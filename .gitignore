@@ -2,6 +2,9 @@
 .claude/gstack/
 .claude/skills/
 
+# Per-machine Claude settings (local paths, not shareable)
+.claude/settings.local.json
+
 # Laravel (from Block 1 onward)
 /vendor/
 /node_modules/
