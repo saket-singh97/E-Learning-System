@@ -5,6 +5,9 @@
 # Per-machine Claude settings (local paths, not shareable)
 .claude/settings.local.json
 
+# graphify — generated knowledge graph output
+graphify-out/
+
 # Laravel (from Block 1 onward)
 /vendor/
 /node_modules/
