@@ -1,0 +1,37 @@
+# gstack — project-local install, 1.1 GB, never commit
+.claude/gstack/
+.claude/skills/
+
+# Laravel (from Block 1 onward)
+/vendor/
+/node_modules/
+/public/build/
+/public/hot
+/public/storage
+/storage/*.key
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+/bootstrap/cache/*
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+auth.json
+
+# Mobile (from Block W onward)
+/mobile/android/app/build/
+/mobile/ios/build/
+/mobile/node_modules/
+*.keystore
+*.jks
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
