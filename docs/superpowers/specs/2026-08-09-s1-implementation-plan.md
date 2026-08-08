@@ -5,6 +5,44 @@ Source design: `2026-08-08-s1-foundation-design.md`
 Target demo: 2026-08-22
 Status: READY TO EXECUTE
 
+---
+
+## PROGRESS — read this first, update it last
+
+One session per block. At the end of a block: tick its row, commit, close the
+session. The next session reads this table and knows exactly where to start.
+
+| # | Block | Status | Commit | Notes |
+|---|---|---|---|---|
+| 0 | Prerequisites (PHP 8.3, Composer, Docker) | ☐ not started | — | Herd + Docker Desktop |
+| 1 | Scaffold | ☐ not started | — | |
+| 2 | Domain skeleton | ☐ not started | — | |
+| 3 | Tenancy core | ☐ not started | — | highest risk |
+| 4 | Isolation suite + CI | ☐ not started | — | |
+| 5 | Auth | ☐ not started | — | |
+| 6 | Roles | ☐ not started | — | |
+| 7 | Filament panels | ☐ not started | — | |
+| 8 | Student shell + branding | ☐ not started | — | |
+| 9 | Content domain | ☐ not started | — | |
+| 10 | `lesson_artifacts` contract | ☐ not started | — | parallel, any time |
+| 11 | Security baseline | ☐ not started | — | |
+| 12 | Docs | ☐ not started | — | |
+
+Status values: `☐ not started` · `◐ in progress` · `☑ done`
+
+**Session opener, copy this:**
+
+```
+Block N chalu karo — docs/superpowers/specs/2026-08-09-s1-implementation-plan.md
+```
+
+Nothing else. No `/context-restore`, no skills. This file carries the state.
+
+**Session closer:** tick the row, write the commit hash in, one commit per block
+with the message `feat(s1): block N — <name>`. Then close.
+
+---
+
 Twelve blocks, in dependency order. Each block ends in a **Verify** step that
 either passes or does not. Do not start a block until the one it depends on
 verifies.
