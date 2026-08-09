@@ -276,6 +276,55 @@ quiz.
 schema above on paper before S3 begins. Any consumer that cannot be expressed
 means the contract is wrong, and it is still free to change.
 
+### 5.3 The eleven read-queries (Block 10, written 2026-08-09)
+
+Every query below opens the same way: latest `ready` version per lesson
+(contract rule 1). Written as the shape of the query, not literal SQL.
+
+1. **Question paper generation** — for a lesson (or set of lessons in a
+   chapter), pull `seed_questions` from the latest-ready artifact, filter by
+   `difficulty` and `concept`, dedupe against questions already used in a
+   prior paper (join on `lesson_artifact_id` stored on the paper).
+2. **Doubt-chat RAG** — vector search `lesson_artifact_chunks.embedding`
+   scoped to `tenant_id` + the lesson's latest-ready `lesson_artifact_id`,
+   return top-k `chunk_idx`/`text`, join back to `lesson_artifacts.chunks`
+   for `start_s`/`end_s` to cite a timestamp.
+3. **Revision notes** — read `transcript` + `concepts` + `syllabus_map` from
+   latest-ready artifact for a lesson; group by `chapter`/`topic` for a
+   chapter-level roll-up across many lessons.
+4. **Semantic search** — vector search over `lesson_artifact_chunks` scoped
+   to `tenant_id` (optionally + course/chapter via join to `lesson_id` →
+   `syllabus_map`), return `chunk_idx`/`text`/`lesson_id` for result links.
+5. **Weak-topic detection** — join student attempt/answer records (outside
+   this table) to `seed_questions[].concept` and `concepts[].confidence` on
+   the artifact that generated each question, aggregate wrong-answer rate per
+   `concept` per student.
+6. **WhatsApp nudges** — read `status` transitions (`ready`/`failed`) plus
+   `concepts` for a just-ingested lesson to compose "new lecture ready:
+   {concepts}" text; filtered by tenant + enrolled students.
+7. **Auto chapters and timestamps** — read `chunks[].{start_s,end_s,text}`
+   from latest-ready artifact, cluster by `concepts[].chunk_idxs` to build a
+   chapter marker list ordered by `start_s`.
+8. **Auto lecture notes** — same base read as #3 (`transcript` + `concepts`),
+   different render target (structured notes doc vs. revision-only view);
+   both read the identical latest-ready row, no schema conflict.
+9. **Daily practice problems** — pull `seed_questions` across all latest-ready
+   artifacts for a student's enrolled courses, filter by `difficulty` and
+   `syllabus_map`, exclude concepts already at high confidence (via #5's
+   weak-topic aggregate) to bias toward weak areas.
+10. **Ask-at-timestamp** — given a lesson + a video timestamp, find the
+    `chunk_idx` where `start_s <= t < end_s` in the latest-ready artifact's
+    `chunks`, use that chunk (± neighbours) as RAG context, same retrieval
+    path as #2 but seeded by timestamp instead of query embedding.
+11. **Post-class auto quiz** — read `seed_questions` from the artifact whose
+    `source_asset_version` matches the just-completed live class's recording,
+    filter to a small `n` by `difficulty` spread; store the generated quiz
+    with `lesson_artifact_id` pinned per contract rule 2.
+
+**Result:** all eleven express cleanly against the schema in §5. No consumer
+required a field, join, or table not already present. Contract holds as
+written; no changes needed before S3.
+
 ---
 
 ## 6. Error handling
@@ -417,10 +466,10 @@ judging a product that does not exist yet.
 - [ ] All five roles exist; privilege escalation is blocked and audited
 - [ ] Auth flows complete: register, verify, login, reset, remember-me, lockout
 - [ ] Course → Section → Lesson CRUD works in the `/teach` panel
-- [ ] Security baseline in place: CSRF on every form, XSS sanitisation on
+- [x] Security baseline in place: CSRF on every form, XSS sanitisation on
       user-supplied text, explicit `$fillable` on every model, file-type
       allowlist on branding uploads — each with a test
-- [ ] `lesson_artifacts` contract written, with all eleven consumer read-queries expressed against it
+- [x] `lesson_artifacts` contract written, with all eleven consumer read-queries expressed against it
 - [ ] Demo #1 delivered on 2026-08-22
 
 ---

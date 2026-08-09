@@ -18,12 +18,15 @@ graphify-out/
 /storage/framework/cache/*
 /storage/framework/sessions/*
 /storage/framework/views/*
+/storage/framework/testing/*
 /storage/logs/*
+/storage/pail
 /bootstrap/cache/*
 .env
 .env.backup
 .env.production
 .phpunit.result.cache
+/.phpunit.cache
 Homestead.json
 Homestead.yaml
 auth.json
