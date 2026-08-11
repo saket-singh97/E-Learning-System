@@ -1,0 +1,200 @@
+<?php
+
+namespace App\Domains\Batches\Filament\Resources\Batches;
+
+use App\Domains\Batches\Filament\Resources\Batches\Pages\CreateBatch;
+use App\Domains\Batches\Filament\Resources\Batches\Pages\EditBatch;
+use App\Domains\Batches\Filament\Resources\Batches\Pages\ListBatches;
+use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\BatchSessionsRelationManager;
+use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\EnrolmentsRelationManager;
+use App\Domains\Batches\Models\Batch;
+use App\Domains\Content\Models\Course;
+use App\Support\Tenancy\CurrentTenant;
+use BackedEnum;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Unique;
+
+class BatchResource extends Resource
+{
+    protected static ?string $model = Batch::class;
+
+    protected static string | BackedEnum | null $navigationIcon = Heroicon::OutlinedUserGroup;
+
+    protected static ?string $recordTitleAttribute = 'title';
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            Select::make('course_id')
+                ->label('Course')
+                ->options(fn () => Course::where('status', 'published')->pluck('title', 'id'))
+                ->searchable()
+                ->required(),
+            TextInput::make('title')
+                ->required()
+                ->maxLength(255)
+                ->live(onBlur: true)
+                ->afterStateUpdated(fn (string $state, callable $set) => $set('slug', Str::slug($state))),
+            TextInput::make('slug')
+                ->required()
+                ->maxLength(255)
+                // batches has a partial unique index on (tenant_id, slug)
+                // WHERE deleted_at IS NULL, same pattern as courses — mirror
+                // both the tenant scope and the soft-delete exclusion here.
+                ->unique(
+                    ignoreRecord: true,
+                    modifyRuleUsing: fn (Unique $rule): Unique => $rule
+                        ->where('tenant_id', app(CurrentTenant::class)->id())
+                        ->whereNull('deleted_at'),
+                ),
+            Textarea::make('description')
+                ->maxLength(65535),
+            DatePicker::make('starts_on')
+                ->required()
+                ->native(false)
+                ->before('ends_on'),
+            DatePicker::make('ends_on')
+                ->required()
+                ->native(false)
+                ->after('starts_on'),
+            TextInput::make('seat_limit')
+                ->numeric()
+                ->minValue(1)
+                ->nullable()
+                ->helperText('Leave blank for unlimited seats.'),
+            Toggle::make('is_paid')
+                ->live()
+                ->default(false),
+            TextInput::make('price')
+                ->numeric()
+                ->minValue(0)
+                ->default(0)
+                ->required(fn (Get $get): bool => (bool) $get('is_paid'))
+                ->visible(fn (Get $get): bool => (bool) $get('is_paid')),
+            Repeater::make('instalment_plan')
+                ->label('Instalment plan (S7 B4)')
+                ->helperText('Split the price into instalments — percentages must sum to exactly 100. Leave empty to charge the full price in one invoice at enrolment.')
+                ->schema([
+                    TextInput::make('percent')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(100)
+                        ->suffix('%')
+                        ->required(),
+                    TextInput::make('days_after_enrolment')
+                        ->label('Due (days after enrolment)')
+                        ->numeric()
+                        ->minValue(0)
+                        ->default(0)
+                        ->required(),
+                ])
+                ->columns(2)
+                ->visible(fn (Get $get): bool => (bool) $get('is_paid'))
+                // No built-in Filament rule sums a repeater's own
+                // sub-values, so a custom one does it — first in this
+                // codebase's Filament forms. ->rule() itself is evaluated
+                // through Filament's own dependency-injecting evaluate()
+                // (the same mechanism ->visible()/->required() use), not
+                // handed straight to Laravel's validator — so the outer
+                // closure here takes no attribute/value/fail params of its
+                // own; it *returns* the actual Laravel in-line closure
+                // rule ((string $attribute, $value, Closure $fail)), which
+                // is what Laravel's validator then calls. Passing
+                // (string $attribute, $value, Closure $fail) directly as
+                // the outer closure fails at evaluation time — Filament
+                // tries to dependency-inject $attribute and finds nothing
+                // by that name (confirmed by running it, not guessed).
+                ->rule(fn (): \Closure => function (string $attribute, $value, \Closure $fail): void {
+                    if (empty($value)) {
+                        return;
+                    }
+
+                    $sum = collect($value)->sum(fn (array $line): float => (float) ($line['percent'] ?? 0));
+
+                    if (round($sum, 2) !== 100.0) {
+                        $fail("Instalment percentages must sum to 100 (currently {$sum}).");
+                    }
+                }),
+            Select::make('self_enrol_mode')
+                ->options(array_combine(Batch::SELF_ENROL_MODES, Batch::SELF_ENROL_MODES))
+                ->required()
+                ->default('manual_only')
+                ->native(false),
+            Select::make('status')
+                ->options(array_combine(Batch::STATUSES, Batch::STATUSES))
+                ->required()
+                ->default('draft')
+                ->native(false),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('title')->searchable(),
+                TextColumn::make('course.title')->label('Course')->searchable(),
+                TextColumn::make('starts_on')->date(),
+                TextColumn::make('ends_on')->date(),
+                TextColumn::make('seat_limit')->label('Seats')->placeholder('Unlimited'),
+                TextColumn::make('status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'published' => 'success',
+                        'archived' => 'gray',
+                        default => 'warning',
+                    }),
+                TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                SelectFilter::make('status')->options(array_combine(Batch::STATUSES, Batch::STATUSES)),
+                TrashedFilter::make(),
+            ])
+            ->recordActions([
+                EditAction::make(),
+                DeleteAction::make(),
+                ForceDeleteAction::make(),
+                RestoreAction::make(),
+            ])
+            ->modifyQueryUsing(fn (Builder $query) => $query->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]));
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            BatchSessionsRelationManager::class,
+            EnrolmentsRelationManager::class,
+        ];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListBatches::route('/'),
+            'create' => CreateBatch::route('/create'),
+            'edit' => EditBatch::route('/{record}/edit'),
+        ];
+    }
+}
