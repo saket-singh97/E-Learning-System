@@ -30,6 +30,11 @@ use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Fees\Models\FeeCoupon;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
+use App\Domains\Security\Models\AccountSharingFlag;
+use App\Domains\Security\Models\DeviceSession;
+use App\Domains\Security\Models\GdprDeletionRequest;
+use App\Domains\Security\Models\GdprExportRequest;
+use App\Domains\Security\Models\LoginHistory;
 use App\Domains\Tenancy\Models\RoleAssignmentAudit;
 use App\Models\User;
 use RuntimeException;
@@ -71,6 +76,11 @@ class TenantModelRegistry
         TenantSubscription::class,
         SubscriptionInvoice::class,
         TenantStorageUsage::class,
+        DeviceSession::class,
+        LoginHistory::class,
+        AccountSharingFlag::class,
+        GdprExportRequest::class,
+        GdprDeletionRequest::class,
     ];
 
     /**
@@ -458,6 +468,32 @@ class TenantModelRegistry
             TenantStorageUsage::class => [
                 'bytes_used' => 0,
             ],
+            DeviceSession::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'device_fingerprint' => 'fp-'.uniqid(),
+                'last_seen_at' => now(),
+            ],
+            LoginHistory::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'ip_address' => '127.0.0.1',
+                'successful' => true,
+            ],
+            AccountSharingFlag::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'distinct_device_count_7d' => 5,
+                'flagged_at' => now(),
+            ],
+            GdprExportRequest::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'requested_by_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'pending',
+            ],
+            GdprDeletionRequest::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'requested_by_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'pending',
+                'scheduled_for' => now()->addDays(30),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -499,6 +535,11 @@ class TenantModelRegistry
             TenantSubscription::class => ['status' => 'tampered'],
             SubscriptionInvoice::class => ['status' => 'tampered'],
             TenantStorageUsage::class => ['bytes_used' => 999999],
+            DeviceSession::class => ['device_label' => 'tampered'],
+            LoginHistory::class => ['successful' => false],
+            AccountSharingFlag::class => ['distinct_device_count_7d' => 999],
+            GdprExportRequest::class => ['status' => 'tampered'],
+            GdprDeletionRequest::class => ['status' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

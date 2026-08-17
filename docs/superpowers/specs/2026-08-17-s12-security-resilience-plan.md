@@ -26,7 +26,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | Domain groundwork — new `Security` domain scaffold, 5 `BelongsToTenant` migrations + models (`device_sessions`, `login_history`, `account_sharing_flags`, `gdpr_export_requests`, `gdpr_deletion_requests`) + 2 non-tenant migrations (`audit_log_entries`, `cookie_consents`), tenant registry | ⬜ not started |
+| B0 | Domain groundwork — new `Security` domain scaffold, 5 `BelongsToTenant` migrations + models (`device_sessions`, `login_history`, `account_sharing_flags`, `gdpr_export_requests`, `gdpr_deletion_requests`) + 2 non-tenant migrations (`audit_log_entries`, `cookie_consents`), tenant registry | ✅ done |
 | B1 | Device fingerprinting (`DeviceFingerprintService`) + registered-device limit at login (default 2, config-driven) (B9) | ⬜ not started |
 | B2 | Concurrent session limit + remote device logout — Admin/Teach/Super panel "My devices" page (B10) | ⬜ not started |
 | B3 | Login history + IP geolocation + impossible-travel detection (`ImpossibleTravelDetector`, velocity check) (B11) | ⬜ not started |
@@ -53,7 +53,52 @@ own estimate undershot its actual by a wide margin.
 ## Block notes (fill in as each block builds — deviations, gotchas,
 ## decisions made mid-build)
 
-### B0 — Domain groundwork — not started
+### B0 — Domain groundwork — DONE (2026-08-17)
+
+- 7 migrations (`2026_08_17_180000` through `_180006`), new
+  `app/Domains/Security/Models/` with 7 models. `constrained()` FK column
+  naming followed the existing convention throughout: `requested_by_id`
+  and `actor_id` both need an explicit `->constrained('users')` table
+  name since Laravel's own singular-column-minus-`_id` guess is wrong for
+  either (`requested_bies`/`actors`).
+- 5 `BelongsToTenant` (`DeviceSession`, `LoginHistory`,
+  `AccountSharingFlag`, `GdprExportRequest`, `GdprDeletionRequest`) — every
+  row's user is a real, currently-tenant-scoped account. Registered in
+  `TenantModelRegistry` with `seedAttributes()`/`updateAttributes()`
+  entries, auto-generating `CrossTenantTest` coverage per `CLAUDE.md`'s own
+  rule.
+- 2 deliberately not `BelongsToTenant` (`AuditLogEntry`, `CookieConsent`)
+  — same `ImpersonationAudit` (S9 B3) exception the design doc's §3.1
+  already names: both need to record events with no tenant context yet
+  (a platform-level action, or a pre-login cookie banner), which the
+  trait's `creating()` hook would reject outright. Neither is registered
+  in `TenantModelRegistry` for the identical reason.
+- **One deviation from `ImpersonationAudit`'s own precedent, deliberate:**
+  `audit_log_entries.actor_id` is `nullOnDelete()`, not `cascadeOnDelete()`
+  like `impersonation_audits.actor_id` is. An audit trail recording what a
+  now-deleted user once did needs to survive that user's deletion — the
+  whole point of an audit log — so cascading the delete would defeat it.
+  Called out explicitly in the migration's own docblock, not silently
+  diverged.
+- `login_history` and `audit_log_entries` are append-only (`created_at`
+  only, no `updated_at` column at the DB level; `LoginHistory`/
+  `AuditLogEntry` models set `const UPDATED_AT = null`). `cookie_consents`
+  has neither `created_at` nor `updated_at` — it has its own single
+  `consented_at` column instead, so `CookieConsent` sets
+  `public $timestamps = false` rather than just nulling `UPDATED_AT`
+  (caught before it could become a real bug: `UPDATED_AT = null` alone
+  would still have left Eloquent trying to write a nonexistent
+  `created_at` column on every `create()` call).
+- **Real bug, caught by the generated `CrossTenantTest` itself, not
+  spotted by inspection**: Eloquent's own pluralization guesses
+  `login_histories` for `LoginHistory`; the migration (matching the
+  design doc's own singular table name, `login_history`) created the
+  singular form. `SQLSTATE[42P01]: relation "login_histories" does not
+  exist` on the very first isolation-suite insert. Same mismatch class
+  `TenantStorageUsage` (S11 B0) already hit — fixed identically, with an
+  explicit `protected $table = 'login_history';` on the model rather than
+  renaming the migration.
+- `composer test`: full suite run below.
 
 ### B1 — Device fingerprinting + registered-device limit — not started
 
