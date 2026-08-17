@@ -1,0 +1,62 @@
+<?php
+
+use App\Domains\Billing\Models\Plan;
+use App\Domains\Billing\Models\TenantSubscription;
+use App\Domains\Tenancy\Filament\Resources\Tenants\Pages\EditTenant;
+use App\Domains\Tenancy\Filament\Resources\Tenants\TenantResource;
+use App\Domains\Tenancy\Models\Tenant;
+use App\Models\User;
+use Database\Seeders\RoleSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    $this->seed(RoleSeeder::class);
+
+    $this->superAdmin = User::factory()->create(['tenant_id' => null]);
+    $this->superAdmin->assignRole('super_admin');
+
+    $this->tenant = Tenant::factory()->create(['subdomain' => 'physics']);
+    $this->plan = Plan::create([
+        'code' => 'growth-ui-test',
+        'name' => 'Growth',
+        'seat_limit' => 15,
+        'storage_limit_gb' => 100,
+        'bandwidth_limit_gb_per_day' => 50,
+        'ai_spend_cap_usd_per_day' => 10,
+        'price_inr_per_month' => 7999,
+    ]);
+
+    $this->actingAs($this->superAdmin)
+        ->get(TenantResource::getUrl('edit', ['record' => $this->tenant], panel: 'super'))
+        ->assertOk();
+});
+
+it('assigns a plan to a tenant via the Assign Plan action', function () {
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->callAction('assignPlan', data: ['plan_id' => $this->plan->id]);
+
+    expect($this->tenant->fresh()->plan_id)->toBe($this->plan->id);
+
+    $subscription = TenantSubscription::withoutGlobalScope('tenant')->where('tenant_id', $this->tenant->id)->sole();
+    expect($subscription->plan_id)->toBe($this->plan->id)
+        ->and($subscription->status)->toBe(TenantSubscription::STATUS_TRIALING);
+});
+
+it('hides the Assign Plan action once a tenant already has one', function () {
+    $this->tenant->update(['plan_id' => $this->plan->id]);
+
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->assertActionHidden('assignPlan');
+});
+
+it('shows the current plan name in the tenant list once assigned', function () {
+    $this->tenant->update(['plan_id' => $this->plan->id]);
+
+    $this->actingAs($this->superAdmin)
+        ->get(TenantResource::getUrl('index', panel: 'super'))
+        ->assertOk()
+        ->assertSee('Growth');
+});

@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ✅ done |
 | B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ✅ done |
 | B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ✅ done |
-| B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ⬜ not started |
+| B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ✅ done |
 | B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ⬜ not started |
 | B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ⬜ not started |
 | B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ⬜ not started |
@@ -358,16 +358,53 @@ estimate undershot its actual by a wide margin.
   pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
   scope.
 
-### B6 — `TenantSubscription` creation (Q3 pt.2) — not started
+### B6 — `TenantSubscription` creation (Q3 pt.2) — DONE (2026-08-17)
 
-- `TenantResource` (Tenancy domain, Super panel) edit page gains a "Plan"
-  section: assign/change `plan_id`, trigger subscribe.
+- **Real structural gap found at build time:** there was no `TenantResource`
+  anywhere in this codebase to add a "Plan" section *to* —
+  `ImpersonateUser`'s own docblock already said so explicitly ("there is
+  no Tenant/User Resource anywhere in this panel yet"), independently
+  confirmed by grep. Built a **deliberately minimal** one now: `name`/
+  `status` editing + the list (name, subdomain, status, plan) — no Create
+  page (tenant provisioning is a separate, still-unbuilt gap, `FEATURES.md`
+  A5/A8, out of scope for a billing slice) and no branding/custom-domain
+  fields (also out of scope). Noted, not silently expanded into.
+  Registered for free — `SuperPanelProvider`'s existing
+  `discoverResources(in: '.../Tenancy/Filament/Resources', ...)` call
+  (already there since S1) picks up the new `Tenants/` subfolder with no
+  provider edit needed.
+- Plan assignment is a dedicated `assignPlan` header `Action` on the Edit
+  page (`->schema([...])->action(...)`, the same modal-form-action shape
+  `AssignmentSubmissionResource`'s own `grade` action already
+  established), **not** a raw `plan_id` field on the main form — decision
+  10's whole point is that assignment goes through
+  `PlanChangeService::subscribe()`, which also creates the
+  `TenantSubscription` row; a bare column edit would leave `plan_id` set
+  with no subscription behind it, a state nothing else in `Billing`
+  expects. Hidden once `plan_id` is already set — assigning a *different*
+  plan later is B10's `changePlan()` (proration), a different operation.
 - `Billing/Services/PlanChangeService::subscribe()` — creates
-  `TenantSubscription` (status `trialing` or `active` depending on
-  whether a trial period is configured — confirm against design doc, no
-  trial concept was locked, so default straight to `active` unless a
-  reason to add trialing surfaces here), calls
-  `SubscriptionProvider::createSubscription()`.
+  `TenantSubscription` with status **`trialing`**, not `active`: no trial
+  concept was ever locked in the design, but the vendor's own initial
+  response status (`'created'`, before the customer completes the hosted
+  mandate) maps naturally onto "started, no successful charge yet" —
+  exactly what `trialing` already means here. B7's webhook is what
+  actually flips it to `active` once a real payment webhook lands, not
+  this method. `current_period_start`/`end` get placeholder values (now /
+  +1 month) for the identical reason — no real billing cycle exists until
+  a charge succeeds.
+- Guards against double-subscribing: refuses (new
+  `TenantAlreadySubscribedException`, 409) if the tenant already has a
+  `trialing`/`active`/`grace` subscription. A `cancelled` one doesn't
+  block a fresh `subscribe()` call — tested explicitly.
+- Runs `TenantSubscription::create()` inside `withoutEvents()` with an
+  explicit `tenant_id` — same shape every other `BelongsToTenant` row
+  created from an unscoped position already uses (`CertificateService`,
+  `RecordVideoCoverageAttendance`): a Super-panel action has no
+  `CurrentTenant` bound to the tenant being acted on.
+- `composer test`: full suite run below (`PlanChangeServiceTest` 3 cases +
+  `TenantResourcePlanSectionTest` 3 cases = 6 new), same 1 pre-existing,
+  unrelated `CourseSlugUniquenessTest` failure, still out of scope.
 
 ### B7 — Webhook + reconciler (Q3 pt.3) — not started
 

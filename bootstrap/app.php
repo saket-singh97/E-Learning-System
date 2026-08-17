@@ -22,6 +22,7 @@ use App\Exceptions\QuizAttemptLimitExceededException;
 use App\Exceptions\QuizNotAvailableException;
 use App\Exceptions\SeatLimitExceededException;
 use App\Exceptions\StorageLimitExceededException;
+use App\Exceptions\TenantAlreadySubscribedException;
 use App\Exceptions\TenantNotFoundException;
 use App\Exceptions\TenantSuspendedException;
 use App\Http\Middleware\EnsureRole;
@@ -140,6 +141,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (AiSpendCapExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (SeatLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (StorageLimitExceededException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (TenantAlreadySubscribedException $e) => abort(409, $e->getMessage()));
 
         // "Should never happen" — a programmer error (tenant-scoped code
         // reached with no tenant bound), not a client-recoverable state, so
