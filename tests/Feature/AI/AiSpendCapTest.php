@@ -2,6 +2,7 @@
 
 use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Services\AiSpendCap;
+use App\Domains\Billing\Models\Plan;
 use App\Domains\Content\Events\LessonVideoReady;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
@@ -52,4 +53,18 @@ it('never returns a negative remaining amount once spend exceeds the cap', funct
     ]);
 
     expect(app(AiSpendCap::class)->remainingFor($tenant))->toBe(0.0);
+});
+
+it('reads the AI spend cap from a real plan once the tenant has one (S11 B2)', function () {
+    $plan = Plan::create([
+        'code' => 'ai-plan-test',
+        'name' => 'Custom',
+        'storage_limit_gb' => 10,
+        'bandwidth_limit_gb_per_day' => 10,
+        'ai_spend_cap_usd_per_day' => 42.50,
+        'price_inr_per_month' => 0,
+    ]);
+    $tenant = Tenant::factory()->create(['plan_id' => $plan->id]);
+
+    expect(app(AiSpendCap::class)->capFor($tenant))->toBe(42.5);
 });

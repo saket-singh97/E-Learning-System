@@ -2,6 +2,7 @@
 
 namespace App\Domains\AI\Services;
 
+use App\Domains\Billing\Services\TenantPlanLimits;
 use App\Domains\Tenancy\Models\Tenant;
 
 /**
@@ -12,6 +13,10 @@ use App\Domains\Tenancy\Models\Tenant;
  * decision — same posture as BandwidthQuota's own caps (S9 B12, Content
  * domain), the design doc deliberately doesn't invent business numbers
  * (§2.4 decision 5).
+ *
+ * CAPS_USD stays put (S11 B2) as the legacy-fallback data source
+ * TenantPlanLimits reads for a plan_id-null tenant — capFor() delegates
+ * there now, same shape as BandwidthQuota::capFor()'s own change.
  *
  * spentToday() relies on TokenCostLedger::totalForDate()'s own documented
  * behavior: no explicit tenant filter, reading through BelongsToTenant's
@@ -31,11 +36,12 @@ class AiSpendCap
 
     public function __construct(
         private readonly TokenCostLedger $ledger,
+        private readonly TenantPlanLimits $limits,
     ) {}
 
     public function capFor(Tenant $tenant): float
     {
-        return self::CAPS_USD[$tenant->plan_tier] ?? self::CAPS_USD[Tenant::PLAN_TIER_FREE];
+        return $this->limits->aiSpendCapUsdPerDay($tenant);
     }
 
     public function spentToday(Tenant $tenant): float

@@ -2,6 +2,7 @@
 
 namespace App\Domains\Content\Services;
 
+use App\Domains\Billing\Services\TenantPlanLimits;
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Tenancy\Models\Tenant;
 
@@ -16,6 +17,11 @@ use App\Domains\Tenancy\Models\Tenant;
  * (docs/FEATURES.md §3.2, ~$0.03/GB) is the only real anchor available;
  * these bound a free tenant's platform cost to a few dollars/day, not
  * derived from a finished pricing model.
+ *
+ * CAPS_BYTES itself stays put (S11 B2) — it's now the legacy-fallback data
+ * source TenantPlanLimits reads directly for a plan_id-null tenant, not
+ * the only cap source any more. capFor() delegates there so this class
+ * doesn't have to know whether a given tenant has a real Plan assigned.
  */
 class BandwidthQuota
 {
@@ -25,9 +31,13 @@ class BandwidthQuota
         Tenant::PLAN_TIER_PAID => 50 * 1024 * 1024 * 1024,  // 50 GB/day
     ];
 
+    public function __construct(
+        private readonly TenantPlanLimits $limits,
+    ) {}
+
     public function capFor(Tenant $tenant): int
     {
-        return self::CAPS_BYTES[$tenant->plan_tier] ?? self::CAPS_BYTES[Tenant::PLAN_TIER_FREE];
+        return $this->limits->bandwidthLimitBytesPerDay($tenant);
     }
 
     /**

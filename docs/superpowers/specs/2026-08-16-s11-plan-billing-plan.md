@@ -27,7 +27,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | Domain groundwork — `Billing` scaffold, `plans`/`tenant_subscriptions`/`subscription_invoices`/`tenant_storage_usage` migrations + models, `tenants.plan_id`, tenant registry, `PlanSeeder` (free/starter/growth/enterprise) | ✅ done |
 | B1 | Plan catalog admin (Q1 pt.1) — Super panel `PlanResource` CRUD | ✅ done |
-| B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ⬜ not started |
+| B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ✅ done |
 | B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ⬜ not started |
 | B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ⬜ not started |
 | B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ⬜ not started |
@@ -157,18 +157,40 @@ estimate undershot its actual by a wide margin.
   reran clean. Worth checking `docker ps` first if a run times out with no
   test-level failure message at all.
 
-### B2 — `TenantPlanLimits` resolver — not started
+### B2 — `TenantPlanLimits` resolver — DONE (2026-08-17)
 
-- New `Billing/Services/TenantPlanLimits.php` implementing design doc
-  §3.2's four methods, each branching on `$tenant->plan_id === null`
-  (legacy `CAPS_*` const lookup) vs. real `$tenant->plan` columns.
-- `BandwidthQuota::capFor()` and `AiSpendCap::capFor()` become one-line
-  delegations to the new resolver; their own `CAPS_BYTES`/`CAPS_USD`
-  consts stay put as the legacy-fallback data source (not deleted —
-  `TenantPlanLimits` reads them directly when `plan_id` is null).
-- Existing `BandwidthQuotaTest`/`AiSpendCapTest` must keep passing
-  unmodified (plan_id-null tenants, decision 3's whole point); add new
-  cases alongside them for the plan_id-present path.
+- New `Billing/Services/TenantPlanLimits.php` — `seatLimit()`,
+  `storageLimitBytes()`, `bandwidthLimitBytesPerDay()`,
+  `aiSpendCapUsdPerDay()`, each branching on `$tenant->plan_id === null`.
+  Legacy branch reads `BandwidthQuota::CAPS_BYTES`/`AiSpendCap::CAPS_USD`
+  directly (one source of truth, not a duplicated copy of those numbers)
+  — a genuinely new `LEGACY_STORAGE_LIMIT_GB` const had to be added on
+  `TenantPlanLimits` itself for storage specifically, since no pre-S11
+  storage cap ever existed anywhere to reuse (free 5 GB / paid 50 GB,
+  matching bandwidth's own free/paid split for continuity). `seatLimit()`
+  returns `null` (unlimited) for every plan_id-null tenant — no legacy
+  seat concept existed before S11 either, and `null` is the only answer
+  that keeps every pre-S11 tenant's behavior genuinely unchanged.
+- Added `Tenant::plan(): BelongsTo` (`Tenancy` domain model reading
+  `Billing\Models\Plan` directly — cross-domain *model* read, the
+  established precedent, not a cross-domain service call).
+- `BandwidthQuota`/`AiSpendCap` both gained a `TenantPlanLimits`
+  constructor dependency; `capFor()` on each is now a one-line delegation.
+  Confirmed no call site anywhere does `new BandwidthQuota()`/
+  `new AiSpendCap()` before adding the constructor param — every real
+  caller resolves through the container (`app(...)` in tests,
+  constructor injection in `SpendCapGuardedAiDriver`/`StreamLessonController`
+  elsewhere), so this was a safe addition. `CAPS_BYTES`/`CAPS_USD` consts
+  themselves untouched, still public, still the legacy data source.
+- Existing `BandwidthQuotaTest`/`AiSpendCapTest` — every pre-existing case
+  passed **unmodified**, exactly as decision 3 requires; added one new
+  `it(...)` to each for the plan_id-present path, plus a dedicated
+  `TenantPlanLimitsTest` (4 cases: legacy free, legacy paid, real plan
+  columns, `null` seat_limit means genuinely unlimited).
+- `composer test`: **820/821 passing** (+6 — `TenantPlanLimitsTest`'s 4
+  cases + 1 new case each in `BandwidthQuotaTest`/`AiSpendCapTest`), same
+  1 pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out
+  of scope.
 
 ### B3 — `SeatQuota` + enforcement (Q2 pt.1) — not started
 

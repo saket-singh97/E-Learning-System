@@ -2,9 +2,11 @@
 
 namespace App\Domains\Tenancy\Models;
 
+use App\Domains\Billing\Models\Plan;
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Tenant extends Model
 {
@@ -61,6 +63,17 @@ class Tenant extends Model
     public function isPaidTier(): bool
     {
         return $this->plan_tier === self::PLAN_TIER_PAID;
+    }
+
+    /**
+     * Null until a Super admin actually assigns one (S11 B6+) — every
+     * quota/limit read has to branch on plan_id being null and fall back
+     * to plan_tier's own legacy caps (TenantPlanLimits owns that branch),
+     * never assume this relation resolves.
+     */
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class);
     }
 
     protected static function newFactory(): TenantFactory

@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Billing\Models\Plan;
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Content\Services\BandwidthQuota;
 use App\Domains\Tenancy\Models\Tenant;
@@ -69,4 +70,18 @@ it('never returns a negative remaining amount once usage exceeds the cap', funct
     BandwidthUsageDaily::create(['date' => now()->toDateString(), 'bytes_served' => 999_999_999_999]);
 
     expect(app(BandwidthQuota::class)->remainingFor($tenant))->toBe(0);
+});
+
+it('reads the bandwidth cap from a real plan once the tenant has one (S11 B2)', function () {
+    $plan = Plan::create([
+        'code' => 'bandwidth-plan-test',
+        'name' => 'Custom',
+        'storage_limit_gb' => 10,
+        'bandwidth_limit_gb_per_day' => 77,
+        'ai_spend_cap_usd_per_day' => 1,
+        'price_inr_per_month' => 0,
+    ]);
+    $tenant = Tenant::factory()->create(['plan_id' => $plan->id]);
+
+    expect(app(BandwidthQuota::class)->capFor($tenant))->toBe(77 * 1024 * 1024 * 1024);
 });
