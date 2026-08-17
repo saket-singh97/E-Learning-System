@@ -81,6 +81,25 @@ it('changes a tenants plan via the Change Plan action (S11 B10)', function () {
     expect($this->tenant->fresh()->plan_id)->toBe($enterprise->id);
 });
 
+it('hides the Cancel Subscription action until a tenant has a plan', function () {
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->assertActionHidden('cancelSubscription');
+});
+
+it('cancels a subscription via the Cancel Subscription action (S11 B13)', function () {
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->callAction('assignPlan', data: ['plan_id' => $this->plan->id]);
+
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->assertActionVisible('cancelSubscription')
+        ->callAction('cancelSubscription');
+
+    expect($this->tenant->fresh()->plan_id)->toBeNull();
+
+    $subscription = TenantSubscription::withoutGlobalScope('tenant')->where('tenant_id', $this->tenant->id)->sole();
+    expect($subscription->status)->toBe(TenantSubscription::STATUS_CANCELLED);
+});
+
 it('shows the current plan name in the tenant list once assigned', function () {
     $this->tenant->update(['plan_id' => $this->plan->id]);
 

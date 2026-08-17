@@ -216,3 +216,31 @@ it('allows a downgrade that stays within the new plans limits', function () {
 
     expect($this->tenant->fresh()->plan_id)->toBe($modestPlan->id);
 });
+
+it('refuses to cancel a tenant with no live subscription', function () {
+    expect(fn () => app(PlanChangeService::class)->cancel($this->tenant))
+        ->toThrow(TenantNotSubscribedException::class);
+});
+
+it('cancels a live subscription and reverts the tenant to the legacy fallback (S11 B13)', function () {
+    $subscription = app(PlanChangeService::class)->subscribe($this->tenant, $this->plan);
+    $subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    app(PlanChangeService::class)->cancel($this->tenant);
+
+    expect($subscription->fresh()->status)->toBe(TenantSubscription::STATUS_CANCELLED)
+        ->and($subscription->fresh()->cancelled_at)->not->toBeNull()
+        // Decision 11 — plan_id = null, not a special "cancelled plan" row.
+        ->and($this->tenant->fresh()->plan_id)->toBeNull();
+});
+
+it('allows subscribing again after a cancellation', function () {
+    $subscription = app(PlanChangeService::class)->subscribe($this->tenant, $this->plan);
+    $subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    app(PlanChangeService::class)->cancel($this->tenant);
+    $fresh = app(PlanChangeService::class)->subscribe($this->tenant, $this->plan);
+
+    expect($fresh->status)->toBe(TenantSubscription::STATUS_TRIALING)
+        ->and($this->tenant->fresh()->plan_id)->toBe($this->plan->id);
+});

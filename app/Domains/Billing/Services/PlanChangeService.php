@@ -111,6 +111,34 @@ class PlanChangeService
     }
 
     /**
+     * S11 B13 — reverts a tenant to decision 3's own legacy-fallback
+     * branch (`plan_id = null`), not a special "cancelled plan" row —
+     * that fallback already correctly models "no active plan" (the
+     * existing `plan_tier` caps), so no new state is needed for it.
+     * Same `TenantNotSubscribedException` guard as `changePlan()` — both
+     * require a live subscription to act on.
+     */
+    public function cancel(Tenant $tenant): TenantSubscription
+    {
+        $subscription = $this->liveSubscriptionFor($tenant);
+
+        if ($subscription === null) {
+            throw TenantNotSubscribedException::forTenant($tenant->id);
+        }
+
+        $this->provider->cancelSubscription($subscription);
+
+        $subscription->update([
+            'status' => TenantSubscription::STATUS_CANCELLED,
+            'cancelled_at' => now(),
+        ]);
+
+        $tenant->update(['plan_id' => null]);
+
+        return $subscription->fresh();
+    }
+
+    /**
      * (days remaining in the current period / total days in the period) x
      * (new plan price - old plan price) — design doc §2.4 decision 9,
      * verbatim. A period with zero elapsed days left (changing on the

@@ -61,6 +61,21 @@ class EditTenant extends EditRecord
 
                     $this->redirect(static::getResource()::getUrl('edit', ['record' => $record]));
                 }),
+            // S11 B13 — same visibility as changePlan (a live subscription
+            // is required for either), destructive so it asks first;
+            // reverts to plan_id = null, decision 11's own legacy-fallback
+            // state, not a special "cancelled" plan.
+            Action::make('cancelSubscription')
+                ->label('Cancel subscription')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalDescription('The institute reverts to the free-tier fallback limits immediately. This does not delete any billing history.')
+                ->visible(fn (Tenant $record): bool => $record->plan_id !== null)
+                ->action(function (Tenant $record): void {
+                    app(PlanChangeService::class)->cancel($record);
+
+                    $this->redirect(static::getResource()::getUrl('edit', ['record' => $record]));
+                }),
         ];
     }
 }

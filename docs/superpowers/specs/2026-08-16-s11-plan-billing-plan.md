@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ✅ done |
 | B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ✅ done |
 | B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ✅ done |
-| B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ⬜ not started |
+| B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ✅ done |
 | B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ⬜ not started |
 | B15 | Edge cases + concurrency — webhook double-delivery idempotency, soft-deleted-tenant handling in the sweep, race guards | ⬜ not started |
 | B16 | Full test coverage, isolation registration sweep, review pass, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
@@ -643,13 +643,24 @@ estimate undershot its actual by a wide margin.
   (`InstituteSubscriptionsPageTest`'s 3 cases), same 1 pre-existing,
   unrelated `CourseSlugUniquenessTest` failure, still out of scope.
 
-### B13 — Cancellation flow — not started
+### B13 — Cancellation flow — DONE (2026-08-17)
 
-- `PlanChangeService::cancel()` — `TenantSubscription.status =
-  'cancelled'`, `cancelled_at` set, calls
-  `SubscriptionProvider::cancelSubscription()`. `tenants.plan_id` reset to
-  `null` (decision 11 — falls back to legacy free-tier caps, tenant stays
-  active, just capped).
+- `PlanChangeService::cancel()` — same `liveSubscriptionFor()` +
+  `TenantNotSubscribedException` guard `changePlan()` already uses (a
+  third caller of the identical precondition). Calls
+  `SubscriptionProvider::cancelSubscription()`, sets
+  `status = cancelled` + `cancelled_at`, resets `tenants.plan_id = null`
+  — decision 11's own legacy-fallback branch, not a new state; a
+  cancelled tenant simply falls back to `plan_tier`'s existing caps,
+  same as any pre-S11 tenant.
+- `EditTenant` gains a `cancelSubscription` header action — same
+  visibility as `changePlan` (`plan_id !== null`), `->color('danger')`
+  and `->requiresConfirmation()` since reverting an institute's limits
+  is meaningful enough to ask first, unlike `assignPlan`/`changePlan`.
+- `composer test`: full suite run below (`PlanChangeServiceTest`'s 3 new
+  cases + `TenantResourcePlanSectionTest`'s 2 new cases = 5 new), same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out
+  of scope.
 
 ### B14 — Grace/suspension notifications — not started
 
