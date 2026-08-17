@@ -9,6 +9,7 @@ use App\Domains\Tenancy\Services\RoleHierarchy;
 use App\Exceptions\PrivilegeEscalationException;
 use App\Exceptions\SeatLimitExceededException;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 class RoleAssignmentPolicy
 {
@@ -46,9 +47,30 @@ class RoleAssignmentPolicy
             throw PrivilegeEscalationException::forAttempt($actorRole, $role);
         }
 
-        $this->guardSeatLimit($target, $role);
+        if (! $this->addsNewSeat($target, $role)) {
+            $target->syncRoles([$role]);
 
-        $target->syncRoles([$role]);
+            return;
+        }
+
+        // S11 B15 — two concurrent assign() calls promoting two *different*
+        // targets to a seat-consuming role on the same tenant could
+        // otherwise both pass remainingFor() === 0 before either commits,
+        // over-provisioning by one seat (no unique DB constraint exists to
+        // catch this the way S10 B15's version-number race had). Locking
+        // the Tenant row (same technique PlanChangeService's own B15 fix
+        // uses) serializes only this seat-consuming path — every other
+        // role assignment (student/parent/a tier change) is untouched by
+        // the lock, since only this branch needs it.
+        DB::transaction(function () use ($target, $role): void {
+            $tenant = Tenant::where('id', $target->tenant_id)->lockForUpdate()->first();
+
+            if ($tenant !== null && app(SeatQuota::class)->remainingFor($tenant) === 0) {
+                throw SeatLimitExceededException::forTenant($tenant->id);
+            }
+
+            $target->syncRoles([$role]);
+        });
     }
 
     /**
@@ -69,24 +91,16 @@ class RoleAssignmentPolicy
      * action" check cannot be expressed as an event anyway, since events
      * react after the fact rather than gating before it.
      */
-    private function guardSeatLimit(User $target, string $role): void
+    private function addsNewSeat(User $target, string $role): bool
     {
         if (! in_array($role, SeatQuota::SEAT_ROLES, true)) {
-            return;
+            return false;
         }
 
         if ($target->hasAnyRole(SeatQuota::SEAT_ROLES)) {
-            return; // already occupies a seat — a tier change, not new headcount
+            return false; // already occupies a seat — a tier change, not new headcount
         }
 
-        if ($target->tenant_id === null) {
-            return; // platform-level user, not a real institute seat
-        }
-
-        $tenant = Tenant::find($target->tenant_id);
-
-        if ($tenant !== null && app(SeatQuota::class)->remainingFor($tenant) === 0) {
-            throw SeatLimitExceededException::forTenant($tenant->id);
-        }
+        return $target->tenant_id !== null; // false = platform-level user, not a real institute seat
     }
 }

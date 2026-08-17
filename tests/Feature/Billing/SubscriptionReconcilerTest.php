@@ -99,6 +99,18 @@ it('moves the subscription to grace and records a failed invoice on payment.fail
     expect($invoice->status)->toBe(SubscriptionInvoice::STATUS_FAILED);
 });
 
+it('is idempotent: the exact same failed webhook redelivered only writes one invoice (S11 B15)', function () {
+    $this->subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    $payload = ($this->payload)('payment.failed', paymentId: 'pay_fail_redelivered');
+    $signature = ($this->sign)($payload);
+
+    $this->reconciler->reconcile($payload, $signature);
+    $this->reconciler->reconcile($payload, $signature);
+
+    expect(SubscriptionInvoice::withoutGlobalScope('tenant')->where('razorpay_payment_id', 'pay_fail_redelivered')->count())->toBe(1);
+});
+
 it('does not push the grace deadline further out on a second, distinct failure', function () {
     $this->subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
 
@@ -168,6 +180,24 @@ it('also cancels the subscription on subscription.completed', function () {
     $this->reconciler->reconcile($payload, ($this->sign)($payload));
 
     expect($this->subscription->fresh()->status)->toBe(TenantSubscription::STATUS_CANCELLED);
+});
+
+it('is idempotent: a redelivered cancelled webhook is a harmless no-op (S11 B15)', function () {
+    $this->subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    $payload = ($this->payload)('subscription.cancelled', paymentId: null);
+    $signature = ($this->sign)($payload);
+
+    $this->reconciler->reconcile($payload, $signature);
+    $firstCancelledAt = $this->subscription->fresh()->cancelled_at;
+
+    $this->travel(1)->day();
+    $this->reconciler->reconcile($payload, $signature);
+
+    // Still cancelled, and crucially cancelled_at did not move to the
+    // redelivery's own later timestamp — the already-cancelled guard
+    // returns before the second update() ever runs.
+    expect($this->subscription->fresh()->cancelled_at->equalTo($firstCancelledAt))->toBeTrue();
 });
 
 it('ignores an event type it does not recognise', function () {

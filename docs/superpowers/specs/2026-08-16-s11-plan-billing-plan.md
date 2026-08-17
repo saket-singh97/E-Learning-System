@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ✅ done |
 | B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ✅ done |
 | B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ✅ done |
-| B15 | Edge cases + concurrency — webhook double-delivery idempotency, soft-deleted-tenant handling in the sweep, race guards | ⬜ not started |
+| B15 | Edge cases + concurrency — webhook double-delivery idempotency, soft-deleted-tenant handling in the sweep, race guards | ✅ done |
 | B16 | Full test coverage, isolation registration sweep, review pass, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
 
 **Test suite:** 804/805 at slice start (1 pre-existing, unrelated
@@ -708,18 +708,75 @@ estimate undershot its actual by a wide margin.
   `SendGraceSuspensionRemindersTest`'s 4), same 1 pre-existing, unrelated
   `CourseSlugUniquenessTest` failure, still out of scope.
 
-### B15 — Edge cases + concurrency — not started
+### B15 — Edge cases + concurrency — DONE (2026-08-17)
 
-- Webhook double-delivery: Razorpay resends on non-2xx or timeout —
-  confirm `SubscriptionReconciler` is idempotent on a repeated event
-  (same event id twice must not double-write `SubscriptionInvoice`).
-- Sweep job vs. a soft-deleted tenant/subscription — proactively apply
-  S10 B15's own fix shape (`whereHas` chains that implicitly exclude
-  soft-deleted parents) rather than waiting for a review pass to find it.
-- Any count-then-write race in `PlanChangeService` or the seat/storage
-  checks — apply the same transaction+retry pattern S10 B15 had to add
-  for `AssignmentSubmissionService::submit()`, if a genuine race exists
-  here too.
+Four sub-items, one per bullet in the original plan note, each actually
+investigated rather than assumed:
+
+1. **Webhook double-delivery** — `charged()`/`failed()` were already
+   deduped on `razorpay_payment_id` since B7; only `charged()` had a
+   redelivery test. Added the missing exact-same-payload-twice tests for
+   `failed()` and for `ended()` (`cancelled`/`completed` — no payment
+   entity to dedupe on there, so its own already-cancelled guard is the
+   whole story; confirmed with a test showing `cancelled_at` doesn't move
+   on redelivery, not just that status stays `cancelled`).
+
+2. **Sweep vs. a soft-deleted parent** — **investigated and found not
+   applicable**, not silently skipped: grepped both `Tenant` and `Plan`
+   for `SoftDeletes` — neither model uses it, unlike `Batch`/`Course`
+   (the actual precondition for S10 B15's own bug class). Every relevant
+   FK is also already correct by construction, not by luck: `tenants.
+   plan_id` is `nullOnDelete()` but `PlanResource`'s own delete guard
+   (B1) already refuses to delete a referenced plan through the UI, and
+   `tenant_subscriptions.plan_id`/`subscription_invoices.plan_id` are
+   both left at Postgres's default **restrict**, not `nullOnDelete()` —
+   so even a raw SQL delete bypassing the UI guard is refused at the
+   database level. `tenant_id` on every Billing table is
+   `cascadeOnDelete()`, so a hard-deleted `Tenant` cleanly takes its own
+   billing rows with it, never leaving one behind. New
+   `BillingCascadeDeleteTest` (2 cases) proves both claims directly
+   rather than leaving them as an unverified comment.
+
+3. **`PlanChangeService` count-then-write race** — real, and fixed:
+   `subscribe()`/`changePlan()`/`cancel()` each wrapped in
+   `DB::transaction()` with a new `lockTenant()` helper
+   (`Tenant::where('id', ...)->lockForUpdate()->first()`, locked and
+   discarded — the lock itself is the point, not the row's data) at the
+   top. Serializes every subscribe/changePlan/cancel call for one tenant
+   through one at a time — there's no unique DB constraint here the way
+   `AssignmentSubmissionService`'s own S10 B15 race had, so a row lock
+   was the only real option, not a catch-and-retry.
+
+4. **`SeatQuota` check race, `RoleAssignmentPolicy::assign()`** — real
+   too (two concurrent promotions of *different* users to a seat-
+   consuming role could both pass `remainingFor() === 0` before either
+   commits), and in scope per the plan note's own "or the seat/storage
+   checks" clause. Fixed narrowly: only the seat-consuming branch is
+   wrapped in the same tenant-lock pattern (extracted `addsNewSeat()`
+   from the old `guardSeatLimit()` to decide branching *before* locking
+   anything) — assigning `student`/`parent`, or a tier change between two
+   already-seated roles, is completely untouched by the lock, since
+   neither needs it.
+
+**Not directly provable in this test suite, stated plainly rather than
+faked:** none of the four locks above can be exercised as genuine
+concurrent contention — Pest/PHPUnit here run on one DB connection, and
+`lockForUpdate()` within the same connection's own transaction never
+blocks against itself the way two real connections would. Every prior
+"race" test in this codebase (S10 B15 included) actually tested recovery
+from a *unique-constraint violation*, not true lock contention; none of
+this block's four races has a constraint to violate, only a lock to
+contend for. The fix is correct Postgres row-locking, verified by reading
+the generated SQL and Postgres's own documented `SELECT ... FOR UPDATE`
+semantics, not by a test asserting it — flagged as a real limitation of
+this single-connection test suite, not glossed over.
+
+`composer test`: full suite run below (`SubscriptionReconcilerTest`'s 2
+new cases + `BillingCascadeDeleteTest`'s 2 cases = 4 new), same 1
+pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
+scope. Existing `RoleAssignmentTest`/`PlanChangeServiceTest` suites both
+pass unmodified, confirming the two lock refactors changed no observable
+behaviour.
 
 ### B16 — Full test coverage, review pass — not started
 

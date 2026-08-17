@@ -10,6 +10,7 @@ use App\Exceptions\PlanDowngradeBlockedException;
 use App\Exceptions\TenantAlreadySubscribedException;
 use App\Exceptions\TenantNotSubscribedException;
 use App\Integrations\SubscriptionProvider;
+use Illuminate\Support\Facades\DB;
 
 class PlanChangeService
 {
@@ -33,34 +34,49 @@ class PlanChangeService
      */
     public function subscribe(Tenant $tenant, Plan $plan): TenantSubscription
     {
-        if ($this->hasLiveSubscription($tenant)) {
-            throw TenantAlreadySubscribedException::forTenant($tenant->id);
-        }
+        return DB::transaction(function () use ($tenant, $plan): TenantSubscription {
+            // S11 B15 — closes a real double-click/two-tabs race (the same
+            // class S10 B15 fixed for AssignmentSubmissionService, but
+            // there's no unique DB constraint to catch-and-retry against
+            // here the way that one had — two concurrent subscribe() calls
+            // for the same tenant would otherwise both pass
+            // hasLiveSubscription() before either commits, creating two
+            // live subscriptions for one tenant with nothing to stop it.
+            // Locking the Tenant row itself serializes every subscribe/
+            // changePlan/cancel call for that tenant through one at a
+            // time, without needing a subscription row to lock before one
+            // necessarily exists yet.
+            $this->lockTenant($tenant);
 
-        $subscription = TenantSubscription::withoutEvents(fn () => TenantSubscription::create([
-            'tenant_id' => $tenant->id,
-            'plan_id' => $plan->id,
-            // The vendor call below reports its own 'created' status —
-            // mapped to this app's own 'trialing' rather than adding a
-            // vendor-shaped 'created' status locally: "subscription
-            // started, no successful charge yet" is exactly what
-            // 'trialing' already means here, and B7's webhook is what
-            // actually flips it to 'active' once a real payment lands.
-            'status' => TenantSubscription::STATUS_TRIALING,
-            // Placeholder period until the first real webhook (B7)
-            // reports the vendor's own billing-cycle dates — there is no
-            // real period yet, since nothing has been charged.
-            'current_period_start' => now(),
-            'current_period_end' => now()->addMonth(),
-        ]));
+            if ($this->hasLiveSubscription($tenant)) {
+                throw TenantAlreadySubscribedException::forTenant($tenant->id);
+            }
 
-        $result = $this->provider->createSubscription($subscription);
+            $subscription = TenantSubscription::withoutEvents(fn () => TenantSubscription::create([
+                'tenant_id' => $tenant->id,
+                'plan_id' => $plan->id,
+                // The vendor call below reports its own 'created' status —
+                // mapped to this app's own 'trialing' rather than adding a
+                // vendor-shaped 'created' status locally: "subscription
+                // started, no successful charge yet" is exactly what
+                // 'trialing' already means here, and B7's webhook is what
+                // actually flips it to 'active' once a real payment lands.
+                'status' => TenantSubscription::STATUS_TRIALING,
+                // Placeholder period until the first real webhook (B7)
+                // reports the vendor's own billing-cycle dates — there is no
+                // real period yet, since nothing has been charged.
+                'current_period_start' => now(),
+                'current_period_end' => now()->addMonth(),
+            ]));
 
-        $subscription->update(['razorpay_subscription_id' => $result['subscription_id']]);
+            $result = $this->provider->createSubscription($subscription);
 
-        $tenant->update(['plan_id' => $plan->id]);
+            $subscription->update(['razorpay_subscription_id' => $result['subscription_id']]);
 
-        return $subscription;
+            $tenant->update(['plan_id' => $plan->id]);
+
+            return $subscription;
+        });
     }
 
     /**
@@ -72,42 +88,50 @@ class PlanChangeService
      */
     public function changePlan(Tenant $tenant, Plan $newPlan): TenantSubscription
     {
-        $subscription = $this->liveSubscriptionFor($tenant);
+        return DB::transaction(function () use ($tenant, $newPlan): TenantSubscription {
+            // S11 B15 — same tenant-row lock subscribe() uses, same
+            // reason: two concurrent changePlan() calls (or a changePlan()
+            // racing a cancel()) for the same tenant must not both act on
+            // a subscription snapshot read before either committed.
+            $this->lockTenant($tenant);
 
-        if ($subscription === null) {
-            throw TenantNotSubscribedException::forTenant($tenant->id);
-        }
+            $subscription = $this->liveSubscriptionFor($tenant);
 
-        $this->guardDowngradeCapacity($tenant, $newPlan);
+            if ($subscription === null) {
+                throw TenantNotSubscribedException::forTenant($tenant->id);
+            }
 
-        $oldPlan = $subscription->plan;
-        $proratedAmount = $this->prorate($subscription, $oldPlan, $newPlan);
+            $this->guardDowngradeCapacity($tenant, $newPlan);
 
-        $this->provider->changePlan($subscription, $newPlan);
+            $oldPlan = $subscription->plan;
+            $proratedAmount = $this->prorate($subscription, $oldPlan, $newPlan);
 
-        $subscription->update(['plan_id' => $newPlan->id]);
-        $tenant->update(['plan_id' => $newPlan->id]);
+            $this->provider->changePlan($subscription, $newPlan);
 
-        // Written even when the two plans happen to cost the same (a
-        // lateral move) — decision 9's whole point is an auditable record
-        // of every plan change in this app's own ledger, not just the
-        // ones that moved money.
-        SubscriptionInvoice::withoutEvents(fn () => SubscriptionInvoice::create([
-            'tenant_id' => $tenant->id,
-            'tenant_subscription_id' => $subscription->id,
-            'plan_id' => $newPlan->id,
-            // Signed, not absolute — negative is a credit (a downgrade),
-            // positive an extra charge (an upgrade), collected on the next
-            // cycle rather than a live mid-cycle charge (decision 9;
-            // design doc §4 — genuinely deferred, not built here).
-            'amount' => round($proratedAmount, 2),
-            'kind' => SubscriptionInvoice::KIND_PRORATION,
-            'status' => SubscriptionInvoice::STATUS_PENDING,
-            'period_start' => now(),
-            'period_end' => $subscription->current_period_end,
-        ]));
+            $subscription->update(['plan_id' => $newPlan->id]);
+            $tenant->update(['plan_id' => $newPlan->id]);
 
-        return $subscription->fresh();
+            // Written even when the two plans happen to cost the same (a
+            // lateral move) — decision 9's whole point is an auditable record
+            // of every plan change in this app's own ledger, not just the
+            // ones that moved money.
+            SubscriptionInvoice::withoutEvents(fn () => SubscriptionInvoice::create([
+                'tenant_id' => $tenant->id,
+                'tenant_subscription_id' => $subscription->id,
+                'plan_id' => $newPlan->id,
+                // Signed, not absolute — negative is a credit (a downgrade),
+                // positive an extra charge (an upgrade), collected on the next
+                // cycle rather than a live mid-cycle charge (decision 9;
+                // design doc §4 — genuinely deferred, not built here).
+                'amount' => round($proratedAmount, 2),
+                'kind' => SubscriptionInvoice::KIND_PRORATION,
+                'status' => SubscriptionInvoice::STATUS_PENDING,
+                'period_start' => now(),
+                'period_end' => $subscription->current_period_end,
+            ]));
+
+            return $subscription->fresh();
+        });
     }
 
     /**
@@ -120,22 +144,27 @@ class PlanChangeService
      */
     public function cancel(Tenant $tenant): TenantSubscription
     {
-        $subscription = $this->liveSubscriptionFor($tenant);
+        return DB::transaction(function () use ($tenant): TenantSubscription {
+            // S11 B15 — same tenant-row lock, same reason.
+            $this->lockTenant($tenant);
 
-        if ($subscription === null) {
-            throw TenantNotSubscribedException::forTenant($tenant->id);
-        }
+            $subscription = $this->liveSubscriptionFor($tenant);
 
-        $this->provider->cancelSubscription($subscription);
+            if ($subscription === null) {
+                throw TenantNotSubscribedException::forTenant($tenant->id);
+            }
 
-        $subscription->update([
-            'status' => TenantSubscription::STATUS_CANCELLED,
-            'cancelled_at' => now(),
-        ]);
+            $this->provider->cancelSubscription($subscription);
 
-        $tenant->update(['plan_id' => null]);
+            $subscription->update([
+                'status' => TenantSubscription::STATUS_CANCELLED,
+                'cancelled_at' => now(),
+            ]);
 
-        return $subscription->fresh();
+            $tenant->update(['plan_id' => null]);
+
+            return $subscription->fresh();
+        });
     }
 
     /**
@@ -190,6 +219,17 @@ class PlanChangeService
         if ($overLimits !== []) {
             throw PlanDowngradeBlockedException::forTenant($tenant->id, $overLimits);
         }
+    }
+
+    /**
+     * Locked and discarded — the lock itself is the point (serializing
+     * every subscribe/changePlan/cancel call for this tenant through one
+     * at a time), not the row's own data, so nothing needs to read the
+     * result back.
+     */
+    protected function lockTenant(Tenant $tenant): void
+    {
+        Tenant::where('id', $tenant->id)->lockForUpdate()->first();
     }
 
     protected function liveSubscriptionFor(Tenant $tenant): ?TenantSubscription
