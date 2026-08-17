@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ✅ done |
 | B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ✅ done |
 | B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ✅ done |
-| B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ⬜ not started |
+| B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ✅ done |
 | B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ⬜ not started |
 | B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ⬜ not started |
 | B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ⬜ not started |
@@ -406,7 +406,7 @@ estimate undershot its actual by a wide margin.
   `TenantResourcePlanSectionTest` 3 cases = 6 new), same 1 pre-existing,
   unrelated `CourseSlugUniquenessTest` failure, still out of scope.
 
-### B7 — Webhook + reconciler (Q3 pt.3) — not started
+### B7 — Webhook + reconciler (Q3 pt.3) — DONE (2026-08-17)
 
 - `routes/api.php`: `Route::post('/webhooks/razorpay-subscriptions',
   RazorpaySubscriptionWebhookController::class)`, same "outside every
@@ -414,12 +414,42 @@ estimate undershot its actual by a wide margin.
 - `Http/Controllers/Billing/RazorpaySubscriptionWebhookController.php` —
   thin, delegates to `SubscriptionReconciler`, mirrors
   `RazorpayWebhookController` exactly.
-- `Billing/Services/SubscriptionReconciler.php` — verifies signature
-  (same HMAC pattern as `PaymentReconciler`), handles
-  `subscription.charged`/`subscription.completed`/`payment.failed`/
-  `subscription.cancelled`, writes `SubscriptionInvoice` rows, updates
-  `TenantSubscription.status`. `payment.failed` sets
-  `grace_ends_at = now()->addDays(7)` per design doc decision 7.
+- `Billing/Services/SubscriptionReconciler.php` — verifies signature via
+  `SubscriptionProvider` (same HMAC discipline as `PaymentReconciler`),
+  looks the local `TenantSubscription` up by its own
+  `razorpay_subscription_id` column rather than trusting the payload's
+  notes for tenant resolution (a cleaner variant of `PaymentReconciler`'s
+  own "verify first, resolve tenant only from something we ourselves
+  wrote" approach — possible here because, unlike `FeePayment`,
+  `TenantSubscription` already has a real vendor-id column to key off).
+- `subscription.charged` → `status = active`, clears `grace_ends_at`,
+  updates `current_period_start`/`end` from the payload (falls back to
+  the existing value if absent), writes a `paid`-status
+  `SubscriptionInvoice`. Deduped on `razorpay_payment_id` — a resent
+  webhook does not write a second invoice row (Razorpay retries delivery
+  on anything but a 2xx response).
+- `payment.failed` → `status = grace`, `grace_ends_at = now()->addDays(7)`
+  per decision 7 — but only when it was previously `null`. A *second*
+  distinct failure while already in grace does not push the deadline
+  further out (`?? now()->addDays(7)`, not an unconditional set) —
+  otherwise a subscription stuck retrying-and-failing could extend its
+  own grace period indefinitely, defeating the point of a 7-day cap.
+  Tested explicitly with two different `razorpay_payment_id`s two days
+  apart.
+- **Real design refinement, not in the original plan:**
+  `subscription.completed` and `subscription.cancelled` both collapse to
+  the same local `STATUS_CANCELLED` — `TenantSubscription`'s status enum
+  (locked at B0) has no separate "completed" value, and every downstream
+  reader this slice builds (grace/suspension enforcement B9, the billing
+  views B11/B12) only ever needs "is this still billing," not why it
+  stopped. Adding a fifth status for a case that's ~8 years out in
+  practice (100-cycle `total_count`, B5) would be state nothing reads.
+  Documented inline rather than silently decided.
+- `composer test`: full suite run below
+  (`SubscriptionReconcilerTest` 9 cases +
+  `RazorpaySubscriptionWebhookControllerTest` 2 cases = 11 new), same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
+  scope.
 
 ### B8 — Grace-period sweep (Q4) — not started
 
