@@ -26,7 +26,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | Domain groundwork — `Billing` scaffold, `plans`/`tenant_subscriptions`/`subscription_invoices`/`tenant_storage_usage` migrations + models, `tenants.plan_id`, tenant registry, `PlanSeeder` (free/starter/growth/enterprise) | ✅ done |
-| B1 | Plan catalog admin (Q1 pt.1) — Super panel `PlanResource` CRUD | ⬜ not started |
+| B1 | Plan catalog admin (Q1 pt.1) — Super panel `PlanResource` CRUD | ✅ done |
 | B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ⬜ not started |
 | B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ⬜ not started |
 | B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ⬜ not started |
@@ -112,19 +112,50 @@ estimate undershot its actual by a wide margin.
   pre-existing, unrelated `CourseSlugUniquenessTest` failure carried since
   S1/S2, still out of scope.
 
-### B1 — Plan catalog admin (Q1 pt.1) — not started
+### B1 — Plan catalog admin (Q1 pt.1) — DONE (2026-08-17)
 
 - New Super-panel-only `Filament/Resources/Plans/PlanResource.php` (+
-  `Pages/List|Create|Edit`) in `app/Domains/Billing/Filament/`. Registered
-  via `SuperPanelProvider`'s `->discoverResources(...)`, not Admin/Teach.
-- Form: `code` (locked/immutable after create — changing it would orphan
-  existing `tenants.plan_id`/`razorpay_plan_id` references), seat/storage/
-  bandwidth/AI caps, price, `razorpay_plan_id` (nullable text — populated
-  once a real Razorpay account exists, same "field exists, wiring waits
-  for real credentials" posture as `RazorpayProvider`), `is_active`.
-- Delete guard: hide delete once any tenant references the plan (mirrors
-  `AssignmentResource`'s own submission-guard pattern from S10 B1) —
-  deactivate (`is_active = false`) instead.
+  `Pages/List|Create|Edit`) in `app/Domains/Billing/Filament/`. Added a
+  second `->discoverResources(...)` call to `SuperPanelProvider` (it
+  previously had exactly one, scoped to Tenancy) — same multi-domain
+  stacking shape `AdminPanelProvider`/`TeachPanelProvider` already use for
+  their own multiple domains.
+- `code` locked on edit via the standard Filament idiom —
+  `disabled(fn (?Plan $record) => $record !== null)` +
+  `dehydrated(fn (?Plan $record) => $record === null)` — disabled on edit
+  so it's never submitted in the update payload, dehydrated only on
+  create so the value is actually saved there. `->unique(Plan::class,
+  'code', ignoreRecord: true)` for the duplicate-code case, same pattern
+  `BatchResource`/`CourseResource` already use for their own unique
+  fields.
+- Delete guard checks **two** things, not one: `tenants()->doesntExist()`
+  (a tenant currently assigned this plan via `tenants.plan_id`) **and**
+  `subscriptions()->doesntExist()` (any billing history at all, even from
+  a tenant that's since moved off it). Added a `Plan::tenants()` `HasMany`
+  (`app/Domains/Tenancy/Models/Tenant::class`) alongside B0's own
+  `subscriptions()` to support this — `Tenant::$fillable` also gained
+  `plan_id` here (B0 added the column but correctly left the model alone,
+  scoped to Billing's own files only; this block is the first thing that
+  actually needs to read/write it). Applied the guard on both the table's
+  row action and the Edit page's own header `DeleteAction` — a small
+  addition beyond what `AssignmentResource`'s own precedent covers (that
+  one only guards the table row, not the Edit page's header action); kept
+  here since the underlying DB FK is a real `restrict`, not
+  `cascadeOnDelete()`/`nullOnDelete()`, so guarding both call sites turns
+  a would-be raw constraint-violation error into a hidden button instead.
+- `composer test`: **814/815 passing** (+7 — `PlanResourceTest`'s
+  create/blank-seat-limit-unlimited/duplicate-code-rejected/
+  edit-code-locked/hide-delete-tenant-assigned/
+  hide-delete-subscription-history/allow-delete-unused), same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
+  scope.
+- **Not a code issue, an environment one:** Docker Desktop wasn't running
+  when this block's first `composer test` attempt started — it doesn't
+  fail fast, it hangs retrying the Postgres/Redis connection until the
+  whole process timeout (900s) is exhausted with no useful error. Started
+  Docker Desktop, waited for the engine, `docker compose up -d`, then
+  reran clean. Worth checking `docker ps` first if a run times out with no
+  test-level failure message at all.
 
 ### B2 — `TenantPlanLimits` resolver — not started
 

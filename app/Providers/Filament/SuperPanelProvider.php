@@ -38,6 +38,7 @@ class SuperPanelProvider extends PanelProvider
             ->favicon(fn () => app(BrandingService::class)->faviconUrl())
             ->brandLogo(fn () => app(BrandingService::class)->logoUrl())
             ->discoverResources(in: app_path('Domains/Tenancy/Filament/Resources'), for: 'App\Domains\Tenancy\Filament\Resources')
+            ->discoverResources(in: app_path('Domains/Billing/Filament/Resources'), for: 'App\Domains\Billing\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
                 Dashboard::class,

@@ -38,6 +38,7 @@ class Tenant extends Model
         'accent_color',
         'custom_domain',
         'plan_tier',
+        'plan_id',
     ];
 
     protected function casts(): array

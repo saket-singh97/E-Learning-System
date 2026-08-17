@@ -2,6 +2,7 @@
 
 namespace App\Domains\Billing\Models;
 
+use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -49,5 +50,15 @@ class Plan extends Model
     public function subscriptions(): HasMany
     {
         return $this->hasMany(TenantSubscription::class);
+    }
+
+    /**
+     * Tenants currently assigned this plan directly (tenants.plan_id) —
+     * distinct from subscriptions(), which is billing-cycle history. Both
+     * are checked before a delete is allowed (PlanResource).
+     */
+    public function tenants(): HasMany
+    {
+        return $this->hasMany(Tenant::class);
     }
 }
