@@ -4,6 +4,7 @@ use App\Domains\Assessments\Jobs\AutoSubmitExpiredQuizAttempts;
 use App\Domains\Assignments\Jobs\CheckCourseCompletionAndIssueCertificates;
 use App\Domains\Batches\Jobs\ExpirePendingEnrolments;
 use App\Domains\Batches\Jobs\RecordVideoCoverageAttendance;
+use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
 use App\Domains\Fees\Jobs\SendFeeReminders;
@@ -88,6 +89,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // not a default left unconsidered — a certificate has no
         // real-time expectation the way a live class or a quiz timer does.
         $schedule->job(new CheckCourseCompletionAndIssueCertificates, 'scheduled')->daily();
+
+        // S11 B8 — same unscoped-sweep shape as the jobs above; the one
+        // grace -> suspended transition no single webhook event can
+        // trigger on its own (design doc §2.4 decision 7).
+        $schedule->job(new SuspendOverdueTenantSubscriptions, 'scheduled')->daily();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same

@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ✅ done |
 | B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ✅ done |
 | B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ✅ done |
-| B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ⬜ not started |
+| B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ✅ done |
 | B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ⬜ not started |
 | B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ⬜ not started |
 | B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ⬜ not started |
@@ -451,16 +451,33 @@ estimate undershot its actual by a wide margin.
   pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
   scope.
 
-### B8 — Grace-period sweep (Q4) — not started
+### B8 — Grace-period sweep (Q4) — DONE (2026-08-17)
 
-- `Billing/Jobs/SuspendOverdueTenantSubscriptions.php` — daily, flips
-  `grace`→`suspended` once `grace_ends_at` has passed with no successful
-  payment landing in between. Mirror `FlagOverdueInvoices`'s own shape.
-- `bootstrap/app.php` `withSchedule()`: add alongside S9's five + S10's
-  one existing scheduled jobs.
-- Guard against a tenant with no active subscription at all (never
-  subscribed, or already cancelled) — sweep must skip those cleanly, not
-  throw.
+- `Billing/Jobs/SuspendOverdueTenantSubscriptions.php` — unscoped daily
+  sweep (`CurrentTenant::clear()`), same shape as `FlagOverdueInvoices`/
+  `CheckCourseCompletionAndIssueCertificates`. WHERE
+  `status = grace AND grace_ends_at < now()` is the entire "skip a tenant
+  with no subscription or an already-cancelled one" guard — matches
+  `FlagOverdueInvoices`'s own "the WHERE clause is the guard" note
+  exactly, no special-case branch needed.
+- **Refinement beyond `FlagOverdueInvoices`'s own bulk-`UPDATE` shape:**
+  this job also has to flip `Tenant.status` (decision 8 — reuse the
+  existing flag, not a second one), so a single atomic bulk statement
+  isn't enough on its own. Used a per-row `DB::transaction()` +
+  `lockForUpdate()` instead — the same discipline `SubscriptionReconciler`
+  (B7) already established for this exact model — re-checking each row's
+  live status right before writing, rather than trusting the collection
+  gathered at the top of `handle()`. Matters concretely here: a
+  `payment.failed` retry recovering via `subscription.charged` mid-sweep
+  (`SubscriptionReconciler` clears `grace_ends_at` the moment that webhook
+  lands) must not get suspended anyway because it was still in the
+  in-memory snapshot from a few rows ago.
+- Scheduled in `bootstrap/app.php` `withSchedule()`, `->daily()` alongside
+  S9's five + S10's one existing scheduled jobs (same midnight-default
+  group, before the staggered backup-related ones).
+- `composer test`: full suite run below
+  (`SuspendOverdueTenantSubscriptionsTest` 6 cases), same 1 pre-existing,
+  unrelated `CourseSlugUniquenessTest` failure, still out of scope.
 
 ### B9 — Suspension enforcement — not started
 
