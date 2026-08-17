@@ -728,8 +728,17 @@ at the source.
 
 ## Broken / open
 
-- (none known right now — the moment something breaks, add it here; don't
-  wait for session end)
+- **No tenant provisioning or branding UI in the Super panel** — found
+  during S11 B6 (2026-08-17). `docs/FEATURES.md` A5 ("Super Admin panel:
+  tenant + plan CRUD") is marked P1 and S1 is marked complete, but no
+  `TenantResource` existed anywhere until S11 B6 added a deliberately
+  minimal one (name/status edit + list, for the "Plan" section's own
+  needs only) — there is still no Create page (a new institute can only
+  be provisioned via `TenantSeeder`/`artisan tinker`) and no
+  logo/favicon/colors/custom-domain fields on the edit form. Not S11's
+  scope to close; needs its own block whenever institute
+  onboarding/provisioning actually gets picked up (not currently a named
+  slice in `docs/ROADMAP.md` S12-S26 — add one when it's prioritised).
 
 ## Avoid
 
@@ -742,7 +751,18 @@ at the source.
   `LessonAccess` from Assessments code is not. Rebuild the small piece of
   logic locally reading the model directly instead (`Quiz::isVisibleTo()`
   reads `Lesson`/`Course` itself rather than calling
-  `LessonAccess::isVisibleTo()`, found in S6 B5, see plan doc's B5 notes)
+  `LessonAccess::isVisibleTo()`, found in S6 B5, see plan doc's B5 notes).
+  **One deliberate, repeated exception (S11 B3/B4/B6):** `Billing`'s
+  quota/limit services (`SeatQuota`, `StorageQuota`) get called directly
+  from other domains' own write paths (`Tenancy\Policies\
+  RoleAssignmentPolicy`, `Assignments\Services\AssignmentSubmissionService`,
+  `Content\Models\Lesson`, `Tenancy\Services\BrandingService`) — a
+  synchronous "block this action if over quota" check cannot be an event
+  (events react after the fact, they don't gate before it), and `Billing`
+  functions as a cross-cutting enforcement layer here, not a domain whose
+  business logic another domain is reaching into. Every call site
+  documents this inline; don't treat it as license to call *any* other
+  domain's service, only this specific, already-established shape
 - Don't add a `BelongsToTenant` model without registering it — `CrossTenantTest`
   fails the build if you forget
 - Don't inline a lesson visibility check in a controller — `LessonAccess`
