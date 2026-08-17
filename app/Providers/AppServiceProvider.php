@@ -17,6 +17,7 @@ use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Events\LessonVideoReady;
 use App\Domains\Fees\Events\PaymentCaptured;
 use App\Domains\Fees\Listeners\CreateInvoiceForPendingEnrolment;
+use App\Domains\Security\Listeners\RegisterDeviceOnLogin;
 use App\Domains\AI\Services\AiSpendCap;
 use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
@@ -38,6 +39,7 @@ use App\Support\Tenancy\CurrentTenant;
 use Filament\Facades\Filament;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Support\Facades\Blade;
@@ -96,6 +98,11 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(PaymentCaptured::class, FinalizeEnrolmentOnPaymentCaptured::class);
         Event::listen(AttendanceRecorded::class, SendAbsenceAlert::class);
         Event::listen(AttendanceRecorded::class, SendLowAttendanceAlert::class);
+
+        // S12 B1 — the one point every login surface already funnels
+        // through (password, TOTP, Google OAuth, all three Filament
+        // panels, both portals); see the listener's own docblock.
+        Event::listen(Login::class, RegisterDeviceOnLogin::class);
 
         // Lives at App\Domains\AI\Livewire, outside Livewire's default
         // App\Livewire auto-discovery root, so the <livewire:ai.doubt-chat />

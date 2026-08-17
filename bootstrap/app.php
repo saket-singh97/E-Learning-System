@@ -14,6 +14,7 @@ use App\Exceptions\BandwidthQuotaExceededException;
 use App\Exceptions\BatchFullException;
 use App\Exceptions\CannotImpersonateException;
 use App\Exceptions\CouponNotRedeemableException;
+use App\Exceptions\DeviceLimitExceededException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\InvalidWebhookSignatureException;
@@ -151,6 +152,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (CouponNotRedeemableException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (BandwidthQuotaExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (AiSpendCapExceededException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (DeviceLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (SeatLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (StorageLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (TenantAlreadySubscribedException $e) => abort(409, $e->getMessage()));
