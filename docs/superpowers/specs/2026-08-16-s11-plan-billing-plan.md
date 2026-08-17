@@ -30,7 +30,7 @@ stop and report before starting the next block.
 | B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ✅ done |
 | B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ✅ done |
 | B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ✅ done |
-| B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ⬜ not started |
+| B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ✅ done |
 | B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ⬜ not started |
 | B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ⬜ not started |
 | B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ⬜ not started |
@@ -322,17 +322,41 @@ estimate undershot its actual by a wide margin.
   pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
   scope.
 
-### B5 — `SubscriptionProvider` + Razorpay drivers (Q3 pt.1) — not started
+### B5 — `SubscriptionProvider` + Razorpay drivers (Q3 pt.1) — DONE (2026-08-17)
 
-- `app/Integrations/SubscriptionProvider.php` — `createSubscription()`,
-  `changePlan()`, `cancelSubscription()`, `verifyWebhookSignature()`.
-- `Drivers/RazorpaySubscriptionProvider.php` — real driver against
-  Razorpay's Subscriptions API, unit-tested via `Http::fake()` (mirrors
-  `RazorpayProviderTest`'s own shape). Not yet bound in
-  `AppServiceProvider` (no real credentials), same posture as
-  `RazorpayProvider` itself.
+- `app/Integrations/SubscriptionProvider.php` — `createSubscription(
+  TenantSubscription)`, `changePlan(TenantSubscription, Plan)`,
+  `cancelSubscription(TenantSubscription)`, `verifyWebhookSignature()`.
+  Method signatures take the actual `Billing` models built in B0, not
+  placeholder scalars — `createSubscription()` reads
+  `$subscription->plan->razorpay_plan_id` itself rather than the caller
+  having to pass it separately.
+- `Drivers/RazorpaySubscriptionProvider.php` — real driver, unit-tested
+  via `Http::fake()` (7 cases, mirrors `RazorpayProviderTest`'s own
+  shape). `total_count: 100` on `createSubscription()` — Razorpay's
+  Subscriptions API requires a finite cycle count even for an
+  effectively-open-ended subscription; 100 monthly cycles is ~8 years,
+  comfortably renewed by a fresh subscription long before it would ever
+  lapse from this alone. `changePlan()` sends `schedule_change_at: 'now'`,
+  not `'cycle_end'` — this app's own proration ledger (decision 9)
+  already accounts for the switch happening immediately. New guard:
+  refuses to create a subscription against a `Plan` with no
+  `razorpay_plan_id` set yet, with a clear message rather than sending
+  Razorpay a null plan reference. Not yet bound in `AppServiceProvider`
+  (no real credentials), same posture as `RazorpayProvider` itself.
 - `Drivers/FakeRazorpaySubscriptionDriver.php` — the actually-bound
-  implementation until real credentials exist.
+  implementation (`AppServiceProvider::register()`), same "hash-seeded,
+  never repeats a subscription_id across calls" posture
+  `FakeRazorpayDriver` already established for orders.
+- New `services.razorpay.subscription_webhook_secret` config key
+  (`RAZORPAY_SUBSCRIPTION_WEBHOOK_SECRET`) — deliberately separate from
+  the existing Orders-API `webhook_secret`, since B7's subscription
+  webhook is a different URL Razorpay can (and should) sign with its own
+  secret, not reuse the Fees domain's.
+- `composer test`: full suite run below (`RazorpaySubscriptionProviderTest`
+  7 cases + `FakeRazorpaySubscriptionDriverTest` 4 cases = 11 new), same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
+  scope.
 
 ### B6 — `TenantSubscription` creation (Q3 pt.2) — not started
 

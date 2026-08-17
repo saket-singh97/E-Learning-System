@@ -26,10 +26,12 @@ use App\Integrations\Drivers\FakeLiveClassDriver;
 use App\Integrations\Drivers\FakeRazorpayDriver;
 use App\Integrations\Drivers\FakeVideoDriver;
 use App\Integrations\Drivers\FakeWhatsAppDriver;
+use App\Integrations\Drivers\FakeRazorpaySubscriptionDriver;
 use App\Integrations\Drivers\RealDnsResolver;
 use App\Integrations\Drivers\SpendCapGuardedAiDriver;
 use App\Integrations\LiveClassProvider;
 use App\Integrations\PaymentProvider;
+use App\Integrations\SubscriptionProvider;
 use App\Integrations\VideoProvider;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -65,6 +67,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->bind(LiveClassProvider::class, FakeLiveClassDriver::class);
         $this->app->bind(PaymentProvider::class, FakeRazorpayDriver::class);
+        $this->app->bind(SubscriptionProvider::class, FakeRazorpaySubscriptionDriver::class);
         $this->app->bind(CommsProvider::class, FakeWhatsAppDriver::class);
 
         // Unlike every driver above, this needs no vendor account —

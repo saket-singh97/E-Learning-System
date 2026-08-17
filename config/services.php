@@ -44,6 +44,12 @@ return [
         'key_id' => env('RAZORPAY_KEY_ID'),
         'key_secret' => env('RAZORPAY_KEY_SECRET'),
         'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
+        // Subscriptions API (S11) uses the same key_id/key_secret as the
+        // Orders API above — one Razorpay account — but a separate webhook
+        // endpoint (/webhooks/razorpay-subscriptions, S11 B7) with its own
+        // secret, same as Razorpay lets any account configure more than
+        // one webhook URL.
+        'subscription_webhook_secret' => env('RAZORPAY_SUBSCRIPTION_WEBHOOK_SECRET'),
     ],
 
     'aisensy' => [
