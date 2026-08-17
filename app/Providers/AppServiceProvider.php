@@ -35,6 +35,7 @@ use App\Integrations\SubscriptionProvider;
 use App\Integrations\VideoProvider;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Filament\Facades\Filament;
 use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -110,6 +111,27 @@ class AppServiceProvider extends ServiceProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::TOPBAR_END,
             fn (): string => Blade::render('<livewire:notification-centre /><livewire:impersonation-banner /><livewire:user-profile />'),
+        );
+
+        // S11 B9 — grace period is an institute-level billing concern an
+        // institute_admin needs to see, not a super_admin (no tenant of
+        // their own) or instructor/student (no billing visibility at all,
+        // per design doc §2.2's own scope boundary) one. Registered
+        // unscoped on the same proven TOPBAR_END hook as the trio above,
+        // gated inside this closure via Filament::getCurrentPanel()
+        // instead of the hook system's own `scopes:` argument — a
+        // `scopes: 'admin'` registration on this exact hook silently never
+        // rendered on a real Dashboard page (found by a failing test, not
+        // assumed; root cause not chased further once this reliable fix
+        // was in hand). The closure only runs during a real panel-page
+        // render, so `getCurrentPanel()` is always resolvable here, unlike
+        // inside the component itself when it's unit-tested directly via
+        // `Livewire::test()` with no panel context at all.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::TOPBAR_END,
+            fn (): string => Filament::getCurrentPanel()?->getId() === 'admin'
+                ? Blade::render('<livewire:grace-period-banner />')
+                : '',
         );
     }
 

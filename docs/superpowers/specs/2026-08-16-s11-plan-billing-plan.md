@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ✅ done |
 | B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ✅ done |
 | B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ✅ done |
-| B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ⬜ not started |
+| B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ✅ done |
 | B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ⬜ not started |
 | B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ⬜ not started |
 | B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ⬜ not started |
@@ -479,15 +479,63 @@ estimate undershot its actual by a wide margin.
   (`SuspendOverdueTenantSubscriptionsTest` 6 cases), same 1 pre-existing,
   unrelated `CourseSlugUniquenessTest` failure, still out of scope.
 
-### B9 — Suspension enforcement — not started
+### B9 — Suspension enforcement — DONE (2026-08-17)
 
-- Confirm the actual current enforcement point for
-  `Tenant::STATUS_SUSPENDED` (likely `TenantAuthenticator` or
-  `ResolveTenant` — read both before assuming) and verify a
-  billing-suspended tenant is genuinely blocked end-to-end, not just
-  flagged in the DB.
-- Grace-window banner: Admin panel shows a visible "N days left in grace
-  period" notice once `TenantSubscription.status === 'grace'`.
+- **Confirmed, not rebuilt:** `ResolveTenant` (not `TenantAuthenticator` —
+  that class has no suspension check at all) already gates on
+  `$tenant->isSuspended()` **before** binding `CurrentTenant`, flushes the
+  session, throws `TenantSuspendedException` (`abort(403)`) — and this
+  check runs in **both** strict and `optional` mode (the `if (!$tenant)`
+  early-return for `optional` sits *before* the suspension check, not
+  after), so a suspended tenant is blocked on the tenant route groups,
+  every Filament panel, *and* the Livewire `/livewire/update` endpoint
+  alike. Built in S1, unchanged by decision 8 — nothing needed rebuilding.
+- **Real coverage gap found and closed:** the mechanism itself had one
+  generic test (`ResolveTenantTest`'s "403s and flushes the session for a
+  suspended tenant," using `Tenant::factory()->suspended()` directly) but
+  **nothing exercised the actual S11 chain** — a tenant that arrives at
+  `STATUS_SUSPENDED` via subscribe → grace → `SuspendOverdueTenantSubscriptions`,
+  not a factory state. Added `TenantSuspensionEnforcementTest` (2 cases):
+  the full chain followed by a real HTTP request confirming both
+  lockout *and* session flush, plus a second case confirming the Admin
+  panel login itself is blocked the same way.
+- New `GracePeriodBanner` Livewire component + `PanelsRenderHook::
+  CONTENT_START` render hook, **scoped to the `'admin'` panel only**
+  (`scopes: 'admin'`, unlike the existing unscoped `TOPBAR_END` hook for
+  notifications/impersonation/profile) — reads through the *ambient*
+  `CurrentTenant` scope on purpose, a deliberate contrast with
+  `SeatQuota`/`StorageQuota`'s own explicit-tenant-param design: this
+  only ever renders inside a real Admin panel request, where
+  `ResolveTenant` has already bound exactly the right tenant. Shows
+  nothing outside a `grace`-status subscription; floors "days left" at 0
+  rather than a negative number once the deadline has technically passed
+  but the sweep hasn't run yet that day.
+- Two real bugs, both caught by the first test run:
+  1. `now()->diffInDays($date)` returns a **float** (e.g. `3.9999926...`),
+     not an int, in this Carbon version — a test asserting "4 days" a few
+     microseconds after `grace_ends_at` was set to exactly `+4 days`
+     failed on the raw decimal. Fixed with `(int) ceil(...)` — also the
+     more correct UX than truncating: the whole of day 4 should still
+     read "4 days left," not flip to "3" the instant any time has
+     elapsed.
+  2. `FilamentView::registerRenderHook(..., scopes: 'admin')` **silently
+     never rendered on a real Dashboard page** — tried both
+     `PanelsRenderHook::CONTENT_START` and `TOPBAR_END` with scoping,
+     neither fired, root cause not chased into Filament's own internals
+     once a reliable alternative was in hand. Fixed by registering
+     **unscoped** on the same `TOPBAR_END` hook the existing
+     notification/impersonation/profile trio already proves renders
+     correctly, and moving the panel restriction into the registration
+     closure itself (`Filament::getCurrentPanel()?->getId() === 'admin'`)
+     rather than the hook system's own scoping. Deliberately *not* pushed
+     into `GracePeriodBanner::render()` itself — that method has no
+     Filament panel context at all when unit-tested directly via
+     `Livewire::test()`, so gating there would have broken 4 already-
+     correct component tests for a reason unrelated to what they check.
+- `composer test`: **885/886 passing** (+7 —
+  `TenantSuspensionEnforcementTest`'s 2 cases + `GracePeriodBannerTest`'s
+  5), same 1 pre-existing, unrelated `CourseSlugUniquenessTest` failure,
+  still out of scope.
 
 ### B10 — Upgrade/downgrade + proration (Q5) — not started
 
