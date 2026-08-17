@@ -28,7 +28,7 @@ stop and report before starting the next block.
 | B0 | Domain groundwork — `Billing` scaffold, `plans`/`tenant_subscriptions`/`subscription_invoices`/`tenant_storage_usage` migrations + models, `tenants.plan_id`, tenant registry, `PlanSeeder` (free/starter/growth/enterprise) | ✅ done |
 | B1 | Plan catalog admin (Q1 pt.1) — Super panel `PlanResource` CRUD | ✅ done |
 | B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ✅ done |
-| B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ⬜ not started |
+| B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ✅ done |
 | B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ⬜ not started |
 | B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ⬜ not started |
 | B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ⬜ not started |
@@ -192,17 +192,57 @@ estimate undershot its actual by a wide margin.
   1 pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out
   of scope.
 
-### B3 — `SeatQuota` + enforcement (Q2 pt.1) — not started
+### B3 — `SeatQuota` + enforcement (Q2 pt.1) — DONE (2026-08-17)
 
-- New `Billing/Services/SeatQuota.php` — `usedNow()` counts active
-  `admin`+`instructor` role users scoped to the tenant (confirm exact
-  Spatie role-query shape already used elsewhere, e.g.
-  `RoleAssignmentPolicy`, reuse it rather than reinventing).
-- Locate the real staff-registration entry point at build time
-  (`RegisteredUserController` was the lead from design-doc research —
-  confirm it's actually reachable in tenant context for admin/instructor
-  signup, not just students) and add the pre-create check there. Clear,
-  specific error message on over-limit, not a raw DB constraint failure.
+- **Real deviation from this block's own plan, found exactly the way the
+  note above anticipated ("confirm... at build time"):**
+  `RegisteredUserController::store()` creates a plain `User` row with
+  **no role at all** — every role grant in this codebase (parent invites
+  today; a future admin/instructor-invite UI eventually) goes through
+  `RoleAssignmentPolicy::assign()` instead, and grepping the whole `app/`
+  tree turned up **zero** existing production call sites that ever assign
+  `'institute_admin'`/`'instructor'` — only test fixtures do
+  `$user->assignRole(...)` directly, bypassing the policy. So the
+  designed hook (`RegisteredUserController`) genuinely does not exist for
+  staff; `RoleAssignmentPolicy::assign()` is the real, already-established
+  chokepoint every role grant passes through, and enforcing there means
+  it's automatically wired up the moment a real staff-invite feature
+  lands (S12+), no separate hookup needed then.
+- New `Billing/Services/SeatQuota.php` — `usedNow()` = `User::where(
+  'tenant_id', ...)->role(['institute_admin', 'instructor'])->count()`.
+  `User` has no `BelongsToTenant` (roles are global to a user, per
+  `RoleAssignmentPolicy`'s own existing note), so this is an explicit
+  filter, not an ambient-scope query; soft-deleted users are already
+  excluded by `User`'s own `SoftDeletes` scope, no separate "active" flag
+  exists to check.
+- `RoleAssignmentPolicy::assign()` gained a `guardSeatLimit()` private
+  method, called after the existing privilege-escalation check passes and
+  before `syncRoles()`. Only fires for `'institute_admin'`/`'instructor'`;
+  skips entirely if the target already holds either (a tier change, not
+  new headcount) or has no `tenant_id` (platform-level user).
+  **Deliberate cross-domain call**, documented inline: `Tenancy\Policies`
+  calling `Billing\Services\SeatQuota` directly is a precedented exception
+  to "domains talk through Events only" — `Comms\Services\
+  ParentInviteCodeService` and `Comms\Filament\...\CreateParentGuardian`
+  already call straight into this exact policy class from a different
+  domain, and a synchronous "block this action" check cannot be expressed
+  as an event in the first place (events react after the fact, they don't
+  gate before it).
+- New `SeatLimitExceededException` (`app/Exceptions/`), registered in
+  `bootstrap/app.php` as `abort(409, ...)` — same shape as
+  `BandwidthQuotaExceededException`/`AiSpendCapExceededException`, a
+  capacity conflict, not an authorization failure like
+  `PrivilegeEscalationException` (`abort(403)`, no message).
+- `composer test`: **828/829 passing** (+8 — `SeatQuotaTest`'s 5 cases +
+  `RoleAssignmentTest`'s 3 new cases: blocked-at-cap, tier-change-allowed-
+  at-capacity, non-staff-role-never-checked), same 1 pre-existing,
+  unrelated `CourseSlugUniquenessTest` failure, still out of scope.
+  One real test bug caught by the first run, not a design flaw: the
+  tier-change test originally had an `institute_admin` actor promote a
+  target to `institute_admin` — `RoleHierarchy` correctly refuses that as
+  privilege escalation regardless of seats (an admin can never grant its
+  own level), so the actor had to be `super_admin` instead for the test
+  to actually exercise the seat-tier-change path it meant to test.
 
 ### B4 — `TenantStorageUsage` + `StorageQuota` (Q1/Q2 pt.2) — not started
 

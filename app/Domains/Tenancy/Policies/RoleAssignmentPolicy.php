@@ -2,9 +2,12 @@
 
 namespace App\Domains\Tenancy\Policies;
 
+use App\Domains\Billing\Services\SeatQuota;
 use App\Domains\Tenancy\Models\RoleAssignmentAudit;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\RoleHierarchy;
 use App\Exceptions\PrivilegeEscalationException;
+use App\Exceptions\SeatLimitExceededException;
 use App\Models\User;
 
 class RoleAssignmentPolicy
@@ -43,6 +46,47 @@ class RoleAssignmentPolicy
             throw PrivilegeEscalationException::forAttempt($actorRole, $role);
         }
 
+        $this->guardSeatLimit($target, $role);
+
         $target->syncRoles([$role]);
+    }
+
+    /**
+     * S11 B3 (Q2) — assign() is the single chokepoint every real role grant
+     * already passes through (parent invites, and this policy's own future
+     * callers once an admin/instructor-invite UI lands), so it's the
+     * correct point-of-action for seat enforcement even though nothing in
+     * this codebase yet calls it with 'institute_admin'/'instructor'
+     * outside tests — enforcing here means it's automatically wired up the
+     * moment such a UI exists, no separate hookup needed later.
+     *
+     * Calling Billing\Services\SeatQuota from a Tenancy\Policies class is a
+     * deliberate, precedented exception to "domains talk through Events
+     * only" — Policies are this codebase's existing sanctioned cross-domain
+     * authorization gate (Comms\Services\ParentInviteCodeService and
+     * Comms\Filament\...\CreateParentGuardian already call straight into
+     * this exact class from a different domain); a synchronous "block this
+     * action" check cannot be expressed as an event anyway, since events
+     * react after the fact rather than gating before it.
+     */
+    private function guardSeatLimit(User $target, string $role): void
+    {
+        if (! in_array($role, SeatQuota::SEAT_ROLES, true)) {
+            return;
+        }
+
+        if ($target->hasAnyRole(SeatQuota::SEAT_ROLES)) {
+            return; // already occupies a seat — a tier change, not new headcount
+        }
+
+        if ($target->tenant_id === null) {
+            return; // platform-level user, not a real institute seat
+        }
+
+        $tenant = Tenant::find($target->tenant_id);
+
+        if ($tenant !== null && app(SeatQuota::class)->remainingFor($tenant) === 0) {
+            throw SeatLimitExceededException::forTenant($tenant->id);
+        }
     }
 }
