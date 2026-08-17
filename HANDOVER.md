@@ -1206,6 +1206,30 @@ at the source.
   fix immediately above — the first version of the test used
   `AssignmentSubmission::creating()` and passed for the wrong reason
   before failing once the real fix was in place).
+- Don't trust a custom app cookie (one never added to `EncryptCookies`'
+  own `$except` list — true of every real, server-only cookie in this
+  app, `lms_device_id` included) to survive Laravel's test HTTP client
+  with a known, predictable value. `withUnencryptedCookie()` sends a value
+  the middleware then tries to *decrypt*, fails, and silently drops
+  (`catch (DecryptException)`) — a real HTTP test then sees no cookie at
+  all. Switching to `withCookie()` (the documented, correct
+  *encrypted*-cookie helper) did **not** reliably fix this either, across
+  three separate attempts in S12 B2 — root cause not fully isolated (a
+  `CookieValuePrefix` validation mismatch inside `EncryptCookies` is the
+  leading suspect). B1's own tests happened to pass despite hitting the
+  identical `withUnencryptedCookie()` mistake, purely because none of
+  them depended on a cookie value surviving a second request (each of its
+  3 device-limit logins supplied a different raw value anyway — a
+  silently-nulled cookie still produced 3 distinct-looking devices,
+  right answer for the wrong reason). Current best-known-working
+  approach: call the middleware/service under test directly
+  (`(new Middleware)->handle($request, $next)`, a `Request::create()`
+  object with cookies set directly on it) rather than dispatching a real
+  HTTP request at all — sidesteps `EncryptCookies` entirely instead of
+  fighting it. A real, stated gap in this suite's own coverage — the
+  literal HTTP-level wiring of anything reading a *custom* cookie is not
+  provable this way, only the logic is (see S12 B2's own plan-doc notes
+  for what was tried).
 - A "which statuses count as live/active" whereIn list written when a
   model only had 3-4 statuses easily goes stale the moment a later block
   adds a new one — `PlanChangeService::liveSubscriptionFor()`'s

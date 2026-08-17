@@ -30,6 +30,7 @@ use App\Exceptions\TenantAlreadySubscribedException;
 use App\Exceptions\TenantNotFoundException;
 use App\Exceptions\TenantNotSubscribedException;
 use App\Exceptions\TenantSuspendedException;
+use App\Http\Middleware\EnsureDeviceNotRevoked;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\ResolveImpersonation;
 use App\Http\Middleware\ResolveTenant;
@@ -133,6 +134,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             ResolveTenant::class.':optional',
             ResolveImpersonation::class,
+            EnsureDeviceNotRevoked::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

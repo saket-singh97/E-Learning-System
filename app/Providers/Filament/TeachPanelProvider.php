@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Domains\Tenancy\Services\BrandingService;
 use App\Filament\Teach\Auth\Login;
+use App\Http\Middleware\EnsureDeviceNotRevoked;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\ResolveImpersonation;
 use App\Http\Middleware\ResolveTenant;
@@ -63,6 +64,7 @@ class TeachPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
                 ResolveTenant::class,
                 ResolveImpersonation::class,
+                EnsureDeviceNotRevoked::class,
             ])
             ->authMiddleware([
                 Authenticate::class,
