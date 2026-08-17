@@ -15,6 +15,10 @@ use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Billing\Models\Plan;
+use App\Domains\Billing\Models\SubscriptionInvoice;
+use App\Domains\Billing\Models\TenantStorageUsage;
+use App\Domains\Billing\Models\TenantSubscription;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
 use App\Domains\Content\Models\AttendanceRecord;
@@ -64,6 +68,9 @@ class TenantModelRegistry
         Assignment::class,
         AssignmentSubmission::class,
         Certificate::class,
+        TenantSubscription::class,
+        SubscriptionInvoice::class,
+        TenantStorageUsage::class,
     ];
 
     /**
@@ -404,6 +411,53 @@ class TenantModelRegistry
                 'pdf_disk_path' => 'certificates/row.pdf',
                 'issued_at' => now(),
             ],
+            TenantSubscription::class => [
+                'plan_id' => Plan::create([
+                    'code' => 'row-'.uniqid(),
+                    'name' => 'Row Plan',
+                    'seat_limit' => 5,
+                    'storage_limit_gb' => 10,
+                    'bandwidth_limit_gb_per_day' => 10,
+                    'ai_spend_cap_usd_per_day' => 1,
+                    'price_inr_per_month' => 999,
+                ])->id,
+                'status' => 'active',
+                'current_period_start' => now(),
+                'current_period_end' => now()->addMonth(),
+            ],
+            SubscriptionInvoice::class => [
+                'tenant_subscription_id' => TenantSubscription::create([
+                    'plan_id' => Plan::create([
+                        'code' => 'row-'.uniqid(),
+                        'name' => 'Row Plan',
+                        'seat_limit' => 5,
+                        'storage_limit_gb' => 10,
+                        'bandwidth_limit_gb_per_day' => 10,
+                        'ai_spend_cap_usd_per_day' => 1,
+                        'price_inr_per_month' => 999,
+                    ])->id,
+                    'status' => 'active',
+                    'current_period_start' => now(),
+                    'current_period_end' => now()->addMonth(),
+                ])->id,
+                'plan_id' => Plan::create([
+                    'code' => 'row-'.uniqid(),
+                    'name' => 'Row Plan',
+                    'seat_limit' => 5,
+                    'storage_limit_gb' => 10,
+                    'bandwidth_limit_gb_per_day' => 10,
+                    'ai_spend_cap_usd_per_day' => 1,
+                    'price_inr_per_month' => 999,
+                ])->id,
+                'amount' => 999,
+                'kind' => 'recurring',
+                'status' => 'pending',
+                'period_start' => now(),
+                'period_end' => now()->addMonth(),
+            ],
+            TenantStorageUsage::class => [
+                'bytes_used' => 0,
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -442,6 +496,9 @@ class TenantModelRegistry
             Assignment::class => ['title' => 'tampered'],
             AssignmentSubmission::class => ['feedback' => 'tampered'],
             Certificate::class => ['pdf_disk_path' => 'tampered.pdf'],
+            TenantSubscription::class => ['status' => 'tampered'],
+            SubscriptionInvoice::class => ['status' => 'tampered'],
+            TenantStorageUsage::class => ['bytes_used' => 999999],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

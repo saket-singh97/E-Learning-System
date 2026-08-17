@@ -25,7 +25,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | Domain groundwork — `Billing` scaffold, `plans`/`tenant_subscriptions`/`subscription_invoices`/`tenant_storage_usage` migrations + models, `tenants.plan_id`, tenant registry, `PlanSeeder` (free/starter/growth/enterprise) | ⬜ not started |
+| B0 | Domain groundwork — `Billing` scaffold, `plans`/`tenant_subscriptions`/`subscription_invoices`/`tenant_storage_usage` migrations + models, `tenants.plan_id`, tenant registry, `PlanSeeder` (free/starter/growth/enterprise) | ✅ done |
 | B1 | Plan catalog admin (Q1 pt.1) — Super panel `PlanResource` CRUD | ⬜ not started |
 | B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ⬜ not started |
 | B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ⬜ not started |
@@ -54,32 +54,63 @@ estimate undershot its actual by a wide margin.
 ## Block notes (fill in as each block builds — deviations, gotchas,
 ## decisions made mid-build)
 
-### B0 — Domain groundwork — not started
+### B0 — Domain groundwork — DONE (2026-08-17)
 
-- Scaffold `app/Domains/Billing/{Models,Services,Filament,Jobs}` (no
-  `Events/`/`Livewire/`/`Views/`/`Policies/` yet — add only when a block
-  actually needs one, matching S6 B0's "don't pre-scaffold empty folders"
-  precedent).
-- Migrations: `plans` (central, no `tenant_id`), `tenant_subscriptions`,
-  `subscription_invoices`, `tenant_storage_usage` (all three
-  `tenant_id ... cascadeOnDelete()`), plus `tenants.plan_id` (nullable FK,
-  `nullOnDelete()` — a deleted plan must not take a tenant row down with
-  it). Check `plans.code` gets a real unique index.
-- Models: `Plan` (no `BelongsToTenant`), `TenantSubscription`,
-  `SubscriptionInvoice`, `TenantStorageUsage` (all three
-  `BelongsToTenant`). Explicit `$fillable` on every one (no `$guarded =
-  []`, enforced by existing test suite).
-- Register `TenantSubscription`, `SubscriptionInvoice`,
-  `TenantStorageUsage` in `TenantModelRegistry::MODELS` **in this block**,
-  full `seedAttributes()`/`updateAttributes()` — register-without-seed
-  throws immediately once `CrossTenantTest` iterates `MODELS` (every prior
-  domain-groundwork block's own note applies verbatim). `Plan` is **not**
-  registered (decision 2 — un-tenanted).
+- Scaffolded only `app/Domains/Billing/Models/` — deviation from this
+  block's own bullet list above, which named `Services/Filament/Jobs` too.
+  Followed S10 B0's actual precedent instead (only `Models/` created at
+  domain-groundwork time; other subfolders appear when the block that
+  first needs them lands), not this note's own more literal wording.
+- Migrations, in order: `create_plans_table` (central, no `tenant_id`,
+  `code` unique), `add_plan_id_to_tenants_table` (nullable FK,
+  `nullOnDelete()`), `create_tenant_subscriptions_table`,
+  `create_subscription_invoices_table` (`plan_id` denormalized — a
+  snapshot, not a live reference), `create_tenant_storage_usage_table`
+  (`tenant_id` unique — one row per tenant). `tenant_id`/
+  `tenant_subscription_id` columns all `cascadeOnDelete()`; `plan_id`
+  references left at Postgres's default (no action / restrict) on both
+  child tables — deleting a referenced plan must fail, not silently
+  cascade or null out billing history, so `PlanResource` (B1) has to
+  deactivate a plan instead of deleting one that is actually in use.
+- Models: `Plan` (no `BelongsToTenant`, `CODE_FREE`/`STARTER`/`GROWTH`/
+  `ENTERPRISE` consts), `TenantSubscription` (`STATUS_*` consts,
+  `plan()`/`invoices()`), `SubscriptionInvoice` (`KIND_*`/`STATUS_*`
+  consts, `subscription()`/`plan()`), `TenantStorageUsage` (`bytes_used`
+  only). All four explicit `$fillable`, no `$guarded = []`.
+- **Real bug, caught by the first test run, not a review pass:**
+  `TenantStorageUsage` — Eloquent's default table-name convention
+  pluralizes "Usage" to "Usages" (`tenant_storage_usages`), but the
+  migration (matching design doc §3.1's literal schema) created
+  `tenant_storage_usage` (singular). First `composer test` run failed
+  with `SQLSTATE[42P01]: Undefined table: tenant_storage_usages`. Fixed
+  with an explicit `protected $table = 'tenant_storage_usage';` on the
+  model rather than renaming the migration — the design doc's schema name
+  is the one worth keeping stable, not Eloquent's pluralization guess.
+  `tenant_subscriptions`/`subscription_invoices` both pluralize correctly
+  on their own, no override needed there.
+- Registered `TenantSubscription`, `SubscriptionInvoice`,
+  `TenantStorageUsage` in `TenantModelRegistry::MODELS`, full
+  `seedAttributes()`/`updateAttributes()` for all three (`Plan` correctly
+  left unregistered — decision 2). `SubscriptionInvoice`'s seed attributes
+  nest a nested `TenantSubscription::create()` inside a nested
+  `Plan::create()`, mirroring the existing multi-level nesting shape
+  `FeeInvoice`/`FeePayment` already used for their own parent chains —
+  confirmed against `CrossTenantTest`'s own "no tenant context bound"
+  branch before writing it: the nested `TenantSubscription::create()`
+  correctly throws `MissingTenantContextException` on its own (via
+  `BelongsToTenant`'s `creating()` hook calling `CurrentTenant::id()`)
+  when the outer test clears tenant context, so no special-casing was
+  needed to satisfy that assertion.
 - `PlanSeeder` — 4 rows (`free`/`starter`/`growth`/`enterprise`), round
-  placeholder numbers for limits/price (design doc explicitly doesn't
-  invent real business pricing, same posture as S9 B12's own caps).
-- Run `composer test`, confirm 807/808 (+3, one new `CrossTenantTest`
-  dataset entry per newly-registered model), same 1 pre-existing failure.
+  placeholder numbers; the free tier's bandwidth (5 GB/day) and AI cap
+  ($1/day) intentionally match `BandwidthQuota`/`AiSpendCap`'s existing
+  hardcoded free-tier constants for continuity. `updateOrCreate` keyed on
+  `code`, safe to re-run. Registered in `DatabaseSeeder` after
+  `TenantSeeder`.
+- `composer test`: **807/808 passing** (+3, one new `CrossTenantTest`
+  dataset entry per newly-registered model, exactly as predicted), same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure carried since
+  S1/S2, still out of scope.
 
 ### B1 — Plan catalog admin (Q1 pt.1) — not started
 
