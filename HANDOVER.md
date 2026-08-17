@@ -7,6 +7,29 @@ at the source.
 
 ## Right now (2026-08-17)
 
+- **S12 — Security & Resilience Hardening: DESIGN + PLAN DONE, build not
+  started.** `docs/superpowers/specs/2026-08-17-s12-security-resilience-design.md`,
+  `...-plan.md`. `docs/FEATURES.md` Section B (B9-B13, B15) + Section V-a
+  (V1-V5) — device fingerprinting + registered-device limit, concurrent
+  session limit + remote logout, login history + impossible-travel
+  detection, account-sharing detection, a general 365-day-retention audit
+  log, GDPR/DPDP consent/export/deletion, circuit breakers on every
+  external provider, explicit cache invalidation, soft-delete gap closure
+  on 4 payment/subscription models, Form Request extraction on the last 2
+  inline-`validate()` controllers. Picked as the next P2-backlog slice per
+  `docs/ROADMAP.md`'s own S12 entry. New `app/Domains/Security/` domain;
+  5 new `BelongsToTenant` models plus 2 deliberately-not-tenant-scoped ones
+  (`audit_log_entries`, `cookie_consents` — same `ImpersonationAudit`-style
+  exception S9 B3 established, both need to record platform-level or
+  pre-tenant-context events). Verified before writing the design: zero
+  existing device/session/GDPR/circuit-breaker/cache surface anywhere in
+  the app (grepped, not assumed); `SoftDeletes` already correct on
+  `User`/`Course`/`CourseSection`/`Lesson`/`Batch`/`Enrolment`/`Question`,
+  missing on `FeePayment`/`FeeInvoice`/`TenantSubscription`/
+  `SubscriptionInvoice`; raw-SQL baseline (V5) already fully enforced by
+  `SecurityBaselineTest`, needs no new code. 15 blocks (B0-B14). Next step:
+  run the per-block build command in the plan doc starting at B0.
+
 - **S11 — Plan Tiers + Institute Billing: COMPLETE, all 17 blocks
   (2026-08-17).** `docs/superpowers/specs/2026-08-16-s11-plan-billing-design.md`,
   `...-plan.md` (full per-block build log + B16's own dedicated review-pass

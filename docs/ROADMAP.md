@@ -14,19 +14,19 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 10 (S1–S10) |
-| **Designed, not built** | 1 (S11) |
-| **Proposed, not yet scoped** | 15 (S12–S26) |
+| **Shipped** | 11 (S1–S11) |
+| **Designed, not built** | 1 (S12) |
+| **Proposed, not yet scoped** | 14 (S13–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **11 shipped** (S10), 5 more designed (S11, not built).
+- **P2 — Depth & extras** (~75 features): **16 shipped** (S10, S11), 11 more designed (S12, not built).
 - **P3 — Scale & enterprise** (~55 features): not started — by design, this comes after paying customers exist.
 
 ---
 
-## Shipped + designed — S1 to S11
+## Shipped + designed — S1 to S12
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -40,11 +40,12 @@ regenerate it from this file.
 | S8 | Comms — WhatsApp notifications, parent portal, parent-student linking | 9 blocks | Aug 12 | ✅ Done |
 | S9 | Hardening & Backlog — 2FA, Google OAuth, AI/bandwidth spend caps, audit-trail fixes | 15 blocks | Aug 12–13 | ✅ Done |
 | S10 | Assignments, Gradebook, Certificates — submissions, rubric grading, weighted gradebook, auto-issued certificates | 16 blocks | Aug 16 | ✅ Done |
-| S11 | Plan Tiers + Billing — seat/storage/bandwidth caps, Razorpay subscriptions, grace period, proration | 17 blocks planned | Aug 16 | 🟡 Designed, build pending |
+| S11 | Plan Tiers + Billing — seat/storage/bandwidth caps, Razorpay subscriptions, grace period, proration | 17 blocks | Aug 17 | ✅ Done |
+| S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks planned | Aug 17 | 🟡 Designed, build pending |
 
 ---
 
-## Full roadmap — S12 onward (proposed)
+## Full roadmap — S13 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
@@ -54,7 +55,6 @@ were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP export, circuit breakers on vendors, explicit cache invalidation | 11 | B, V1-V5 |
 | S13 | Discovery & Content Engagement — categories, prerequisites, course bundles, catalog search, lesson Q&A, notes/bookmarks, direct messaging, ratings | 8 | C7-C10, N7-N10 |
 | S14 | Video & Live-Class Depth — concurrent-play limits, multi-DRM, auto-subtitles, doc print-block, live recording → AI ingestion, Zoom OAuth, live polls | 12 | D9-D13, E4, G5-G10 |
 | S15 | Batch & Institute Operations — discussion forums, timetable conflict detection, bulk CSV import, per-instructor permissions, admissions CRM, ID cards | 11 | F6-F10, S2-S7 |
