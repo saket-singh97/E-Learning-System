@@ -4,6 +4,7 @@ use App\Domains\Assessments\Jobs\AutoSubmitExpiredQuizAttempts;
 use App\Domains\Assignments\Jobs\CheckCourseCompletionAndIssueCertificates;
 use App\Domains\Batches\Jobs\ExpirePendingEnrolments;
 use App\Domains\Batches\Jobs\RecordVideoCoverageAttendance;
+use App\Domains\Billing\Jobs\SendGraceSuspensionReminders;
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
@@ -96,6 +97,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // grace -> suspended transition no single webhook event can
         // trigger on its own (design doc §2.4 decision 7).
         $schedule->job(new SuspendOverdueTenantSubscriptions, 'scheduled')->daily();
+
+        // S11 B14 — same unscoped-sweep shape as the jobs above.
+        $schedule->job(new SendGraceSuspensionReminders, 'scheduled')->daily();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same

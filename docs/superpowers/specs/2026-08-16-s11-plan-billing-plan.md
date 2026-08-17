@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ✅ done |
 | B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ✅ done |
 | B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ✅ done |
-| B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ⬜ not started |
+| B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ✅ done |
 | B15 | Edge cases + concurrency — webhook double-delivery idempotency, soft-deleted-tenant handling in the sweep, race guards | ⬜ not started |
 | B16 | Full test coverage, isolation registration sweep, review pass, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
 
@@ -662,11 +662,51 @@ estimate undershot its actual by a wide margin.
   pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out
   of scope.
 
-### B14 — Grace/suspension notifications — not started
+### B14 — Grace/suspension notifications — DONE (2026-08-17)
 
-- Reuse Comms domain's existing WhatsApp driver (same one Fees P7's
-  defaulter reminders use) for a grace-entry notice and a T-3-before-
-  suspension reminder to the tenant's registered billing contact.
+- **No "billing contact" field/concept exists anywhere in this app**
+  (`Tenant` has no such column) — resolved to every active
+  `institute_admin` user for the tenant instead, the closest real fit
+  already in this codebase, same "flag the ambiguity, resolve to what
+  actually exists, don't invent a new concept" posture
+  `FeeReminderDue`'s own docblock already took toward an identical
+  question (P7).
+  New `GracePeriodReminder` notification — one class, staged via a param
+  (`entered_grace` | `suspension_imminent`), mirroring `FeeReminderDue`'s
+  own shape exactly rather than two near-identical classes. Same 3
+  channels (`mail`, `database`, `WhatsAppChannel`).
+- **`entered_grace` fires directly from `SubscriptionReconciler::failed()`**,
+  not a sweep — it's a real one-time event (the moment `payment.failed`
+  first flips a subscription into grace), not an elapsed-time condition.
+  Only on the genuine active/trialing → grace transition, captured
+  *before* the update — a second distinct failure while already in grace
+  (Razorpay retrying the charge) is not a new entry into it and must not
+  re-notify. Sent after the transaction commits, not inside it.
+- **`suspension_imminent` is a new daily sweep**,
+  `Billing/Jobs/SendGraceSuspensionReminders.php` — "3 days before the
+  deadline" genuinely is an elapsed-time check, so it needs the same
+  shape `SendFeeReminders` (Fees P7) already established: unscoped daily
+  sweep, `whereDate('grace_ends_at', now()->addDays(3))`, deduped against
+  the raw `notifications` table (not one user's own relation — the
+  notifiable here is *every* admin for the tenant, not a single user)
+  so a queue retry on the same logical day doesn't double-send. Scheduled
+  in `bootstrap/app.php` alongside every other daily sweep.
+- A tenant with no `institute_admin` at all (a data gap, not expected in
+  practice) is skipped cleanly — `Notification::send()` is simply never
+  called when the admin collection is empty, no special-case branch
+  needed.
+- One real test bug, not a code bug: the double-send dedupe test
+  originally used `Notification::fake()`, which intercepts every channel
+  including `'database'` — so nothing was ever actually written for
+  `alreadySentToday()` to read back, and the second `handle()` call sent
+  again. `SendFeeRemindersTest` had already solved this identical problem
+  (its own docblock explains it); fixed by dropping `fake()` for that one
+  test and asserting the real notifications-table count instead, same as
+  that precedent.
+- `composer test`: **912/913 passing** (+6 —
+  `SubscriptionReconcilerTest`'s 2 new cases +
+  `SendGraceSuspensionRemindersTest`'s 4), same 1 pre-existing, unrelated
+  `CourseSlugUniquenessTest` failure, still out of scope.
 
 ### B15 — Edge cases + concurrency — not started
 

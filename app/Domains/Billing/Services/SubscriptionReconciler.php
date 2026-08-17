@@ -7,9 +7,12 @@ use App\Domains\Billing\Models\TenantSubscription;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\InvalidWebhookSignatureException;
 use App\Integrations\SubscriptionProvider;
+use App\Models\User;
+use App\Notifications\GracePeriodReminder;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * The only thing that ever turns a Razorpay subscription webhook into a
@@ -130,21 +133,32 @@ class SubscriptionReconciler
      * not push the deadline further out — `?? ` only sets it when it was
      * null, so the original 7-day clock survives a repeat failure rather
      * than resetting indefinitely.
+     *
+     * S11 B14 — the grace-entry notice fires only on the genuine
+     * active/trialing -> grace transition, captured *before* the update,
+     * not on every call that reaches this far — a second distinct failure
+     * during an already-open grace window is not a new entry into it, and
+     * re-notifying on every one of those would be noise, not a warning.
+     * Sent after the transaction commits, not inside it — a notification
+     * tied to a write that could still be rolled back by something later
+     * in the same request has nothing to roll back to.
      */
     protected function failed(TenantSubscription $subscription, array $data): void
     {
-        DB::transaction(function () use ($subscription, $data) {
+        $justEnteredGrace = DB::transaction(function () use ($subscription, $data): bool {
             $locked = TenantSubscription::withoutGlobalScope('tenant')->lockForUpdate()->find($subscription->id);
 
             if ($locked->status === TenantSubscription::STATUS_CANCELLED) {
-                return;
+                return false;
             }
 
             $paymentId = data_get($data, 'payload.payment.entity.id');
 
             if ($paymentId !== null && $this->invoiceAlreadyRecorded($paymentId)) {
-                return;
+                return false;
             }
+
+            $wasAlreadyInGrace = $locked->status === TenantSubscription::STATUS_GRACE;
 
             $locked->update([
                 'status' => TenantSubscription::STATUS_GRACE,
@@ -162,7 +176,24 @@ class SubscriptionReconciler
                 'period_start' => $locked->current_period_start,
                 'period_end' => $locked->current_period_end,
             ]));
+
+            return ! $wasAlreadyInGrace;
         });
+
+        if ($justEnteredGrace) {
+            $this->notifyInstituteAdmins($subscription->fresh(), 'entered_grace');
+        }
+    }
+
+    protected function notifyInstituteAdmins(TenantSubscription $subscription, string $stage): void
+    {
+        $admins = User::where('tenant_id', $subscription->tenant_id)
+            ->role('institute_admin')
+            ->get();
+
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new GracePeriodReminder($subscription, $stage));
+        }
     }
 
     protected function ended(TenantSubscription $subscription): void

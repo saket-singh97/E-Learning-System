@@ -7,12 +7,18 @@ use App\Domains\Billing\Services\SubscriptionReconciler;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\InvalidWebhookSignatureException;
 use App\Integrations\Drivers\FakeRazorpaySubscriptionDriver;
+use App\Models\User;
+use App\Notifications\GracePeriodReminder;
 use App\Support\Tenancy\CurrentTenant;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    $this->seed(RoleSeeder::class);
+
     $this->tenant = Tenant::factory()->create(['subdomain' => 'physics']);
     app(CurrentTenant::class)->set($this->tenant);
 
@@ -106,6 +112,42 @@ it('does not push the grace deadline further out on a second, distinct failure',
     $this->reconciler->reconcile($second, ($this->sign)($second));
 
     expect($this->subscription->fresh()->grace_ends_at->equalTo($originalDeadline))->toBeTrue();
+});
+
+it('notifies every institute_admin the moment a subscription enters grace (S11 B14)', function () {
+    Notification::fake();
+    $this->subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    $admin = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $admin->assignRole('institute_admin');
+    $instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $instructor->assignRole('instructor');
+
+    $payload = ($this->payload)('payment.failed', paymentId: 'pay_fail_1');
+    $this->reconciler->reconcile($payload, ($this->sign)($payload));
+
+    Notification::assertSentTo(
+        $admin,
+        fn (GracePeriodReminder $notification) => $notification->stage === 'entered_grace'
+            && $notification->subscription->id === $this->subscription->id,
+    );
+    Notification::assertNotSentTo($instructor, GracePeriodReminder::class);
+});
+
+it('does not re-notify entered_grace on a second distinct failure while already in grace', function () {
+    Notification::fake();
+    $this->subscription->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    $admin = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $admin->assignRole('institute_admin');
+
+    $first = ($this->payload)('payment.failed', paymentId: 'pay_fail_1');
+    $this->reconciler->reconcile($first, ($this->sign)($first));
+
+    $second = ($this->payload)('payment.failed', paymentId: 'pay_fail_2');
+    $this->reconciler->reconcile($second, ($this->sign)($second));
+
+    Notification::assertSentToTimes($admin, GracePeriodReminder::class, 1);
 });
 
 it('cancels the subscription on subscription.cancelled', function () {
