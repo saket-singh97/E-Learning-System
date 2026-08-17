@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | B0 | Domain groundwork — new `Security` domain scaffold, 5 `BelongsToTenant` migrations + models (`device_sessions`, `login_history`, `account_sharing_flags`, `gdpr_export_requests`, `gdpr_deletion_requests`) + 2 non-tenant migrations (`audit_log_entries`, `cookie_consents`), tenant registry | ✅ done |
 | B1 | Device fingerprinting (`DeviceFingerprintService`) + registered-device limit at login (default 2, config-driven) (B9) | ✅ done |
 | B2 | Concurrent session limit + remote device logout — Admin/Teach panel "My devices" page (B10) | ✅ done |
-| B3 | Login history + IP geolocation + impossible-travel detection (`ImpossibleTravelDetector`, velocity check) (B11) | ⬜ not started |
+| B3 | Login history + IP geolocation + impossible-travel detection (`ImpossibleTravelDetector`, velocity check) (B11) | ✅ done |
 | B4 | Account-sharing detection — daily sweep, forced re-auth on flag (B12) | ⬜ not started |
 | B5 | General `audit_log_entries` sink (`AuditLogger`) + wire into the highest-value existing sensitive actions (role assignment, impersonation, plan change, tenant suspension) | ⬜ not started |
 | B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ⬜ not started |
@@ -245,7 +245,78 @@ own estimate undershot its actual by a wide margin.
   B15 already established for true concurrent-lock contention.
 - `composer test`: full suite run below.
 
-### B3 — Login history + impossible-travel detection — not started
+### B3 — Login history + impossible-travel detection — DONE (2026-08-17)
+
+- **No real `GeoIpResolver` driver built, deliberately** — design doc §4
+  decision 3 named a local MaxMind GeoLite2 database, matching
+  `RealDnsResolver`'s own "no vendor account needed" posture, but
+  MaxMind now gates even the free GeoLite2 tier behind account
+  registration to download the `.mmdb` file itself. Unlike `RealDnsResolver`
+  (a plain PHP builtin, immediately bindable and testable), there is no
+  real database file available in this environment to build or verify a
+  real driver against — a stub with zero test coverage would be worse
+  than not building it. `FakeGeoIpResolver` stays the bound driver
+  (matches every other unconfigured vendor integration in this app —
+  Razorpay, WhatsApp, live-class — all bind their Fake by default too).
+  Provisioning a real `.mmdb` file is a `SETUP.md`-level deployment
+  concern, the same boundary the design doc already draws around V6/V7.
+- **`RecordLoginHistory` — a sibling listener on the same `Illuminate\Auth\Events\Login`
+  event `RegisterDeviceOnLogin` (B1) already established as the one point
+  every login surface funnels through**, not merged into B1's own class —
+  same "one listener per concern" shape `AttendanceRecorded` already has
+  two independent listeners for.
+- **Scoped to successful logins only — a deliberate cut, not a stale
+  oversight.** `Illuminate\Auth\Events\Login` only fires on success by
+  construction; recording *failed* attempts too would need hooking
+  `TenantAuthenticator::validate()`'s own failure branch, which — unlike
+  the `Login` event — genuinely isn't reachable from Google OAuth's flow
+  at all (a real, different chokepoint problem this block doesn't try to
+  solve). Impossible-travel detection only makes sense comparing
+  successful sessions anyway (a rejected password attempt was never
+  really "there"), so the smallest version that delivers this block's
+  actual value doesn't need failed-attempt tracking. `login_history.successful`
+  stays in the schema for a later fast-follow, unused by this block
+  beyond always writing `true`.
+- `ImpossibleTravelDetector` re-resolves both IPs on every call rather
+  than storing lat/lon on `login_history` — that table only has
+  `country`/`city` strings (B0's own schema, not revisited here), and
+  this runs once per login, not a hot path. Real haversine distance /
+  elapsed hours > `config('security.impossible_travel_max_kmh')`
+  (default 900 km/h, config-driven per design doc §6). Two logins at the
+  same instant from two distinct real locations correctly flags (floored
+  elapsed time, not a zero-guard early return) — the astronomically
+  narrow-but-real case a naive "return false if no time passed" guard
+  would have silently missed.
+- **Real bug, caught by the "should NOT flag" tests failing, not by
+  inspection**: assumed `diffInSeconds()`'s plain default (no extra args)
+  form was already unsigned, matching `PlanChangeService::prorate()`'s
+  own S11 B9 precedent for `diffInDays()`. Wrong for `diffInSeconds()`
+  specifically in this Carbon version — it still returned a *negative*
+  value when `$toAt` was after `$fromAt`, which floored straight to the
+  `max(0.001, ...)` minimum, turning a perfectly plausible ~50 km/h
+  Mumbai→Pune trip into an apparent multi-million-km/h one (and made the
+  "respects the configured max speed" test fail too, for the identical
+  reason — no config value could ever be high enough to un-flag a
+  division by 0.001). Fixed with an explicit `abs()`, not by assuming
+  Carbon's own convention holds across every `diffIn*()` method — a
+  narrower, more accurate lesson than the S11 B9 one it first looked like
+  it'd match.
+- Tested at three levels: `FakeGeoIpResolverTest` (the driver itself —
+  known cities, loopback nulls, stable-but-differentiated results for
+  unlisted IPs), `ImpossibleTravelDetectorTest` (the velocity math
+  directly — flags a real distant-city pair, doesn't flag a real nearby
+  pair, never flags on unresolvable IPs, respects the config threshold,
+  the same-instant edge case both ways), and `RecordLoginHistoryTest`
+  (the listener — geo data recorded correctly, first-login-ever never
+  flags, a genuinely impossible pair flags, a plausible pair doesn't,
+  platform-level users are skipped, plus one real HTTP login proving
+  the listener is actually registered). Unlike B2's own device-fingerprint
+  cookie, IP comes from `REMOTE_ADDR`, not a cookie — no `EncryptCookies`
+  round-trip involved, so B2's own multi-attempt saga doesn't repeat here;
+  still bound the request directly into the container rather than
+  chasing a full HTTP dispatch, for the same "full control, zero
+  framework plumbing to second-guess" reasoning B2 ultimately settled on.
+- `composer test`: full suite run below.
 
 ### B4 — Account-sharing detection — not started
 

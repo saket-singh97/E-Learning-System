@@ -17,12 +17,14 @@ use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Events\LessonVideoReady;
 use App\Domains\Fees\Events\PaymentCaptured;
 use App\Domains\Fees\Listeners\CreateInvoiceForPendingEnrolment;
+use App\Domains\Security\Listeners\RecordLoginHistory;
 use App\Domains\Security\Listeners\RegisterDeviceOnLogin;
 use App\Domains\AI\Services\AiSpendCap;
 use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
 use App\Integrations\DnsResolver;
 use App\Integrations\Drivers\FakeAiDriver;
+use App\Integrations\Drivers\FakeGeoIpResolver;
 use App\Integrations\Drivers\FakeLiveClassDriver;
 use App\Integrations\Drivers\FakeRazorpayDriver;
 use App\Integrations\Drivers\FakeVideoDriver;
@@ -30,6 +32,7 @@ use App\Integrations\Drivers\FakeWhatsAppDriver;
 use App\Integrations\Drivers\FakeRazorpaySubscriptionDriver;
 use App\Integrations\Drivers\RealDnsResolver;
 use App\Integrations\Drivers\SpendCapGuardedAiDriver;
+use App\Integrations\GeoIpResolver;
 use App\Integrations\LiveClassProvider;
 use App\Integrations\PaymentProvider;
 use App\Integrations\SubscriptionProvider;
@@ -78,6 +81,12 @@ class AppServiceProvider extends ServiceProvider
         // this project's native Windows PHP 8.4 build (S9 B4) — so the
         // real driver binds by default, not a Fake.
         $this->app->bind(DnsResolver::class, RealDnsResolver::class);
+
+        // S12 B3 — no real driver exists yet; see FakeGeoIpResolver's own
+        // docblock for why (MaxMind gates even the free GeoLite2 tier
+        // behind account registration, unlike DnsResolver's plain PHP
+        // builtin above).
+        $this->app->bind(GeoIpResolver::class, FakeGeoIpResolver::class);
     }
 
     /**
@@ -103,6 +112,11 @@ class AppServiceProvider extends ServiceProvider
         // through (password, TOTP, Google OAuth, all three Filament
         // panels, both portals); see the listener's own docblock.
         Event::listen(Login::class, RegisterDeviceOnLogin::class);
+
+        // S12 B3 — a sibling listener on the same event, its own concern
+        // (login history + impossible-travel), not merged into B1's own
+        // class; see the listener's own docblock.
+        Event::listen(Login::class, RecordLoginHistory::class);
 
         // Lives at App\Domains\AI\Livewire, outside Livewire's default
         // App\Livewire auto-discovery root, so the <livewire:ai.doubt-chat />

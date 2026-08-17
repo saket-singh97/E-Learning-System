@@ -1230,6 +1230,19 @@ at the source.
   literal HTTP-level wiring of anything reading a *custom* cookie is not
   provable this way, only the logic is (see S12 B2's own plan-doc notes
   for what was tried).
+- Don't assume `Carbon::diffInSeconds()`'s plain default (no extra args)
+  call is already unsigned just because `diffInDays()` behaves that way
+  elsewhere in this app (`PlanChangeService::prorate()`, S11 B9) — in
+  this Carbon version, `$toAt->diffInSeconds($fromAt)` still returned a
+  *negative* value when `$toAt` was genuinely after `$fromAt`, found by
+  `ImpossibleTravelDetector`'s own "should NOT flag a plausible trip"
+  test failing (S12 B3) — a negative diff floored straight to a
+  `max(0.001, ...)` minimum-hours guard, turning a real ~50 km/h trip
+  into an apparent multi-million-km/h one no config threshold could ever
+  un-flag. Wrap in `abs()` explicitly for any `diffIn*()` call whose sign
+  you haven't independently verified for that specific method in this
+  Carbon version — don't extrapolate from a different `diffIn*()`
+  method's own already-observed behaviour.
 - A "which statuses count as live/active" whereIn list written when a
   model only had 3-4 statuses easily goes stale the moment a later block
   adds a new one — `PlanChangeService::liveSubscriptionFor()`'s
