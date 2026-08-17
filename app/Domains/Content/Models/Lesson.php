@@ -2,7 +2,10 @@
 
 namespace App\Domains\Content\Models;
 
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Content\Events\LessonVideoReady;
+use App\Domains\Tenancy\Models\Tenant;
+use App\Exceptions\StorageLimitExceededException;
 use App\Integrations\VideoProvider;
 use App\Support\Security\SanitizesHtml;
 use App\Support\Tenancy\BelongsToTenant;
@@ -80,7 +83,16 @@ class Lesson extends Model
             app(VideoProvider::class)->delete($lesson);
 
             if ($lesson->pdf_disk_path) {
+                // S11 B4 — release storage only on a real delete (a force
+                // delete), not a soft delete that leaves the file on disk
+                // untouched (design doc §3.3's explicit rule).
+                $bytes = Storage::disk('local')->exists($lesson->pdf_disk_path)
+                    ? Storage::disk('local')->size($lesson->pdf_disk_path)
+                    : 0;
+
                 Storage::disk('local')->delete($lesson->pdf_disk_path);
+
+                app(StorageQuota::class)->adjust(Tenant::findOrFail($lesson->tenant_id), -$bytes);
             }
         });
     }
@@ -145,11 +157,34 @@ class Lesson extends Model
      */
     public function attachUploadedPdf(string $tempDiskPath): void
     {
+        // S11 B4 (Q2) — same deliberate cross-domain call B3 already
+        // established for SeatQuota: a Model resolving a Billing service
+        // via app() (the same pattern this file's own attachUploadedVideo()
+        // already uses for VideoProvider), since a Model can't take
+        // constructor-injected dependencies.
+        $storageQuota = app(StorageQuota::class);
+        $tenant = Tenant::findOrFail($this->tenant_id);
+        $newBytes = Storage::disk('local')->size($tempDiskPath);
+
+        if ($newBytes > $storageQuota->remainingFor($tenant)) {
+            throw StorageLimitExceededException::forTenant($tenant->id);
+        }
+
+        // Read the previous file's size before it's overwritten — the
+        // computed path is the same for a same-extension re-upload
+        // (overwrite in place), so without this the counter would grow on
+        // every re-upload even though disk usage didn't actually increase.
+        $previousBytes = ($this->pdf_disk_path && Storage::disk('local')->exists($this->pdf_disk_path))
+            ? Storage::disk('local')->size($this->pdf_disk_path)
+            : 0;
+
         $extension = pathinfo($tempDiskPath, PATHINFO_EXTENSION) ?: 'pdf';
         $diskPath = "pdfs/{$this->tenant_id}/{$this->id}.{$extension}";
 
         Storage::disk('local')->move($tempDiskPath, $diskPath);
 
         $this->update(['pdf_disk_path' => $diskPath]);
+
+        $storageQuota->adjust($tenant, $newBytes - $previousBytes);
     }
 }

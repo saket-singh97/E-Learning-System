@@ -2,6 +2,7 @@
 
 use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Assignments\Services\CertificateService;
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Content\Models\Course;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\BrandingService;
@@ -94,4 +95,34 @@ it('still generates a real pdf once a tenant has logo/signature/background brand
 
     $bytes = Storage::disk('local')->get($certificate->pdf_disk_path);
     expect(substr($bytes, 0, 4))->toBe('%PDF');
+});
+
+it('tracks the issued PDF against the tenant storage counter (S11 B4)', function () {
+    $tenant = Tenant::factory()->create();
+    app(CurrentTenant::class)->set($tenant);
+    $course = Course::create(['title' => 'Physics 101', 'slug' => 'physics-101', 'status' => 'published']);
+    $student = User::factory()->create(['tenant_id' => $tenant->id]);
+
+    $certificate = app(CertificateService::class)->issue($student, $course, 90);
+
+    expect(app(StorageQuota::class)->usedNow($tenant))
+        ->toBe(Storage::disk('local')->size($certificate->pdf_disk_path));
+});
+
+it('still issues a certificate even once the tenant is already over its storage limit', function () {
+    $tenant = Tenant::factory()->create();
+    app(CurrentTenant::class)->set($tenant);
+    $course = Course::create(['title' => 'Physics 101', 'slug' => 'physics-101', 'status' => 'published']);
+    $student = User::factory()->create(['tenant_id' => $tenant->id]);
+
+    // Deliberately not gated (design doc §3.3) — an automated sweep with no
+    // interactive user to retry must not silently fail to issue a
+    // student's already-earned certificate over an institute-level cap.
+    app(StorageQuota::class)->adjust($tenant, 5 * 1024 * 1024 * 1024);
+    app(CurrentTenant::class)->clear();
+
+    $certificate = app(CertificateService::class)->issue($student, $course, 90);
+
+    expect($certificate->exists)->toBeTrue()
+        ->and(Storage::disk('local')->exists($certificate->pdf_disk_path))->toBeTrue();
 });

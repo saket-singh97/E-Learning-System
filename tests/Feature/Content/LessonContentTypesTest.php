@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Content\Filament\Resources\Lessons\Pages\EditLesson;
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Content\Models\Course;
@@ -7,6 +8,7 @@ use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Services\LessonAccess;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Exceptions\StorageLimitExceededException;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Database\Seeders\RoleSeeder;
@@ -209,6 +211,58 @@ it('reports isPlayable per content type', function () {
     expect($access->isPlayable($embedLesson))->toBeFalse();
     $embedLesson->update(['embed_url' => 'https://www.youtube.com/embed/abc']);
     expect($access->isPlayable($embedLesson->fresh()))->toBeTrue();
+});
+
+it('tracks an attached pdf against the tenant storage counter (S11 B4)', function () {
+    [$tenant, $lesson] = contentTypeFixture(['type' => 'pdf']);
+
+    // UploadedFile::fake() writes no real bytes into Storage::fake() (this
+    // file's own later test documents the same gotcha) — writing directly
+    // to a temp path gives attachUploadedPdf() a real byte count to read,
+    // matching how a real FileUpload field's dehydrated temp path already
+    // has genuine content sitting on disk in production.
+    $tempPath = 'livewire-tmp/notes.pdf';
+    Storage::disk('local')->put($tempPath, str_repeat('x', 2000));
+
+    $lesson->attachUploadedPdf($tempPath);
+
+    expect(app(StorageQuota::class)->usedNow($tenant))->toBe(2000);
+});
+
+it('nets out a same-extension pdf re-upload to only the size delta', function () {
+    [$tenant, $lesson] = contentTypeFixture(['type' => 'pdf']);
+
+    Storage::disk('local')->put('livewire-tmp/first.pdf', str_repeat('x', 2000));
+    $lesson->attachUploadedPdf('livewire-tmp/first.pdf');
+
+    Storage::disk('local')->put('livewire-tmp/second.pdf', str_repeat('x', 3000));
+    $lesson->fresh()->attachUploadedPdf('livewire-tmp/second.pdf');
+
+    expect(app(StorageQuota::class)->usedNow($tenant))->toBe(3000);
+});
+
+it('blocks attaching a pdf once the tenant storage limit is reached', function () {
+    [$tenant, $lesson] = contentTypeFixture(['type' => 'pdf']);
+    app(StorageQuota::class)->adjust($tenant, (5 * 1024 * 1024 * 1024) - 500);
+
+    Storage::disk('local')->put('livewire-tmp/notes.pdf', str_repeat('x', 2000));
+
+    expect(fn () => $lesson->attachUploadedPdf('livewire-tmp/notes.pdf'))
+        ->toThrow(StorageLimitExceededException::class);
+
+    expect($lesson->fresh()->pdf_disk_path)->toBeNull();
+});
+
+it('releases storage when a pdf lesson is force-deleted', function () {
+    [$tenant, $lesson] = contentTypeFixture(['type' => 'pdf']);
+
+    Storage::disk('local')->put('livewire-tmp/notes.pdf', str_repeat('x', 2000));
+    $lesson->attachUploadedPdf('livewire-tmp/notes.pdf');
+    expect(app(StorageQuota::class)->usedNow($tenant))->toBe(2000);
+
+    $lesson->fresh()->forceDelete();
+
+    expect(app(StorageQuota::class)->usedNow($tenant))->toBe(0);
 });
 
 it('marks the video player with download-protection attributes', function () {

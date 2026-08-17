@@ -1,8 +1,10 @@
 <?php
 
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\BrandingService;
 use App\Exceptions\InvalidFileTypeException;
+use App\Exceptions\StorageLimitExceededException;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -115,4 +117,51 @@ it('returns absolute local disk paths for certificate branding, or null when uns
 
     expect($service->certificateSignaturePath($tenant))
         ->toBe(Storage::disk('public')->path($tenant->certificate_signature_path));
+});
+
+it('tracks a logo upload against the tenant storage counter (S11 B4)', function () {
+    $tenant = Tenant::factory()->create();
+    $file = UploadedFile::fake()->create('logo.png', 200, 'image/png');
+
+    app(BrandingService::class)->storeLogo($tenant, $file);
+
+    expect(app(StorageQuota::class)->usedNow($tenant))->toBe(200 * 1024);
+});
+
+it('does not double-count a same-extension logo re-upload, only the size delta', function () {
+    $tenant = Tenant::factory()->create();
+
+    app(BrandingService::class)->storeLogo($tenant, UploadedFile::fake()->create('logo.png', 200, 'image/png'));
+    $tenant->refresh();
+
+    // UploadedFile::fake()->create() writes no real bytes into
+    // Storage::fake() (LessonContentTypesTest documents the identical
+    // gotcha for the 'local' disk) — the *new* file's size is read from
+    // the UploadedFile's own metadata (correct either way), but the
+    // *previous* file's size is read back via Storage::size(), which
+    // needs real bytes on the fake disk to report anything but 0.
+    Storage::disk('public')->put($tenant->logo_path, str_repeat('x', 200 * 1024));
+
+    app(BrandingService::class)->storeLogo($tenant, UploadedFile::fake()->create('logo.png', 350, 'image/png'));
+
+    // Same computed path both times (branding/{tenant}/logo.png) — usage
+    // should reflect the final file's size, not 200 + 350.
+    expect(app(StorageQuota::class)->usedNow($tenant))->toBe(350 * 1024);
+});
+
+it('blocks a branding upload once the tenant storage limit is reached', function () {
+    $tenant = Tenant::factory()->create();
+    app(StorageQuota::class)->adjust($tenant, (5 * 1024 * 1024 * 1024) - (50 * 1024));
+
+    $exception = null;
+
+    try {
+        app(BrandingService::class)->storeLogo($tenant, UploadedFile::fake()->create('logo.png', 200, 'image/png'));
+    } catch (StorageLimitExceededException $e) {
+        $exception = $e;
+    }
+
+    expect($exception)->not->toBeNull();
+    $tenant->refresh();
+    expect($tenant->logo_path)->toBeNull();
 });

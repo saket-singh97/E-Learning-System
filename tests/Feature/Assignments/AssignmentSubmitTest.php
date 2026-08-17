@@ -4,6 +4,7 @@ use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
@@ -280,4 +281,33 @@ it('recovers from a concurrent-submission race instead of surfacing a raw databa
         ->pluck('version_number');
 
     expect($versions->all())->toBe([1, 2]);
+});
+
+it('increases the tenant storage counter by the total submitted file size (S11 B4)', function () {
+    enrolStudentInAssignmentBatch();
+
+    Livewire::actingAs($this->student)
+        ->test(AssignmentSubmit::class, ['assignment' => $this->assignment])
+        ->set('files', [UploadedFile::fake()->create('answer.pdf', 500, 'application/pdf')])
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    expect(app(StorageQuota::class)->usedNow($this->tenant))
+        ->toBe(500 * 1024);
+});
+
+it('blocks a submission once the tenant storage limit is reached', function () {
+    enrolStudentInAssignmentBatch();
+
+    // Legacy free-tier cap (no plan assigned) is 5 GB — pre-fill it to
+    // within 100 KB of full so a 500 KB upload has nowhere to go.
+    app(StorageQuota::class)->adjust($this->tenant, (5 * 1024 * 1024 * 1024) - (100 * 1024));
+
+    Livewire::actingAs($this->student)
+        ->test(AssignmentSubmit::class, ['assignment' => $this->assignment])
+        ->set('files', [UploadedFile::fake()->create('answer.pdf', 500, 'application/pdf')])
+        ->call('submit')
+        ->assertHasErrors(['submission']);
+
+    expect(AssignmentSubmission::count())->toBe(0);
 });

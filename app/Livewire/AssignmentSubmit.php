@@ -8,6 +8,7 @@ use App\Domains\Assignments\Services\AssignmentSubmissionService;
 use App\Exceptions\AssignmentNotAvailableException;
 use App\Exceptions\AssignmentResubmissionLimitExceededException;
 use App\Exceptions\InvalidFileTypeException;
+use App\Exceptions\StorageLimitExceededException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -68,6 +69,10 @@ class AssignmentSubmit extends Component
             return;
         } catch (InvalidFileTypeException $e) {
             $this->addError('files', $e->getMessage());
+
+            return;
+        } catch (StorageLimitExceededException) {
+            $this->addError('submission', "Your institute's storage limit has been reached — contact your admin.");
 
             return;
         }

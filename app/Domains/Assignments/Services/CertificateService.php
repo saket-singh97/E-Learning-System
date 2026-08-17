@@ -3,6 +3,7 @@
 namespace App\Domains\Assignments\Services;
 
 use App\Domains\Assignments\Models\Certificate;
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Content\Models\Course;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\BrandingService;
@@ -23,6 +24,10 @@ use Illuminate\Support\Str;
  */
 class CertificateService
 {
+    public function __construct(
+        private readonly StorageQuota $storageQuota,
+    ) {}
+
     public function issue(User $student, Course $course, float $finalScore): Certificate
     {
         $verificationId = 'CERT-'.strtoupper(Str::random(12));
@@ -46,6 +51,15 @@ class CertificateService
             'signaturePath' => $branding->certificateSignaturePath($tenant),
             'backgroundPath' => $branding->certificateBackgroundPath($tenant),
         ])->save($pdfDiskPath, 'local');
+
+        // S11 B4 — tracked, deliberately not gated. This runs from an
+        // unscoped daily sweep with no interactive user watching it retry
+        // (design doc §3.3 header); blocking a student's already-earned
+        // certificate because the *institute's* storage happens to be full
+        // is a worse failure mode than letting one certificate go through,
+        // unlike the interactive uploads (assignment submissions, lesson
+        // PDFs, branding) B4's other call sites correctly do block.
+        $this->storageQuota->adjust($tenant, Storage::disk('local')->size($pdfDiskPath));
 
         return Certificate::withoutEvents(fn () => Certificate::create([
             'tenant_id' => $student->tenant_id,

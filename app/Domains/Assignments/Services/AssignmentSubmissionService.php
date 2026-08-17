@@ -4,9 +4,12 @@ namespace App\Domains\Assignments\Services;
 
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
+use App\Domains\Billing\Services\StorageQuota;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\AssignmentNotAvailableException;
 use App\Exceptions\AssignmentResubmissionLimitExceededException;
 use App\Exceptions\InvalidFileTypeException;
+use App\Exceptions\StorageLimitExceededException;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +27,10 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 class AssignmentSubmissionService
 {
     public const MAX_VERSIONS = 3;
+
+    public function __construct(
+        private readonly StorageQuota $storageQuota,
+    ) {}
 
     /**
      * @param  array<int, TemporaryUploadedFile>  $files
@@ -91,6 +98,18 @@ class AssignmentSubmissionService
      */
     protected function storeVersion(Assignment $assignment, User $user, array $files, int $versionNumber): AssignmentSubmission
     {
+        // S11 B4 (Q2) — point-of-action storage enforcement. Billing\
+        // Services\StorageQuota called directly from this domain's own
+        // service is the same deliberate, documented cross-domain
+        // exception S11 B3 already established for SeatQuota — a
+        // synchronous "block this upload" check cannot be an event.
+        $tenant = Tenant::findOrFail($assignment->tenant_id);
+        $incomingBytes = array_sum(array_map(fn (TemporaryUploadedFile $file): int => $file->getSize(), $files));
+
+        if ($incomingBytes > $this->storageQuota->remainingFor($tenant)) {
+            throw StorageLimitExceededException::forTenant($tenant->id);
+        }
+
         $storedFiles = [];
 
         foreach ($files as $file) {
@@ -116,6 +135,12 @@ class AssignmentSubmissionService
                 'size_kb' => (int) ceil($file->getSize() / 1024),
             ];
         }
+
+        // No decrement counterpart — every version is a distinct disk path
+        // that's kept forever (design doc §2.4 decision 3, unchanged by
+        // S10 B15's own version-history reasoning), never overwritten or
+        // deleted, so there is nothing to release later.
+        $this->storageQuota->adjust($tenant, $incomingBytes);
 
         return AssignmentSubmission::create([
             'assignment_id' => $assignment->id,

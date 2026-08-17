@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | B1 | Plan catalog admin (Q1 pt.1) — Super panel `PlanResource` CRUD | ✅ done |
 | B2 | `TenantPlanLimits` resolver; `BandwidthQuota`/`AiSpendCap` migrated onto it (plan_id-aware, legacy fallback preserved) | ✅ done |
 | B3 | `SeatQuota` + enforcement at staff registration (Q2 pt.1) | ✅ done |
-| B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ⬜ not started |
+| B4 | `TenantStorageUsage` + `StorageQuota`, wired into every file-store/delete call site (Q1/Q2 pt.2 — storage) | ✅ done |
 | B5 | `SubscriptionProvider` interface + `RazorpaySubscriptionProvider` + `FakeRazorpaySubscriptionDriver` (Q3 pt.1) | ⬜ not started |
 | B6 | `TenantSubscription` creation — `TenantResource` "Plan" section, `PlanChangeService::subscribe()` (Q3 pt.2) | ⬜ not started |
 | B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ⬜ not started |
@@ -244,21 +244,83 @@ estimate undershot its actual by a wide margin.
   own level), so the actor had to be `super_admin` instead for the test
   to actually exercise the seat-tier-change path it meant to test.
 
-### B4 — `TenantStorageUsage` + `StorageQuota` (Q1/Q2 pt.2) — not started
+### B4 — `TenantStorageUsage` + `StorageQuota` (Q1/Q2 pt.2) — DONE (2026-08-17)
 
-- Grep for every model/controller that stores a user-uploaded file
-  counted toward institute storage: assignment submission files
-  (`AssignmentSubmissionService`), lesson downloadable resources, issued
-  certificate PDFs, branding uploads (`BrandingService`). Enumerate the
-  real list here before writing any hook — design doc deliberately left
-  this open rather than guessing.
-- New `Billing/Services/StorageQuota.php` (`capFor`/`usedNow`/
-  `remainingFor`, reading `TenantStorageUsage.bytes_used`).
-- Increment on successful store, decrement on delete, at each enumerated
-  site. Soft-deletes that don't remove the underlying file do **not**
-  decrement (design doc §3.3).
-- Pre-check `remainingFor()` before accepting a new upload at each site,
-  same "block at the point of action" posture as `SeatQuota`.
+- Grep confirmed exactly the 4 sites the design doc named, plus one it
+  didn't name explicitly by column but is the same underlying method:
+  `AssignmentSubmissionService::storeVersion()`, `Lesson::
+  attachUploadedPdf()` (+ its `forceDeleting` hook), `CertificateService::
+  issue()`, and `BrandingService::storeUpload()`/`storeTempUpload()` — the
+  latter is a **single shared method already** for all 4 branding fields
+  (logo, favicon, certificate-signature, certificate-background), so one
+  hook there covers all four, not four separate ones.
+- New `Billing/Services/StorageQuota.php` — `capFor`/`usedNow`/
+  `remainingFor` (same `withoutGlobalScope` pattern `BandwidthQuota::
+  usedToday()` already established) + one `adjust(Tenant, int $delta)`
+  doing both directions (positive records, negative releases, floored at
+  0) rather than separate `record()`/`release()` methods.
+- **Real design refinement found at build time, not in the original
+  plan:** `Lesson::attachUploadedPdf()` and `BrandingService::
+  storeUpload()` both **overwrite the same computed disk path** on a
+  same-extension re-upload (no new path, no delete call at all) — a naive
+  "always increment on store" would inflate the counter on every
+  re-upload of an unchanged file, unlike assignment submissions
+  (always a new versioned path, safe to only ever increment) and
+  certificates (always a new path, never overwritten). Fixed by reading
+  the *previous* file's size before overwriting and calling
+  `adjust(newBytes - previousBytes)` — a net-zero delta on an identical
+  re-upload, a correct partial delta otherwise. `BrandingService::
+  storeUpload()`/`storeTempUpload()` both gained a `?string $previousPath`
+  parameter so each of the 4 public callers can read the tenant's current
+  column value before calling in.
+- Pre-checked at 3 of the 4 sites (assignment submissions, lesson PDFs,
+  branding) — all genuinely interactive, blockable actions, matching
+  `SeatQuota`'s "point of action" posture, each throwing the new
+  `StorageLimitExceededException` (409, registered in `bootstrap/app.php`
+  same as every other quota exception). **Deliberately not pre-checked at
+  the 4th (`CertificateService::issue()`)** — it runs from S10's own
+  unscoped daily sweep with no interactive user watching to retry;
+  blocking a student's already-earned certificate over an institute-level
+  storage cap is a worse failure mode than letting one certificate go
+  through slightly over budget. Usage is still tracked there (increment
+  only), just never gates the action. Documented inline and in
+  `CertificateServiceTest`.
+- `Lesson::attachUploadedPdf()` and `BrandingService::storeUpload()` both
+  resolve `StorageQuota` via `app(...)` rather than constructor injection
+  — a Model can't take constructor dependencies (same reason
+  `attachUploadedVideo()` already resolves `VideoProvider` the same way);
+  `AssignmentSubmissionService`/`CertificateService`/`BrandingService`
+  (real Service classes) all got real constructor injection instead.
+- `AssignmentSubmit` Livewire component gained a catch clause for the new
+  exception (same shape as its 3 existing catches) — without it the
+  exception would have bubbled up as a raw 500 inside a Livewire action
+  instead of a clean form error, same class of gap B3 didn't have to fix
+  only because `RoleAssignmentPolicy::assign()` isn't reached through a UI
+  yet.
+- Every cross-domain call here (`Assignments`→`Billing`,
+  `Content`→`Billing`, `Tenancy`→`Billing`) is the same deliberate,
+  documented exception S11 B3 already established for `SeatQuota` — not
+  re-argued at length per call site, just flagged inline.
+- One real test bug, not a code bug, caught by the first run: the
+  branding re-upload test failed with 550 KB recorded instead of the
+  expected 350 KB (200+350, i.e. it looked like a genuine double-count).
+  Root cause was in the test, not `storeUpload()` — `UploadedFile::
+  fake()->create()` writes no real bytes into `Storage::fake()` (the
+  identical gotcha `LessonContentTypesTest`'s own bandwidth-quota test
+  already documents for the `'local'` disk, here hitting `'public'`
+  instead): the *new* file's size is read from the `UploadedFile` object's
+  own metadata (always correct), but the *previous* file's size is read
+  back via `Storage::size()`, which needs real bytes physically on the
+  fake disk to report anything but 0. Fixed by writing real content into
+  the first upload's path before the second call, matching the same
+  workaround already established elsewhere in this codebase — production
+  code was never wrong, since a real re-upload's previous file genuinely
+  has real bytes on disk.
+- `composer test`: **844/845 passing** (+16 — `StorageQuotaTest`'s 5
+  cases + `AssignmentSubmitTest`'s 2 + `CertificateServiceTest`'s 2 +
+  `BrandingServiceTest`'s 3 + `LessonContentTypesTest`'s 4), same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure, still out of
+  scope.
 
 ### B5 — `SubscriptionProvider` + Razorpay drivers (Q3 pt.1) — not started
 

@@ -2,8 +2,10 @@
 
 namespace App\Domains\Tenancy\Services;
 
+use App\Domains\Billing\Services\StorageQuota;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\InvalidFileTypeException;
+use App\Exceptions\StorageLimitExceededException;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -17,7 +19,13 @@ class BrandingService
 
     public const DEFAULT_ACCENT_COLOR = '#f59e0b';
 
-    public function __construct(protected CurrentTenant $currentTenant) {}
+    public function __construct(
+        protected CurrentTenant $currentTenant,
+        // S11 B4 (Q2) — same deliberate cross-domain call B3/B4's other
+        // sites already establish and document once each; not repeated
+        // at length here.
+        private readonly StorageQuota $storageQuota,
+    ) {}
 
     /**
      * Filament panels evaluate their ->colors()/->favicon()/->brandLogo()
@@ -69,12 +77,12 @@ class BrandingService
 
     public function storeLogo(Tenant $tenant, UploadedFile $file): void
     {
-        $tenant->update(['logo_path' => $this->storeUpload($tenant, $file, 'logo')]);
+        $tenant->update(['logo_path' => $this->storeUpload($tenant, $file, 'logo', $tenant->logo_path)]);
     }
 
     public function storeFavicon(Tenant $tenant, UploadedFile $file): void
     {
-        $tenant->update(['favicon_path' => $this->storeUpload($tenant, $file, 'favicon')]);
+        $tenant->update(['favicon_path' => $this->storeUpload($tenant, $file, 'favicon', $tenant->favicon_path)]);
     }
 
     /**
@@ -92,12 +100,12 @@ class BrandingService
      */
     public function storeCertificateSignature(Tenant $tenant, string $tempDiskPath): void
     {
-        $tenant->update(['certificate_signature_path' => $this->storeTempUpload($tenant, $tempDiskPath, 'certificate-signature')]);
+        $tenant->update(['certificate_signature_path' => $this->storeTempUpload($tenant, $tempDiskPath, 'certificate-signature', $tenant->certificate_signature_path)]);
     }
 
     public function storeCertificateBackground(Tenant $tenant, string $tempDiskPath): void
     {
-        $tenant->update(['certificate_background_path' => $this->storeTempUpload($tenant, $tempDiskPath, 'certificate-background')]);
+        $tenant->update(['certificate_background_path' => $this->storeTempUpload($tenant, $tempDiskPath, 'certificate-background', $tenant->certificate_background_path)]);
     }
 
     /**
@@ -125,7 +133,7 @@ class BrandingService
         return $path ? Storage::disk('public')->url($path) : null;
     }
 
-    protected function storeTempUpload(Tenant $tenant, string $tempDiskPath, string $field): string
+    protected function storeTempUpload(Tenant $tenant, string $tempDiskPath, string $field, ?string $previousPath): string
     {
         $file = new UploadedFile(
             Storage::disk('local')->path($tempDiskPath),
@@ -133,14 +141,22 @@ class BrandingService
             test: true,
         );
 
-        $diskPath = $this->storeUpload($tenant, $file, $field);
+        $diskPath = $this->storeUpload($tenant, $file, $field, $previousPath);
 
         Storage::disk('local')->delete($tempDiskPath);
 
         return $diskPath;
     }
 
-    protected function storeUpload(Tenant $tenant, UploadedFile $file, string $field): string
+    /**
+     * S11 B4 (Q2) — $previousPath is the field's current value, read by
+     * every caller *before* it overwrites it. storeAs() below always
+     * computes "{$field}.{$extension}" — a same-extension re-upload lands
+     * on the exact same path (overwrite in place, no net disk growth), so
+     * without reading the old size first the running counter would grow
+     * on every re-upload of an unchanged logo/favicon/signature/background.
+     */
+    protected function storeUpload(Tenant $tenant, UploadedFile $file, string $field, ?string $previousPath): string
     {
         $extension = strtolower((string) $file->extension());
 
@@ -148,6 +164,19 @@ class BrandingService
             throw InvalidFileTypeException::forField($field, $extension, self::ALLOWED_EXTENSIONS);
         }
 
-        return $file->storeAs("branding/{$tenant->id}", "{$field}.{$extension}", 'public');
+        $newBytes = $file->getSize();
+        $previousBytes = ($previousPath && Storage::disk('public')->exists($previousPath))
+            ? Storage::disk('public')->size($previousPath)
+            : 0;
+
+        if ($newBytes - $previousBytes > $this->storageQuota->remainingFor($tenant)) {
+            throw StorageLimitExceededException::forTenant($tenant->id);
+        }
+
+        $diskPath = $file->storeAs("branding/{$tenant->id}", "{$field}.{$extension}", 'public');
+
+        $this->storageQuota->adjust($tenant, $newBytes - $previousBytes);
+
+        return $diskPath;
     }
 }
