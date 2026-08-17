@@ -5,28 +5,95 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-16)
+## Right now (2026-08-17)
 
-- **S11 — Plan Tiers + Institute Billing: DESIGN + PLAN DONE, build not
-  started.** `docs/superpowers/specs/2026-08-16-s11-plan-billing-design.md`,
-  `...-plan.md`. `docs/FEATURES.md` Section Q (Q1-Q5) — plan tiers with
-  seat/storage/bandwidth limits, enforcement at point of action, Razorpay
-  recurring subscriptions for institutes, 7-day grace period → suspension,
-  upgrade/downgrade with proration. Picked over 2 other leftover P2
-  candidates (account-security round 2, engagement analytics + parent
-  comms follow-up) — directly closes the fast-follow `BandwidthQuota`/
-  `AiSpendCap` (S9 B12) themselves flagged as deferred ("richer
-  tiers/limits product... once real customers need different limits").
-  New `app/Domains/Billing/` domain; new un-tenanted `Plan` catalog table
-  (only `Plan` of the four new models is *not* `BelongsToTenant` —
-  `TenantSubscription`/`SubscriptionInvoice`/`TenantStorageUsage` all
-  are); `tenants.plan_id` added additively (nullable, existing
-  `plan_tier` enum + hardcoded caps kept as the fallback when null — zero
-  blast radius on existing S9 tests); second, separate Razorpay
-  integration (`SubscriptionProvider`, Subscriptions API) beside the
-  existing `PaymentProvider` (Orders API, Fees domain) since they're
-  different vendor surfaces. 17 blocks (B0-B16). Next step: run the
-  per-block build command in the plan doc starting at B0.
+- **S11 — Plan Tiers + Institute Billing: COMPLETE, all 17 blocks
+  (2026-08-17).** `docs/superpowers/specs/2026-08-16-s11-plan-billing-design.md`,
+  `...-plan.md` (full per-block build log + B16's own dedicated review-pass
+  notes live there, not repeated here). `docs/FEATURES.md` Section Q
+  (Q1-Q5) — plan tiers with seat/storage/bandwidth limits, enforcement at
+  point of action, Razorpay recurring subscriptions for institutes, 7-day
+  grace period → suspension, upgrade/downgrade with proration. Picked over
+  2 other leftover P2 candidates (account-security round 2, engagement
+  analytics + parent comms follow-up) — directly closes the fast-follow
+  `BandwidthQuota`/`AiSpendCap` (S9 B12) themselves flagged as deferred
+  ("richer tiers/limits product... once real customers need different
+  limits"). New `app/Domains/Billing/` domain; new un-tenanted `Plan`
+  catalog table (only `Plan` of the four new models is *not*
+  `BelongsToTenant` — `TenantSubscription`/`SubscriptionInvoice`/
+  `TenantStorageUsage` all are, all three registered in
+  `TenantModelRegistry`, confirmed exact-complete in B16); `tenants.plan_id`
+  added additively (nullable, existing `plan_tier` enum + hardcoded caps
+  kept as the fallback when null — zero blast radius on existing S9
+  tests); second, separate Razorpay integration (`SubscriptionProvider`,
+  Subscriptions API) beside the existing `PaymentProvider` (Orders API,
+  Fees domain) since they're different vendor surfaces.
+  - **B0-B4** built the domain end to end: schema, Super-panel `PlanResource`
+    CRUD, `TenantPlanLimits` (plan-aware, legacy `plan_tier` fallback
+    preserved), `SeatQuota` (enforced at `RoleAssignmentPolicy::assign()`),
+    `StorageQuota` (wired into every file-store/delete call site across
+    Assignments/Content/Tenancy).
+  - **B5-B10** built the real subscription lifecycle: `SubscriptionProvider`
+    + `RazorpaySubscriptionProvider`/`FakeRazorpaySubscriptionDriver`;
+    `TenantResource`'s "Plan" section + `PlanChangeService::subscribe()`;
+    the webhook (`RazorpaySubscriptionWebhookController` +
+    `SubscriptionReconciler`); the daily grace-period sweep
+    (`SuspendOverdueTenantSubscriptions`, `grace_ends_at` logic); suspension
+    enforcement confirmed on the existing `ResolveTenant` gate (decision 8
+    — reuses `Tenant::STATUS_SUSPENDED`, no parallel flag) plus a
+    `GracePeriodBanner`; upgrade/downgrade with in-house proration
+    (`PlanChangeService::changePlan()`, decision 9 — computed in this app's
+    own ledger, not delegated to Razorpay's opaque INR proration).
+  - **B11-B15** built the remaining surfaces + hardening: Admin-panel
+    `BillingOverview` (plan/usage bars/status/invoices); Super-panel
+    `InstituteSubscriptions` (cross-tenant list); `PlanChangeService::cancel()`
+    (reverts to `plan_id = null`, decision 11's own legacy-fallback branch,
+    not a new state); grace/suspension-imminent WhatsApp+email+database
+    notifications (`GracePeriodReminder`, mirrors Fees' `FeeReminderDue`
+    shape); **B15's dedicated concurrency pass** found and fixed 4 real
+    races with no unique DB constraint to catch-and-retry against —
+    `PlanChangeService::subscribe/changePlan/cancel` and
+    `RoleAssignmentPolicy`'s seat-consuming branch both now lock the
+    `Tenant` row (`lockForUpdate()`, locked-and-discarded) inside their own
+    `DB::transaction()`, serializing concurrent calls per tenant; flagged,
+    not fixed, as a documented limitation: `SubscriptionReconciler` (locks
+    the `TenantSubscription` row) and `PlanChangeService` (locks the
+    `Tenant` row) lock different targets, so a webhook landing and a manual
+    plan-change at the same instant on the same tenant have no mutual
+    exclusion between them — assessed low-severity (proration-math
+    precision only, self-correcting next cycle, no data corruption, disjoint
+    columns written).
+  - **B16's own dedicated review pass** — the user's own explicit ask,
+    beyond the plan note's stated scope: re-read every B1-B15 file for real
+    bugs, not just re-confirm the suite stayed green. **Found and fixed 3
+    real bugs, none of them theoretical:** (1) `StorageQuota::adjust()` had
+    a lost-update race on its read-then-write increment (two concurrent
+    file uploads for the same tenant could silently undercount usage) plus
+    a unique-constraint race on its create-new-row branch — fixed with
+    atomic `increment()`/`decrement()` and a retry-once-on-`QueryException`
+    for the create race (same shape `AssignmentSubmissionService::submitWithRetry()`
+    established in S10 B15), floor-at-zero moved from write time to
+    `usedNow()`'s read time. (2) `PlanChangeService::liveSubscriptionFor()`
+    excluded `SUSPENDED` from its status filter, so `cancel()`/`changePlan()`
+    both refused exactly the tenant a super_admin is most likely to want to
+    act on — worse, `EditTenant`'s own header actions stay *visible* for a
+    suspended tenant (visibility only checks `plan_id !== null`), so this
+    was a real visible-but-broken button, not a hypothetical gap. (3)
+    `SubscriptionReconciler::charged()` flipped `TenantSubscription::status`
+    back to `active` on a recovered payment but never touched
+    `Tenant::status` — the column `ResolveTenant` actually gates login on —
+    so a tenant the daily sweep had already suspended stayed locked out of
+    login forever even after billing genuinely recovered, with zero
+    automated path back in. All three ship with regression tests (7 new,
+    plus one full lifecycle E2E test chaining subscribe → charge → grace →
+    suspend → recover → cancel in one run, mirroring S7's own
+    `DemoScriptE2ETest` posture — the one thing no per-block test could
+    cover). Full detail in the plan doc's own B16 notes.
+  - Tests green: **925/926** (same 1 pre-existing, unrelated
+    `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+    scope).
+  - `docs/PROJECT-STATUS.md` updated to COMPLETE, matching S1-S10's own
+    post-completion format.
 
 - **S10 — Assignments + Gradebook + Certificates: COMPLETE, all 16 blocks
   (2026-08-16).** `docs/superpowers/specs/2026-08-16-s10-assignments-gradebook-design.md`,
@@ -1116,15 +1183,43 @@ at the source.
   fix immediately above — the first version of the test used
   `AssignmentSubmission::creating()` and passed for the wrong reason
   before failing once the real fix was in place).
+- A "which statuses count as live/active" whereIn list written when a
+  model only had 3-4 statuses easily goes stale the moment a later block
+  adds a new one — `PlanChangeService::liveSubscriptionFor()`'s
+  `[TRIALING, ACTIVE, GRACE]` filter predates `SUSPENDED` even existing as
+  a `TenantSubscription` status (B8 added it), and nothing forced a
+  revisit when it did. The UI-side symptom is the real danger: a header
+  action's own `->visible()` check (`EditTenant`'s `cancelSubscription`/
+  `changePlan`) can easily key off a *different*, broader condition
+  (`plan_id !== null`) than the service method it calls actually accepts,
+  so the button stays clickable and *looks* fine right up until it throws
+  — found in S11 B16's own review pass, not by a failing test. When a
+  model gains a new status, grep every whereIn/match over its status
+  column, not just the state machine that introduced the status.
+- When a status column mirrors another model's status column for a
+  real-world reason (`Tenant::status` mirrors `TenantSubscription::status`
+  for suspension — decision 8, S11 design doc), a fix that makes the
+  *forward* transition correct (suspend both rows together, already true
+  since B8) doesn't guarantee the *reverse* transition is too.
+  `SubscriptionReconciler::charged()` correctly recovers
+  `TenantSubscription::status` on a successful payment but, until S11
+  B16's review pass caught it, never touched `Tenant::status` at all — a
+  tenant billing-suspended by the daily sweep whose payment later
+  recovered stayed locked out of login forever, since nothing else in the
+  app ever un-suspends a tenant automatically. Whenever a mirrored pair of
+  columns gets a "enters state X" fix, check the code path that reverses
+  it too, even if no test was asserting the reverse path was broken.
 
 ## Where the detail actually lives
 
 - Full roadmap + what's shipped: `docs/PROJECT-STATUS.md`
-- Most recently completed slice's block-by-block plan (also the last slice
-  on the original 8-slice roadmap — all eight are complete):
-  `docs/superpowers/specs/2026-08-12-s8-comms-plan.md`, `...-design.md`.
-  S9 (new, not on the original roadmap — now COMPLETE, all 15 blocks) own
-  design + plan:
+- The original 8-slice roadmap (S1-S8) is complete; S9, S10, S11 are later
+  additions, not on it. Most recently completed slice's own design + plan
+  (S11 — Plan Tiers + Institute Billing, COMPLETE, all 17 blocks):
+  `docs/superpowers/specs/2026-08-16-s11-plan-billing-design.md`,
+  `...-plan.md`. S10 (Assignments + Gradebook + Certificates, COMPLETE, 16
+  blocks): `docs/superpowers/specs/2026-08-16-s10-assignments-gradebook-design.md`,
+  `...-plan.md`. S9 (Hardening & Backlog, COMPLETE, 15 blocks):
   `docs/superpowers/specs/2026-08-12-s9-hardening-backlog-design.md`,
   `...-plan.md`.
 - Why things are built this way: `DECISIONS.md`

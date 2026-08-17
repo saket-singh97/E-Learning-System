@@ -244,3 +244,47 @@ it('allows subscribing again after a cancellation', function () {
     expect($fresh->status)->toBe(TenantSubscription::STATUS_TRIALING)
         ->and($this->tenant->fresh()->plan_id)->toBe($this->plan->id);
 });
+
+/**
+ * S11 B16 review pass — liveSubscriptionFor() originally excluded
+ * SUSPENDED, so cancel() threw TenantNotSubscribedException for exactly
+ * the tenant a super_admin is most likely to want to cancel outright.
+ * EditTenant's own cancelSubscription header action stays visible for a
+ * suspended tenant (its ->visible() check is only `plan_id !== null`),
+ * so this was a real visible-but-broken button, not just a theoretical
+ * gap.
+ */
+it('cancels a suspended subscription instead of refusing it (S11 B16)', function () {
+    $subscription = app(PlanChangeService::class)->subscribe($this->tenant, $this->plan);
+    $subscription->update(['status' => TenantSubscription::STATUS_SUSPENDED]);
+
+    app(PlanChangeService::class)->cancel($this->tenant);
+
+    expect($subscription->fresh()->status)->toBe(TenantSubscription::STATUS_CANCELLED)
+        ->and($this->tenant->fresh()->plan_id)->toBeNull();
+});
+
+/**
+ * Same liveSubscriptionFor() fix, the changePlan() side — a suspended
+ * tenant fixing itself by moving to an affordable plan must not be
+ * refused either.
+ */
+it('changes the plan for a suspended subscription instead of refusing it (S11 B16)', function () {
+    $subscription = app(PlanChangeService::class)->subscribe($this->tenant, $this->plan);
+    $subscription->update(['status' => TenantSubscription::STATUS_SUSPENDED]);
+
+    $cheaperPlan = Plan::create([
+        'code' => 'starter-suspended-recovery-test',
+        'name' => 'Starter',
+        'seat_limit' => 5,
+        'storage_limit_gb' => 20,
+        'bandwidth_limit_gb_per_day' => 10,
+        'ai_spend_cap_usd_per_day' => 2,
+        'price_inr_per_month' => 1999,
+    ]);
+
+    app(PlanChangeService::class)->changePlan($this->tenant, $cheaperPlan);
+
+    expect($subscription->fresh()->plan_id)->toBe($cheaperPlan->id)
+        ->and($this->tenant->fresh()->plan_id)->toBe($cheaperPlan->id);
+});

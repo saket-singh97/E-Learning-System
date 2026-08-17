@@ -41,13 +41,16 @@ stop and report before starting the next block.
 | B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ✅ done |
 | B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ✅ done |
 | B15 | Edge cases + concurrency — webhook double-delivery idempotency, soft-deleted-tenant handling in the sweep, race guards | ✅ done |
-| B16 | Full test coverage, isolation registration sweep, review pass, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
+| B16 | Full test coverage, isolation registration sweep, review pass, `PROJECT-STATUS.md`/`HANDOVER.md` update | ✅ done |
 
 **Test suite:** 804/805 at slice start (1 pre-existing, unrelated
 `CourseSlugUniquenessTest` failure carried since S1/S2, out of scope here
 same as every prior slice). Design doc §3.5 estimates ~55-65 new tests by
 B16 (~860-870 total) — treat as a rough anchor, not a target; S10's own
-estimate undershot its actual by a wide margin.
+estimate undershot its actual by a wide margin. **Final: 924/925** (same 1
+pre-existing failure, still out of scope).
+
+**S11 is now COMPLETE — all 17 blocks (B0-B16).**
 
 ---
 
@@ -778,13 +781,93 @@ scope. Existing `RoleAssignmentTest`/`PlanChangeServiceTest` suites both
 pass unmodified, confirming the two lock refactors changed no observable
 behaviour.
 
-### B16 — Full test coverage, review pass — not started
+### B16 — Full test coverage, review pass — DONE (2026-08-17)
 
-- Sweep for anything the per-block tests didn't cover end-to-end (full
-  subscribe→charge→grace→suspend→cancel lifecycle as one integration
-  test).
-- Update `TenantModelRegistry` coverage is already enforced by B0; just
-  confirm no model slipped through.
-- Update `HANDOVER.md` (S11 complete entry + any new `## Avoid` entries)
-  and `docs/PROJECT-STATUS.md` (new S11 section, matching S1-S10's exact
-  format).
+- **Explicit ask this block, beyond the plan note's own scope**: re-read
+  every B1-B15 file for real bugs, not just re-confirm the existing suite
+  stays green. Read every service, job, notification, Filament page,
+  webhook controller, and integration driver in `app/Domains/Billing/`
+  plus every external call site (`app/Filament/Admin/Pages/BillingOverview.php`,
+  `app/Filament/Pages/InstituteSubscriptions.php`,
+  `app/Livewire/GracePeriodBanner.php`,
+  `RoleAssignmentPolicy`/`AssignmentSubmissionService`/`Lesson`/
+  `BrandingService`'s own `StorageQuota`/`SeatQuota` call sites). **Found
+  and fixed 3 real bugs, none of them theoretical:**
+  1. **`StorageQuota::adjust()` — lost-update race, no test was failing.**
+     The existing-row branch read `bytes_used`, computed the new total in
+     PHP, then wrote it back — two concurrent `adjust()` calls for the
+     same tenant (two students' file uploads landing at the same moment,
+     not an edge case) could read the same starting value and the second
+     write would silently overwrite the first's increment, undercounting
+     real usage against the very quota this class exists to enforce. Its
+     create-new-row branch raced too: `tenant_id` has a real unique
+     constraint (B0's own migration), so two concurrent *first-ever*
+     `adjust()` calls for a tenant could both find no row and both attempt
+     `create()`. Fixed with Eloquent's atomic `increment()`/`decrement()`
+     for the existing-row path (a single `SET bytes_used = bytes_used +/-
+     ?` statement, no PHP-side read-modify-write to race on) and a
+     retry-once-on-`QueryException` (own `DB::transaction()` savepoint,
+     matching `AssignmentSubmissionService::submitWithRetry()`'s exact S10
+     B15 shape) for the create-race. Floor-at-zero moved from write time to
+     `usedNow()`'s read time — an atomic decrement has no "not below zero"
+     variant, and a transient negative row value is harmless since nothing
+     ever reads it unclamped.
+  2. **`PlanChangeService::liveSubscriptionFor()` excluded `SUSPENDED`
+     from its status filter** — so `cancel()`/`changePlan()` both threw
+     `TenantNotSubscribedException` for exactly the tenant a super_admin
+     is most likely to want to act on. Worse: `EditTenant`'s own
+     `changePlan`/`cancelSubscription` header actions stay *visible* for a
+     suspended tenant (their `->visible()` check is only `plan_id !==
+     null`, untouched by suspension), so this was a real visible-but-broken
+     button, not a hypothetical gap — click either on a suspended tenant
+     and it 409s instead of doing what it says. Fixed by adding
+     `TenantSubscription::STATUS_SUSPENDED` to the whereIn list. `cancel()`
+     deliberately still does not touch `Tenant::status` — cancelling
+     billing and restoring access are different actions; a suspended
+     tenant's access stays a manual super_admin call via `TenantResource`'s
+     own status field, same posture decision 8 already establishes.
+  3. **`SubscriptionReconciler::charged()` never touched `Tenant::status`**
+     — a `subscription.charged` webhook always flipped
+     `TenantSubscription::status` back to `active`, but the column
+     `ResolveTenant` actually gates login on (decision 8) stayed
+     `suspended` forever with no automated way back, even when a late or
+     retried payment genuinely recovered a tenant the daily sweep had
+     already suspended. Fixed: `charged()` now reads whether the locked
+     row's prior status was `SUSPENDED` before overwriting it, and if so
+     also sets `Tenant::status = ACTIVE` in the same transaction.
+  - All three are real, reachable bugs (not defensive-programming
+    additions) — each ships with its own regression test.
+     `PlanChangeServiceTest` gained 2 (cancel/changePlan from suspended),
+     `SubscriptionReconcilerTest` gained 2 (un-suspend on recovery,
+     ordinary-active-tenant no-op), `StorageQuotaTest` gained 3 (sequential
+     accumulation via the atomic path, read-time floor on a transient
+     negative row, retry recovery via direct reflection on the protected
+     retry method — true concurrent contention still isn't reproducible in
+     this single-connection suite, same stated limitation B15 already
+     recorded, not glossed over here either).
+  - Read and found no further issues in: `Plan`, `SubscriptionInvoice`,
+    `PlanResource`, `TenantResource`, `SeatQuota`, `TenantPlanLimits`,
+    `SuspendOverdueTenantSubscriptions`, `SendGraceSuspensionReminders`,
+    `GracePeriodReminder`, `GracePeriodBanner`, `RazorpaySubscriptionProvider`,
+    `FakeRazorpaySubscriptionDriver`, `RazorpaySubscriptionWebhookController`,
+    `RoleAssignmentPolicy`, `BillingCascadeDeleteTest`'s own assumptions.
+- **Full lifecycle E2E test added** (new
+  `SubscriptionLifecycleE2ETest.php`, mirrors S7's own `DemoScriptE2ETest`
+  posture): subscribe → real `subscription.charged` webhook → real
+  `payment.failed` webhook (grace) → the daily sweep (suspend, both rows)
+  → a recovered `subscription.charged` webhook (un-suspend — directly
+  exercises fix #3 above) → cancel. Every intermediate state asserted, not
+  just the terminal one.
+- **`TenantModelRegistry` confirmed exact-complete**: `Plan` correctly
+  absent (not `BelongsToTenant` by design, decision 2); `TenantSubscription`/
+  `SubscriptionInvoice`/`TenantStorageUsage` all present with
+  `seedAttributes()`/`updateAttributes()` entries — no model slipped
+  through.
+- `composer test`: **924/925 → 925/926** after the new E2E test, same 1
+  pre-existing, unrelated `CourseSlugUniquenessTest` failure carried since
+  S1/S2, still out of scope.
+- `HANDOVER.md` and `docs/PROJECT-STATUS.md` updated with the S11-complete
+  entry, matching S9/S10's own exact format.
+
+**S11 — Plan Tiers + Institute Billing is now COMPLETE, all 17 blocks
+(B0-B16).**

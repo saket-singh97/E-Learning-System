@@ -86,6 +86,16 @@ class SubscriptionReconciler
      * but a 2xx response, so the same event can genuinely arrive twice.
      * Deduped on razorpay_payment_id: a resent 'charged' webhook must not
      * write a second SubscriptionInvoice for the same real payment.
+     *
+     * S11 B16 review pass — a charged webhook landing while the
+     * subscription was SUSPENDED (a late/retried payment succeeding after
+     * SuspendOverdueTenantSubscriptions already flipped it, or a delayed
+     * redelivery) must also clear Tenant::status back to ACTIVE, not just
+     * TenantSubscription::status. Before this fix, only the subscription
+     * row recovered — the tenant itself, gated on Tenant::status by
+     * ResolveTenant (decision 8), stayed locked out of login forever with
+     * no automated way back in even though billing had genuinely
+     * recovered. Read before the lock below overwrites it.
      */
     protected function charged(TenantSubscription $subscription, array $data): void
     {
@@ -97,6 +107,7 @@ class SubscriptionReconciler
             }
 
             $locked = TenantSubscription::withoutGlobalScope('tenant')->lockForUpdate()->find($subscription->id);
+            $wasSuspended = $locked->status === TenantSubscription::STATUS_SUSPENDED;
 
             $amountPaise = data_get($data, 'payload.payment.entity.amount');
             $amount = $amountPaise !== null ? $amountPaise / 100 : (float) $locked->plan->price_inr_per_month;
@@ -110,6 +121,10 @@ class SubscriptionReconciler
                 'current_period_start' => $periodStart,
                 'current_period_end' => $periodEnd,
             ]);
+
+            if ($wasSuspended) {
+                Tenant::where('id', $locked->tenant_id)->update(['status' => Tenant::STATUS_ACTIVE]);
+            }
 
             SubscriptionInvoice::withoutEvents(fn () => SubscriptionInvoice::create([
                 'tenant_id' => $locked->tenant_id,

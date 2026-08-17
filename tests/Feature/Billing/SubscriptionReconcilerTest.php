@@ -66,6 +66,34 @@ it('activates the subscription and records a paid invoice on subscription.charge
         ->and($invoice->razorpay_payment_id)->toBe('pay_test123');
 });
 
+/**
+ * S11 B16 review pass — a subscription.charged webhook always flipped
+ * TenantSubscription::status back to active, but never touched
+ * Tenant::status — the column ResolveTenant actually gates login on
+ * (decision 8). A tenant billing-suspended by the daily sweep whose
+ * payment then recovers (a late/retried charge landing after
+ * SuspendOverdueTenantSubscriptions already flipped it) stayed locked
+ * out of login forever with no automated way back in, even though
+ * billing had genuinely recovered.
+ */
+it('un-suspends the tenant when a charged webhook recovers a suspended subscription (S11 B16)', function () {
+    $this->tenant->update(['status' => Tenant::STATUS_SUSPENDED]);
+    $this->subscription->update(['status' => TenantSubscription::STATUS_SUSPENDED]);
+
+    $payload = ($this->payload)('subscription.charged');
+    $this->reconciler->reconcile($payload, ($this->sign)($payload));
+
+    expect($this->subscription->fresh()->status)->toBe(TenantSubscription::STATUS_ACTIVE)
+        ->and($this->tenant->fresh()->status)->toBe(Tenant::STATUS_ACTIVE);
+});
+
+it('leaves an already-active tenant alone on an ordinary charged webhook', function () {
+    $payload = ($this->payload)('subscription.charged');
+    $this->reconciler->reconcile($payload, ($this->sign)($payload));
+
+    expect($this->tenant->fresh()->status)->toBe(Tenant::STATUS_ACTIVE);
+});
+
 it('throws on an invalid signature and touches nothing', function () {
     $payload = ($this->payload)('subscription.charged');
 

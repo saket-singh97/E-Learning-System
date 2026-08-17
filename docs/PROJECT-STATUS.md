@@ -1,6 +1,6 @@
 # Project Status — AI-Native LMS
 
-Last updated: 2026-08-12. This file is a plain-English snapshot of where the
+Last updated: 2026-08-17. This file is a plain-English snapshot of where the
 whole project stands. For the technical detail behind any line here, see
 `docs/superpowers/specs/2026-08-08-s1-foundation-design.md` (the full S1
 design) and `docs/superpowers/specs/2026-08-09-s1-implementation-plan.md`
@@ -1122,3 +1122,101 @@ certificate request/evaluation workflow (K5) stay P3, deliberately
 absent.
 
 **All 16 S10 blocks are now built, tested, and reviewed.**
+
+---
+
+## S11 — Plan Tiers + Institute Billing: COMPLETE (all 17 blocks, 2026-08-17)
+
+Not part of the original P1 roadmap, and a new slice beyond S9/S10 too —
+picked over 2 other leftover P2 candidates (account-security round 2,
+engagement analytics + parent comms follow-up). Directly closes the
+fast-follow `BandwidthQuota`/`AiSpendCap` (S9 B12) themselves flagged as
+deferred ("richer tiers/limits product... once real customers need
+different limits from each other").
+`docs/superpowers/specs/2026-08-16-s11-plan-billing-design.md` and
+`...-plan.md` cover 17 blocks (B0-B16):
+
+- **B0-B4** built the new `app/Domains/Billing/` domain end to end: schema
+  (`Plan` — a new, un-tenanted catalog table — plus `TenantSubscription`/
+  `SubscriptionInvoice`/`TenantStorageUsage`, all three `BelongsToTenant`),
+  `tenants.plan_id` added additively (nullable, existing `plan_tier` enum
+  + hardcoded caps kept as the legacy fallback), Super-panel `PlanResource`
+  CRUD, `TenantPlanLimits` (the one place resolving a tenant's real limits
+  — plan-aware when `plan_id` is set, legacy fallback otherwise),
+  `SeatQuota` (staff seats only — students are unlimited, the institute's
+  own monetisation lever) enforced at `RoleAssignmentPolicy::assign()`,
+  and `StorageQuota` wired into every file-store/delete call site across
+  three domains (Assignments, Content, Tenancy).
+- **B5-B10** built the real subscription lifecycle: a second, separate
+  Razorpay integration (`SubscriptionProvider`, Subscriptions API — a
+  different vendor surface from the existing Orders-API `PaymentProvider`)
+  with `RazorpaySubscriptionProvider`/`FakeRazorpaySubscriptionDriver`;
+  Super-panel-initiated subscription creation
+  (`TenantResource`'s "Plan" section + `PlanChangeService::subscribe()`,
+  matching this platform's actual sales motion — every institute here is
+  operator-provisioned, no public checkout page); a real webhook
+  (`RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`,
+  same signature-first, no-business-logic-in-the-controller division of
+  responsibility `Fees\PaymentReconciler` already established) writing
+  `SubscriptionInvoice` rows; a daily grace-period sweep
+  (`SuspendOverdueTenantSubscriptions`, 7-day `grace_ends_at` window,
+  webhook-driven entry + time-driven exit — mirrors `FlagOverdueInvoices`);
+  suspension enforcement confirmed on the existing `ResolveTenant` gate
+  (reuses `Tenant::STATUS_SUSPENDED`, not a second flag) plus a
+  `GracePeriodBanner`; upgrade/downgrade with proration computed in this
+  app's own ledger rather than delegated to Razorpay's opaque INR
+  proration (`PlanChangeService::changePlan()`, blocks a downgrade that
+  would strand the tenant over the new plan's seat/storage limits).
+- **B11-B15** built the remaining surfaces plus hardening: an
+  institute-facing Admin-panel `BillingOverview` (plan, usage bars,
+  subscription status, invoice history) and a Super-panel cross-tenant
+  `InstituteSubscriptions` list; `PlanChangeService::cancel()` (reverts to
+  `plan_id = null` — the existing legacy-fallback branch, not a new
+  "cancelled plan" state); grace-entry and suspension-imminent
+  WhatsApp+email+database notifications (`GracePeriodReminder`, mirrors
+  Fees' own `FeeReminderDue` shape); a dedicated concurrency pass found
+  and fixed 4 real races with no unique DB constraint to catch-and-retry
+  against — `PlanChangeService`'s three public methods and
+  `RoleAssignmentPolicy`'s seat-consuming branch both now lock the
+  `Tenant` row inside their own transaction, serializing concurrent calls
+  per tenant (one gap deliberately left as a documented limitation:
+  `SubscriptionReconciler` and `PlanChangeService` lock different row
+  targets, so a webhook and a manual plan-change on the same tenant at the
+  same instant have no mutual exclusion between them — low-severity,
+  proration-math precision only, self-correcting, no data corruption).
+- **B16's own dedicated review pass** — re-read every B1-B15 file for real
+  bugs, not just re-confirmed the suite stayed green — found and fixed 3
+  more: `StorageQuota::adjust()` had a lost-update race on its
+  read-then-write increment (two concurrent file uploads for the same
+  tenant could silently undercount real usage against the quota this
+  class exists to enforce), fixed with atomic `increment()`/`decrement()`
+  plus a retry-once-on-collision for its own create-row race, matching
+  `AssignmentSubmissionService::submitWithRetry()`'s S10 B15 shape;
+  `PlanChangeService::liveSubscriptionFor()` excluded `SUSPENDED` from its
+  status filter, so `cancel()`/`changePlan()` both refused exactly the
+  tenant a super_admin is most likely to want to act on, while
+  `EditTenant`'s own header actions stayed visible for that same tenant —
+  a real visible-but-broken button, not a hypothetical gap; and
+  `SubscriptionReconciler::charged()` recovered `TenantSubscription::status`
+  on a successful payment but never touched `Tenant::status` — the column
+  that actually gates login — so a tenant the daily sweep had already
+  suspended stayed locked out forever even after billing genuinely
+  recovered. All three ship with regression tests, plus one new full
+  lifecycle E2E test (subscribe → charge → grace → suspend → recover →
+  cancel, chained in one run, mirroring S7's own `DemoScriptE2ETest`
+  posture) proving the pieces still fit together end to end.
+
+**Test suite: 925/926 passing.** Same 1 pre-existing failure carried since
+S1/S2 (`CourseSlugUniquenessTest`, unrelated to S11, still out of scope).
+
+**What's not real yet, on purpose**: no public pricing/checkout page —
+plan assignment and subscription creation stay Super-panel-initiated,
+matching this platform's actual current sales motion; self-serve signup
+is a later, separate R-series item. A live mid-cycle charge on a plan
+change is genuinely deferred — proration is written as a ledger row and
+collected on the next billing cycle, not charged immediately. The
+`SubscriptionReconciler`/`PlanChangeService` cross-service lock-target gap
+noted above (B15) stays a documented, deliberately-accepted limitation,
+not a bug queued for a fix.
+
+**All 17 S11 blocks are now built, tested, and reviewed.**

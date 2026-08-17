@@ -232,6 +232,20 @@ class PlanChangeService
         Tenant::where('id', $tenant->id)->lockForUpdate()->first();
     }
 
+    /**
+     * S11 B16 review pass — SUSPENDED belongs in this list, not just
+     * TRIALING/ACTIVE/GRACE. Without it, EditTenant's changePlan/
+     * cancelSubscription header actions stay *visible* for a suspended
+     * tenant (their own ->visible() check is only `plan_id !== null`,
+     * untouched by suspension) but throw TenantNotSubscribedException the
+     * moment either is clicked — exactly backwards, since a suspended
+     * tenant (non-paying, locked out) is the case a super_admin is most
+     * likely to want to cancel outright or fix by moving to a plan they
+     * can actually afford. A cancel from here deliberately does not touch
+     * Tenant::status — cancelling billing is not the same action as
+     * restoring access, and access for a suspended tenant stays a manual
+     * super_admin call via TenantResource's own status field.
+     */
     protected function liveSubscriptionFor(Tenant $tenant): ?TenantSubscription
     {
         return TenantSubscription::withoutGlobalScope('tenant')
@@ -240,6 +254,7 @@ class PlanChangeService
                 TenantSubscription::STATUS_TRIALING,
                 TenantSubscription::STATUS_ACTIVE,
                 TenantSubscription::STATUS_GRACE,
+                TenantSubscription::STATUS_SUSPENDED,
             ])
             ->first();
     }
