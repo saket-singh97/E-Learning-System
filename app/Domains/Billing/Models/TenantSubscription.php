@@ -2,6 +2,7 @@
 
 namespace App\Domains\Billing\Models;
 
+use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -45,6 +46,17 @@ class TenantSubscription extends Model
     public function plan(): BelongsTo
     {
         return $this->belongsTo(Plan::class);
+    }
+
+    /**
+     * S11 B12 — the Super panel's own cross-tenant subscription list needs
+     * this to show/search/sort by institute name; no prior block needed
+     * it (every other Billing read has been scoped to one already-known
+     * tenant).
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 
     public function invoices(): HasMany

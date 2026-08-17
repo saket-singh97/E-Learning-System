@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ✅ done |
 | B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ✅ done |
 | B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ✅ done |
-| B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ⬜ not started |
+| B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ✅ done |
 | B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ⬜ not started |
 | B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ⬜ not started |
 | B15 | Edge cases + concurrency — webhook double-delivery idempotency, soft-deleted-tenant handling in the sweep, race guards | ⬜ not started |
@@ -614,12 +614,34 @@ estimate undershot its actual by a wide margin.
   `BillingOverviewPageTest`'s 5 cases), same 1 pre-existing, unrelated
   `CourseSlugUniquenessTest` failure, still out of scope.
 
-### B12 — Super-panel cross-tenant billing visibility — not started
+### B12 — Super-panel cross-tenant billing visibility — DONE (2026-08-17)
 
-- Subscription list/filter in the Super panel — apply
-  `withoutGlobalScope('tenant')` up front on every query here
-  (S9 B10's sweep + S10 B13's fix both exist because this got missed
-  after the fact elsewhere; build it in from the start this time).
+- `app/Filament/Pages/InstituteSubscriptions.php` — same directory
+  `ImpersonateUser` already lives in (the Super panel's own pages root,
+  registered since S1; not named `Filament/Super/Pages` the way
+  Admin/Teach's own convention would suggest, but matching existing
+  precedent here mattered more than the naming pattern used elsewhere).
+  Auto-discovered, no `SuperPanelProvider` edit needed.
+- `TenantSubscription::withoutGlobalScope('tenant')->with(['tenant',
+  'plan'])` as the table's base query — applied explicitly up front, per
+  the block's own note, rather than relying on "`CurrentTenant` happens
+  to be unbound on the Super panel anyway" (true today, but exactly the
+  kind of ambient assumption `S9 B10`'s sweep-job fix and `S10 B13`'s
+  gradebook fix both exist to correct after the fact elsewhere). Tested
+  directly: binds `CurrentTenant` to one specific tenant before asserting
+  every tenant's row is still visible, not just that one's.
+- New `TenantSubscription::tenant(): BelongsTo` — no prior block needed
+  it (every earlier Billing read was already scoped to one known
+  tenant); this table is the first place needing to show/search by
+  institute name.
+- Status filter (`SelectFilter`) + colour-coded status badges
+  (active=success, trialing=info, grace=warning,
+  suspended/cancelled=danger) — same colour convention `PlanResource`'s
+  `is_active` toggle and `BillingOverview`'s usage bars both already
+  use.
+- `composer test`: full suite run below
+  (`InstituteSubscriptionsPageTest`'s 3 cases), same 1 pre-existing,
+  unrelated `CourseSlugUniquenessTest` failure, still out of scope.
 
 ### B13 — Cancellation flow — not started
 
