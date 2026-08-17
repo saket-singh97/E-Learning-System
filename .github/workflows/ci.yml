@@ -10,7 +10,13 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # Not the vanilla postgres image — this app's migrations create
+        # `vector` columns (lesson-artifact embeddings, S3) and rely on
+        # pg_trgm (admin search). Local dev already uses this exact image
+        # (docker-compose.yml); the plain postgres:16 image has neither
+        # extension available, so every migration touching those columns
+        # would fail here otherwise.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: lms
           POSTGRES_PASSWORD: secret
@@ -57,11 +63,21 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      - name: Copy environment file
+        run: cp .env.example .env
+
       - name: Generate app key
         run: php artisan key:generate --ansi
+
+      - name: Enable required Postgres extensions
+        env:
+          PGPASSWORD: secret
+        run: |
+          psql -h 127.0.0.1 -U lms -d lms_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+          psql -h 127.0.0.1 -U lms -d lms_test -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 
       - name: Run migrations
         run: php artisan migrate --force
 
       - name: Run isolation suite and full test suite
-        run: ./vendor/bin/pest
+        run: composer test
