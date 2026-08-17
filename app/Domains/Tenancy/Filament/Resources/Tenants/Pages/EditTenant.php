@@ -40,6 +40,27 @@ class EditTenant extends EditRecord
 
                     $this->redirect(static::getResource()::getUrl('edit', ['record' => $record]));
                 }),
+            // S11 B10 — the complement to assignPlan above: visible once a
+            // plan already exists, goes through changePlan() (proration),
+            // not subscribe() (which explicitly refuses a tenant that's
+            // already subscribed).
+            Action::make('changePlan')
+                ->label('Change plan')
+                ->visible(fn (Tenant $record): bool => $record->plan_id !== null)
+                ->schema([
+                    Select::make('plan_id')
+                        ->label('New plan')
+                        ->options(fn (Tenant $record): array => Plan::where('is_active', true)
+                            ->where('id', '!=', $record->plan_id)
+                            ->pluck('name', 'id')
+                            ->all())
+                        ->required(),
+                ])
+                ->action(function (Tenant $record, array $data): void {
+                    app(PlanChangeService::class)->changePlan($record, Plan::findOrFail($data['plan_id']));
+
+                    $this->redirect(static::getResource()::getUrl('edit', ['record' => $record]));
+                }),
         ];
     }
 }

@@ -17,6 +17,7 @@ use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\InvalidWebhookSignatureException;
 use App\Exceptions\MissingTenantContextException;
+use App\Exceptions\PlanDowngradeBlockedException;
 use App\Exceptions\PrivilegeEscalationException;
 use App\Exceptions\QuizAttemptAlreadySubmittedException;
 use App\Exceptions\QuizAttemptLimitExceededException;
@@ -25,6 +26,7 @@ use App\Exceptions\SeatLimitExceededException;
 use App\Exceptions\StorageLimitExceededException;
 use App\Exceptions\TenantAlreadySubscribedException;
 use App\Exceptions\TenantNotFoundException;
+use App\Exceptions\TenantNotSubscribedException;
 use App\Exceptions\TenantSuspendedException;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\ResolveImpersonation;
@@ -148,6 +150,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (SeatLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (StorageLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (TenantAlreadySubscribedException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (PlanDowngradeBlockedException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (TenantNotSubscribedException $e) => abort(409, $e->getMessage()));
 
         // "Should never happen" — a programmer error (tenant-scoped code
         // reached with no tenant bound), not a client-recoverable state, so

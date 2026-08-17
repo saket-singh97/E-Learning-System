@@ -3,15 +3,20 @@
 namespace App\Domains\Billing\Services;
 
 use App\Domains\Billing\Models\Plan;
+use App\Domains\Billing\Models\SubscriptionInvoice;
 use App\Domains\Billing\Models\TenantSubscription;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Exceptions\PlanDowngradeBlockedException;
 use App\Exceptions\TenantAlreadySubscribedException;
+use App\Exceptions\TenantNotSubscribedException;
 use App\Integrations\SubscriptionProvider;
 
 class PlanChangeService
 {
     public function __construct(
         private readonly SubscriptionProvider $provider,
+        private readonly SeatQuota $seatQuota,
+        private readonly StorageQuota $storageQuota,
     ) {}
 
     /**
@@ -58,7 +63,108 @@ class PlanChangeService
         return $subscription;
     }
 
-    protected function hasLiveSubscription(Tenant $tenant): bool
+    /**
+     * S11 B10 (Q5) — moves an already-subscribed tenant onto a different
+     * plan immediately, with a prorated adjustment for the remainder of
+     * the current period. Refuses a subscribe() call's job (a tenant with
+     * no live subscription at all) with TenantNotSubscribedException —
+     * symmetric to subscribe() refusing a tenant that already has one.
+     */
+    public function changePlan(Tenant $tenant, Plan $newPlan): TenantSubscription
+    {
+        $subscription = $this->liveSubscriptionFor($tenant);
+
+        if ($subscription === null) {
+            throw TenantNotSubscribedException::forTenant($tenant->id);
+        }
+
+        $this->guardDowngradeCapacity($tenant, $newPlan);
+
+        $oldPlan = $subscription->plan;
+        $proratedAmount = $this->prorate($subscription, $oldPlan, $newPlan);
+
+        $this->provider->changePlan($subscription, $newPlan);
+
+        $subscription->update(['plan_id' => $newPlan->id]);
+        $tenant->update(['plan_id' => $newPlan->id]);
+
+        // Written even when the two plans happen to cost the same (a
+        // lateral move) — decision 9's whole point is an auditable record
+        // of every plan change in this app's own ledger, not just the
+        // ones that moved money.
+        SubscriptionInvoice::withoutEvents(fn () => SubscriptionInvoice::create([
+            'tenant_id' => $tenant->id,
+            'tenant_subscription_id' => $subscription->id,
+            'plan_id' => $newPlan->id,
+            // Signed, not absolute — negative is a credit (a downgrade),
+            // positive an extra charge (an upgrade), collected on the next
+            // cycle rather than a live mid-cycle charge (decision 9;
+            // design doc §4 — genuinely deferred, not built here).
+            'amount' => round($proratedAmount, 2),
+            'kind' => SubscriptionInvoice::KIND_PRORATION,
+            'status' => SubscriptionInvoice::STATUS_PENDING,
+            'period_start' => now(),
+            'period_end' => $subscription->current_period_end,
+        ]));
+
+        return $subscription->fresh();
+    }
+
+    /**
+     * (days remaining in the current period / total days in the period) x
+     * (new plan price - old plan price) — design doc §2.4 decision 9,
+     * verbatim. A period with zero elapsed days left (changing on the
+     * exact last instant of a cycle) prorates to 0 rather than dividing by
+     * zero.
+     */
+    protected function prorate(TenantSubscription $subscription, Plan $oldPlan, Plan $newPlan): float
+    {
+        $periodDays = $subscription->current_period_start->diffInDays($subscription->current_period_end);
+
+        if ($periodDays <= 0) {
+            return 0.0;
+        }
+
+        // diffInDays()'s own *signed* mode has an easy-to-get-backwards
+        // sign convention (S11 B9's own diffInDays() float surprise, same
+        // method, different pitfall) — sidestepped entirely by checking
+        // direction with isAfter() first and always calling the plain
+        // absolute (default) form, which is unambiguously non-negative.
+        $daysRemaining = now()->isAfter($subscription->current_period_end)
+            ? 0.0
+            : now()->diffInDays($subscription->current_period_end);
+        $priceDelta = (float) $newPlan->price_inr_per_month - (float) $oldPlan->price_inr_per_month;
+
+        return ($daysRemaining / $periodDays) * $priceDelta;
+    }
+
+    /**
+     * "Decide and document behaviour here" (B10's own plan note) — blocks
+     * rather than silently leaving the tenant over-limit on a plan that
+     * can't support what it already has. Checked against seat/storage only
+     * — bandwidth and AI spend are daily-resetting quotas, not an
+     * accumulated stock, so a downgrade there just means a lower cap
+     * starting tomorrow, nothing "stranded" the way an over-limit seat
+     * count or storage total would be.
+     */
+    protected function guardDowngradeCapacity(Tenant $tenant, Plan $newPlan): void
+    {
+        $overLimits = [];
+
+        if ($newPlan->seat_limit !== null && $this->seatQuota->usedNow($tenant) > $newPlan->seat_limit) {
+            $overLimits[] = 'seats';
+        }
+
+        if ($this->storageQuota->usedNow($tenant) > ($newPlan->storage_limit_gb * 1024 * 1024 * 1024)) {
+            $overLimits[] = 'storage';
+        }
+
+        if ($overLimits !== []) {
+            throw PlanDowngradeBlockedException::forTenant($tenant->id, $overLimits);
+        }
+    }
+
+    protected function liveSubscriptionFor(Tenant $tenant): ?TenantSubscription
     {
         return TenantSubscription::withoutGlobalScope('tenant')
             ->where('tenant_id', $tenant->id)
@@ -67,6 +173,11 @@ class PlanChangeService
                 TenantSubscription::STATUS_ACTIVE,
                 TenantSubscription::STATUS_GRACE,
             ])
-            ->exists();
+            ->first();
+    }
+
+    protected function hasLiveSubscription(Tenant $tenant): bool
+    {
+        return $this->liveSubscriptionFor($tenant) !== null;
     }
 }

@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B7 | Webhook — `RazorpaySubscriptionWebhookController` + `SubscriptionReconciler`, `SubscriptionInvoice` writes (Q3 pt.3) | ✅ done |
 | B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ✅ done |
 | B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ✅ done |
-| B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ⬜ not started |
+| B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ✅ done |
 | B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ⬜ not started |
 | B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ⬜ not started |
 | B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ⬜ not started |
@@ -537,16 +537,54 @@ estimate undershot its actual by a wide margin.
   5), same 1 pre-existing, unrelated `CourseSlugUniquenessTest` failure,
   still out of scope.
 
-### B10 — Upgrade/downgrade + proration (Q5) — not started
+### B10 — Upgrade/downgrade + proration (Q5) — DONE (2026-08-17)
 
-- `PlanChangeService::changePlan()` — computes
-  `(days_remaining_in_period / period_days) × (new_plan.price −
-  old_plan.price)` per design doc decision 9, writes a `proration`-kind
-  `SubscriptionInvoice`, updates `TenantSubscription.plan_id`.
-- Downgrade below current usage (e.g. new plan's seat_limit < current
-  active staff count) — decide and document behavior here: block the
-  downgrade with a clear error listing what's over, rather than silently
-  leaving the tenant over-limit on a plan that can't support it.
+- `PlanChangeService::changePlan()` — symmetric guard to `subscribe()`:
+  refuses (new `TenantNotSubscribedException`, 409) a tenant with **no**
+  live subscription, where `subscribe()` refuses one that already **has**
+  one. `prorate()` computes `(days_remaining / period_days) ×
+  (new_plan.price − old_plan.price)` exactly per decision 9 — **signed**,
+  not absolute: negative is a credit (downgrade), positive an extra
+  charge (upgrade), written to `SubscriptionInvoice.amount` as-is (that
+  column has no unsigned constraint). Written even for a same-price
+  lateral move — decision 9's own emphasis is an auditable record of
+  every change, not only the ones that moved money.
+- **Real Carbon pitfall avoided, not hit this time** — B9 already found
+  `diffInDays()` returns a float, and its *signed* (`absolute: false`)
+  form has a sign convention easy to get backwards. Sidestepped entirely
+  here by checking direction with `isAfter()` first and only ever calling
+  the plain absolute (default) form, same pattern B9's `GracePeriodBanner`
+  fix already established — kept the *raw float* for the money math
+  itself (only `round()`ed once, on the final stored amount), unlike B9's
+  own `ceil()` for a *display* day-count, since more precision is exactly
+  what you want in a proration calculation, not less.
+- Downgrade guard (`guardDowngradeCapacity()`) checks **seats and
+  storage only**, not bandwidth/AI spend — those two are daily-resetting
+  quotas, not an accumulated stock, so a downgrade there just means a
+  lower cap starting tomorrow, nothing "stranded" the way an already-over
+  seat count or storage total would be. Blocks with `PlanDowngradeBlockedException`
+  (409) listing exactly which limits (`seats`, `storage`, or both) would
+  be exceeded, rather than silently leaving the tenant over-limit on a
+  plan that can't support what it already has.
+- `EditTenant` gained a `changePlan` header action, the complement to
+  B6's `assignPlan` — visible exactly when `assignPlan` is hidden
+  (`plan_id !== null`), excludes the tenant's current plan from the
+  options list (changing "to" the same plan makes no sense).
+- One real test-fixture gap, not a code bug, caught by the first run:
+  `guardDowngradeCapacity()` always calls `SeatQuota::usedNow()`, and
+  Spatie's `role()` query scope throws `RoleDoesNotExist` the instant it's
+  asked to filter by a role name with **no matching `Role` row at all** —
+  not merely "zero users have it." `PlanChangeServiceTest`'s `beforeEach`
+  never seeded roles (none of B6's own `subscribe()`-only tests ever
+  reached this code path), so two of B10's new tests failed immediately,
+  including one that never assigns a role to anyone. Fixed by adding
+  `RoleSeeder` to the file's shared `beforeEach` — a real production
+  deployment always has roles seeded at setup, so this was purely a test
+  fixture gap, not an app-level one.
+- `composer test`: **893/894 passing** (+9 —
+  `PlanChangeServiceTest`'s 7 new cases + `TenantResourcePlanSectionTest`'s
+  2), same 1 pre-existing, unrelated `CourseSlugUniquenessTest` failure,
+  still out of scope.
 
 ### B11 — Institute-facing billing view — not started
 

@@ -52,6 +52,35 @@ it('hides the Assign Plan action once a tenant already has one', function () {
         ->assertActionHidden('assignPlan');
 });
 
+it('hides the Change Plan action until a tenant has a plan', function () {
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->assertActionHidden('changePlan');
+});
+
+it('changes a tenants plan via the Change Plan action (S11 B10)', function () {
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->callAction('assignPlan', data: ['plan_id' => $this->plan->id]);
+
+    TenantSubscription::withoutGlobalScope('tenant')
+        ->where('tenant_id', $this->tenant->id)
+        ->update(['status' => TenantSubscription::STATUS_ACTIVE]);
+
+    $enterprise = Plan::create([
+        'code' => 'enterprise-ui-test',
+        'name' => 'Enterprise',
+        'storage_limit_gb' => 500,
+        'bandwidth_limit_gb_per_day' => 200,
+        'ai_spend_cap_usd_per_day' => 50,
+        'price_inr_per_month' => 19999,
+    ]);
+
+    Livewire::test(EditTenant::class, ['record' => $this->tenant->id])
+        ->assertActionVisible('changePlan')
+        ->callAction('changePlan', data: ['plan_id' => $enterprise->id]);
+
+    expect($this->tenant->fresh()->plan_id)->toBe($enterprise->id);
+});
+
 it('shows the current plan name in the tenant list once assigned', function () {
     $this->tenant->update(['plan_id' => $this->plan->id]);
 
