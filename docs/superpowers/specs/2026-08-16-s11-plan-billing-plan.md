@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B8 | Grace-period sweep — `SuspendOverdueTenantSubscriptions` job, `grace_ends_at` logic, scheduled daily (Q4) | ✅ done |
 | B9 | Suspension enforcement — confirm/wire `Tenant::STATUS_SUSPENDED` gate for a billing-suspended tenant, grace-window banner in Admin panel | ✅ done |
 | B10 | Plan upgrade/downgrade + proration — `PlanChangeService::changePlan()`, `proration`-kind invoice row (Q5) | ✅ done |
-| B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ⬜ not started |
+| B11 | Institute-facing billing view — Admin panel `BillingOverview` page: plan, usage bars, subscription status, invoice history | ✅ done |
 | B12 | Super-panel cross-tenant billing visibility — subscription list/filter, `withoutGlobalScope` applied up front | ⬜ not started |
 | B13 | Cancellation flow — `PlanChangeService::cancel()`, `SubscriptionProvider::cancelSubscription()`, reverts to `plan_id = null` fallback | ⬜ not started |
 | B14 | Grace/suspension notifications — WhatsApp/email reminder on grace-entry and T-3-before-suspension, reuses Comms domain driver (mirrors Fees P7) | ⬜ not started |
@@ -586,12 +586,33 @@ estimate undershot its actual by a wide margin.
   2), same 1 pre-existing, unrelated `CourseSlugUniquenessTest` failure,
   still out of scope.
 
-### B11 — Institute-facing billing view — not started
+### B11 — Institute-facing billing view — DONE (2026-08-17)
 
-- Admin panel `Filament/Pages/BillingOverview.php` — read-only: current
-  plan name/limits, live usage (seat/storage/bandwidth, reusing
-  `SeatQuota`/`StorageQuota`/`BandwidthQuota` directly, not re-querying),
-  subscription status, `SubscriptionInvoice` history table.
+- `app/Filament/Admin/Pages/BillingOverview.php` — the first page in this
+  app to combine two previously-separate patterns: `CertificateSettings`'s
+  "standalone Page, `Placeholder`-only `form()` for static display, no
+  save action" shape, and `Gradebook`'s "`EmbeddedTable` in `content()`"
+  shape — `content()` returns both `EmbeddedSchema::make('form')` (the
+  plan/status/usage summary) and `EmbeddedTable::make()` (invoice
+  history) together.
+- Reuses `SeatQuota`/`StorageQuota`/`BandwidthQuota` directly for every
+  number shown — this page is a *view* onto numbers those services
+  already own, not a second place computing them. A small `usageBar()`
+  helper (inline CSS, no JS) renders each as a coloured progress bar
+  (green/amber/red at 70%/90%) with a plain "N used (unlimited)" line
+  when `capFor()` returns `null` (no seat cap on the tenant's plan).
+- Invoice table: `SubscriptionInvoice::query()->latest('id')`, badge
+  columns for `kind`/`status`, `money('INR')` on `amount`.
+- One real test bug, not a code bug: every `BillingOverviewPageTest` case
+  called `BillingOverview::getUrl(panel: 'admin')` with no route
+  parameters — `UrlGenerationException: Missing parameter [subdomain]`,
+  the exact same "tenant panel routes need `['subdomain' => ...]`
+  explicitly" gotcha `CLAUDE.md` already documents, just newly hit on a
+  standalone Page's own `getUrl()` rather than a Resource's. Fixed by
+  passing `['subdomain' => 'physics']`.
+- `composer test`: **898/899 passing** (+5 —
+  `BillingOverviewPageTest`'s 5 cases), same 1 pre-existing, unrelated
+  `CourseSlugUniquenessTest` failure, still out of scope.
 
 ### B12 — Super-panel cross-tenant billing visibility — not started
 
