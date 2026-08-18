@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B5 | General `audit_log_entries` sink (`AuditLogger`) + wire into the highest-value existing sensitive actions (role assignment, impersonation, plan change, tenant suspension) | ✅ done |
 | B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ✅ done |
 | B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ✅ done |
-| B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ⬜ not started |
+| B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ✅ done |
 | B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ⬜ not started |
 | B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ⬜ not started |
 | B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ⬜ not started |
@@ -520,7 +520,66 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1007 total, 1006 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B8 — GDPR data export — not started
+### B8 — GDPR data export — DONE (2026-08-18)
+
+- **Staff-initiated, not self-service** — `requested_by_id` is a real,
+  distinct actor from `user_id` in B0's own schema, which settles a real
+  design question the plan text itself left open: this is a compliance-
+  officer-style "export this user's data because they asked us" workflow
+  (an institute_admin acting on a data subject's request), not a "download
+  my own data" portal button. No self-service surface exists anywhere in
+  this app to hang that on, and the plan text names the export mechanism
+  itself, not a new portal page.
+- `GdprExportService::request()` (row + dispatch) and
+  `GenerateGdprExport` (the zip) are two classes, not one — mirrors
+  `AuditLogger`/listener's own split and `ExportRevenueRegister`'s
+  "`ShouldQueue` does the slow part" shape (S9 B11) at once.
+  `RebindsTenant` middleware, same as that job — every model this job
+  reads is `BelongsToTenant`, and a queue worker has no ambient
+  `CurrentTenant` on its own.
+- One CSV per domain inside the zip, covering decision 7's own named
+  examples (enrolments, submissions, certificates, fee history, quiz
+  attempts) plus this slice's own new login/device tables — not an
+  exhaustive sweep of every domain in the app; a real fast-follow if a
+  genuine compliance audit ever demands more, not assumed needed now.
+  `FeePayment` has no direct `user_id` (confirmed by reading its own
+  `$fillable`, not assumed) — joined through `FeeInvoice.user_id` instead,
+  the one genuinely non-obvious query in the whole job.
+- **Signed download link, literally** — `URL::temporarySignedRoute()` +
+  `'signed'` route middleware (`routes/security.php`), the same real
+  mechanism `watch.stream`/`watch.pdf` already use (routes/content.php),
+  not the plain role-gated-controller shape `ExportRevenueRegister`'s own
+  download route actually uses despite the design doc's own wording
+  loosely calling that one "signed" too — confirmed by reading
+  `DownloadRevenueExportController` directly rather than assuming the
+  design doc's cross-reference was mechanically precise.
+  `expires_at` (B0's own schema column) drives both the DB-level 410 check
+  and the signed URL's own expiry together, so a link can't outlive the
+  file it points at.
+- `GdprExports` (Admin panel) — a table, not a single generate/download
+  action pair like `RevenueExport`: that job produces one file per
+  tenant, this one produces one per *request*, and several can be in
+  flight for different users at once. Target user picked via a searchable
+  `Select` scoped to the current tenant — same "no Users Resource exists
+  yet" reasoning `ImpersonateUser` (S9 B3) already established, just
+  tenant-scoped here instead of that page's own cross-tenant one.
+- Tested at four levels: `GdprExportServiceTest` (request row + dispatch),
+  `GenerateGdprExportTest` (every CSV entry present even for a user with
+  zero cross-domain data, user-scoping proven on a cheap-to-seed table,
+  the `FeePayment`-via-`FeeInvoice` join and a `Certificate` join both
+  proven with real rows), `DownloadGdprExportControllerTest` (a real
+  signed download, a tampered/unsigned URL refused, not-ready is 404,
+  expired is 410), `GdprExportsPageTest` (the request action queues
+  correctly, cross-tenant isolation, the download action's own
+  ready-and-unexpired visibility gate, one real HTTP page load). No
+  forced-failure-path test for the job's own `catch` block — the one
+  realistic trigger (`user_id` pointing at a deleted user) is blocked by
+  its own `cascadeOnDelete()` FK, which would delete the request row
+  itself before the job could ever observe a "missing user" state; not
+  worth mocking a filesystem failure just to exercise a 3-line catch
+  block.
+- `composer test`: 1020 total, 1019 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B9 — GDPR data deletion — not started
 

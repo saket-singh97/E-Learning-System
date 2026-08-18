@@ -63,3 +63,7 @@ Route::domain('{subdomain}.lms.test')
 Route::domain('{subdomain}.lms.test')
     ->middleware(['web', 'resolve.tenant'])
     ->group(base_path('routes/comms.php'));
+
+Route::domain('{subdomain}.lms.test')
+    ->middleware(['web', 'resolve.tenant'])
+    ->group(base_path('routes/security.php'));
