@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B3 | Login history + IP geolocation + impossible-travel detection (`ImpossibleTravelDetector`, velocity check) (B11) | ✅ done |
 | B4 | Account-sharing detection — daily sweep, forced re-auth on flag (B12) | ✅ done |
 | B5 | General `audit_log_entries` sink (`AuditLogger`) + wire into the highest-value existing sensitive actions (role assignment, impersonation, plan change, tenant suspension) | ✅ done |
-| B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ⬜ not started |
+| B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ✅ done |
 | B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ⬜ not started |
 | B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ⬜ not started |
 | B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ⬜ not started |
@@ -419,7 +419,51 @@ own estimate undershot its actual by a wide margin.
   proving each wired call site actually writes the right row, not just
   that `AuditLogger` works in isolation.
 
-### B6 — Audit log retention + viewer — not started
+### B6 — Audit log retention + viewer — DONE (2026-08-18)
+
+- `PruneAuditLogEntries` — `->monthly()`, not `->daily()` like every other
+  sweep in this file (`SuspendOverdueTenantSubscriptions`,
+  `DetectAccountSharing`), per design doc §4 decision 6's own explicit
+  cadence call. Hard `->delete()` on rows past
+  `config('security.audit_log_retention_days')` (default 365, new env
+  `SECURITY_AUDIT_LOG_RETENTION_DAYS`) — no soft-delete, matching decision
+  6's "nothing left to restore" reasoning verbatim. No `CurrentTenant`
+  clearing needed the way every other unscoped sweep in this app requires
+  — `AuditLogEntry` was never `BelongsToTenant` to begin with (B0), so
+  there's no tenant scope to bypass.
+- `AuditLog` (Super panel) — a plain `HasTable` page, not a Resource,
+  same "nothing worth Create/Edit scaffolding" reasoning `MyDevices` (B2)
+  already established for an append-only/no-create data source. Lives at
+  `app/Filament/Pages/` — confirmed (not assumed) that path is Super's
+  own exclusive `discoverPages` source (`SuperPanelProvider`'s only
+  `discoverPages` call), unlike Admin/Teach's own `Filament/Admin/Pages`/
+  `Filament/Teach/Pages` — so no explicit panel-registration edit was
+  needed, matching how `ImpersonateUser` already got picked up the
+  identical way in S9 B3.
+- Unscoped `AuditLogEntry::query()` (every tenant's rows plus
+  platform-level ones, `tenant_id IS NULL` included) — deliberate, not
+  the accidental cross-tenant leak `CrossTenantTest` exists to catch
+  elsewhere: this page is Super-panel-only (`EnsureRole::class.':super_admin'`
+  already gates the whole panel), and the whole point of a platform-level
+  audit viewer is seeing across every tenant at once. `AuditLogEntry`
+  isn't `BelongsToTenant` in the first place, so there's no global scope
+  being bypassed here, unlike `MyDevices`'s own ambient-`CurrentTenant`
+  reliance.
+- Action-name and tenant `SelectFilter`s, a `view` row-action opening a
+  read-only modal (`KeyValueEntry` for `metadata`, the one column too
+  unstructured for a plain `TextColumn`) — the smallest surface that
+  makes a 981-row (and growing) table actually navigable, nothing beyond
+  what "read-only viewer" asks for. No export/search-by-actor-name/date-
+  range filter built — not named by the plan text, a fast-follow if a
+  real investigation ever needs it.
+- Tested at three levels: `PruneAuditLogEntriesTest` (past-cutoff deleted,
+  within-window kept, exact-boundary kept — strictly-older only, a custom
+  config value respected, an empty table runs cleanly), `AuditLogPageTest`
+  (cross-tenant + platform-level rows all visible in one list, both
+  filters narrow correctly, a non-`super_admin` gets `403` the same way
+  `PanelAccessTest`'s own existing cases already prove for this panel).
+- `composer test`: 990 total, 989 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B7 — GDPR cookie consent — not started
 

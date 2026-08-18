@@ -40,4 +40,17 @@ return [
     */
     'account_sharing_device_threshold' => (int) env('SECURITY_ACCOUNT_SHARING_DEVICE_THRESHOLD', 4),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Audit log retention (S12 B6 — FEATURES.md B13)
+    |--------------------------------------------------------------------------
+    |
+    | Days an audit_log_entries row is kept before the monthly prune sweep
+    | hard-deletes it. Defaulted to 365 per the design doc's own §4
+    | decision 6 — a config value, not a hardcoded constant, so it's
+    | tunable without a redeploy.
+    |
+    */
+    'audit_log_retention_days' => (int) env('SECURITY_AUDIT_LOG_RETENTION_DAYS', 365),
+
 ];

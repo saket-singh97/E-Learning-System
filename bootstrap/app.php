@@ -10,6 +10,7 @@ use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
 use App\Domains\Fees\Jobs\SendFeeReminders;
 use App\Domains\Security\Jobs\DetectAccountSharing;
+use App\Domains\Security\Jobs\PruneAuditLogEntries;
 use App\Exceptions\AiSpendCapExceededException;
 use App\Exceptions\BandwidthQuotaExceededException;
 use App\Exceptions\BatchFullException;
@@ -109,6 +110,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // doc §4 decision 4 — a rolling-7-day device-cycling pattern, not
         // a single event.
         $schedule->job(new DetectAccountSharing, 'scheduled')->daily();
+
+        // S12 B6 — design doc §4 decision 6: monthly, not daily like the
+        // sweeps above — a 365-day cutoff tolerates a sweep running once a
+        // month with no practical difference in what gets pruned.
+        $schedule->job(new PruneAuditLogEntries, 'scheduled')->monthly();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
