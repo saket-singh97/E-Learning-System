@@ -5,30 +5,90 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-17)
+## Right now (2026-08-18)
 
-- **S12 — Security & Resilience Hardening: DESIGN + PLAN DONE, build not
-  started.** `docs/superpowers/specs/2026-08-17-s12-security-resilience-design.md`,
-  `...-plan.md`. `docs/FEATURES.md` Section B (B9-B13, B15) + Section V-a
-  (V1-V5) — device fingerprinting + registered-device limit, concurrent
-  session limit + remote logout, login history + impossible-travel
-  detection, account-sharing detection, a general 365-day-retention audit
-  log, GDPR/DPDP consent/export/deletion, circuit breakers on every
-  external provider, explicit cache invalidation, soft-delete gap closure
-  on 4 payment/subscription models, Form Request extraction on the last 2
-  inline-`validate()` controllers. Picked as the next P2-backlog slice per
+- **S12 — Security & Resilience Hardening: COMPLETE, all 15 blocks
+  (2026-08-18).** `docs/superpowers/specs/2026-08-17-s12-security-resilience-design.md`,
+  `...-plan.md` (full per-block build log + B14's own review-pass notes
+  live there, not repeated here). `docs/FEATURES.md` Section B (B9-B13,
+  B15) + Section V-a (V1-V5). Picked as the next P2-backlog slice per
   `docs/ROADMAP.md`'s own S12 entry. New `app/Domains/Security/` domain;
-  5 new `BelongsToTenant` models plus 2 deliberately-not-tenant-scoped ones
-  (`audit_log_entries`, `cookie_consents` — same `ImpersonationAudit`-style
+  5 new `BelongsToTenant` models (`DeviceSession`, `LoginHistory`,
+  `AccountSharingFlag`, `GdprExportRequest`, `GdprDeletionRequest`), all
+  registered in `TenantModelRegistry`, plus 2 deliberately-not-tenant-scoped
+  ones (`AuditLogEntry`, `CookieConsent` — same `ImpersonationAudit`-style
   exception S9 B3 established, both need to record platform-level or
-  pre-tenant-context events). Verified before writing the design: zero
-  existing device/session/GDPR/circuit-breaker/cache surface anywhere in
-  the app (grepped, not assumed); `SoftDeletes` already correct on
-  `User`/`Course`/`CourseSection`/`Lesson`/`Batch`/`Enrolment`/`Question`,
-  missing on `FeePayment`/`FeeInvoice`/`TenantSubscription`/
-  `SubscriptionInvoice`; raw-SQL baseline (V5) already fully enforced by
-  `SecurityBaselineTest`, needs no new code. 15 blocks (B0-B14). Next step:
-  run the per-block build command in the plan doc starting at B0.
+  pre-tenant-context events).
+  - **B0-B4** built device/session/login tracking: `DeviceFingerprintService`
+    (UA + first-party cookie hash, no paid vendor) + `DeviceRegistrar`
+    (registered-device limit, default 2, config-driven) firing off
+    `Illuminate\Auth\Events\Login` — the one chokepoint every login surface
+    (password, TOTP, Google OAuth, all 3 Filament panels, both portals)
+    already funnels through, no controller touched; Admin/Teach-panel
+    "My devices" page with a remote-logout action, enforced lazily on the
+    revoked device's *next* request (`EnsureDeviceNotRevoked`, same
+    lazy-check tradeoff `Tenant::isSuspended()` already accepts);
+    `LoginHistory` + `ImpossibleTravelDetector` (plain haversine velocity
+    check against a config'd max plausible km/h, `FakeGeoIpResolver` stands
+    in for a real MaxMind driver — deferred, no `.mmdb` file to test
+    against in this environment); `AccountSharingFlag` daily sweep
+    (distinct-device-count threshold, forces re-auth on flag rather than
+    locking the account, so a false positive doesn't lock out a real user).
+  - **B5-B9** built the general audit log + GDPR/DPDP surface: `AuditLogger`
+    (`audit_log_entries`, written synchronously — not queued, since the
+    entire point is surviving a queue worker failure) wired into role
+    assignment, impersonation, plan change, and tenant suspension;
+    `PruneAuditLogEntries` (365-day retention, monthly sweep, hard delete —
+    an aged-out entry has nothing left to restore) + a Super-panel
+    read-only viewer; cookie-consent banner recorded per-session before
+    login then reconciled to the user on `Auth::login()` (mirrors
+    `ParentInviteCode`'s own "real state before a User row exists" shape);
+    GDPR export (async job, zip of every domain's rows for one user,
+    signed download link, same shape `ExportRevenueRegister` (S9 B11)
+    already established) and GDPR deletion (anonymize PII on rows with a
+    legal/financial retention requirement — `FeeInvoice`/`SubscriptionInvoice`
+    — hard-delete everything else, 30-day grace window before the daily
+    sweep executes it).
+  - **B10-B13** built the resilience half (V1-V4): `App\Support\Resilience\CircuitBreaker`
+    (Redis-backed `INCR`/`SETEX`, half-open implicit via TTL expiry,
+    failures not reset on trip so a failed probe re-trips immediately)
+    wrapped as a decorator around all 6 external-provider drivers (Bunny,
+    Claude, both Razorpay integrations, WhatsApp BSP, live-class) —
+    container bindings swapped, call sites untouched — plus a Sentry
+    `Log::critical()` alert on trip and a shared Super/Admin dashboard
+    widget; `AggregateCache` (explicit named remember/forget per target,
+    not generic keying) standing up a first-ever cache layer for
+    `GradebookService::scoreFor()`/`StudentMetrics::summarize()`/
+    `InstituteOverviewWidget`, busted on every write path that can change
+    the underlying numbers (assignment grading, quiz submission/review,
+    attendance recorded via a dedicated listener); `SoftDeletes` +
+    `TrashedFilter`/`RestoreAction` closing the 4 real V3 gaps
+    (`FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice`)
+    — 3 of those 4 needed a brand-new minimal browse-only Filament resource
+    built from scratch, since only `FeeInvoice` already had one; Form
+    Request extraction on the last 2 inline-`validate()` calls
+    (`TwoFactorChallengeRequest`, `WatchHeartbeatRequest`).
+  - **B14's own dedicated review pass** — same discipline S9 B14/S10 B15/S11
+    B16 each already established, re-reading every B0-B13 file rather than
+    trusting a green suite alone. **Found and fixed 2 real bugs:** (1)
+    `DeviceRegistrar` never revives an old revoked `device_sessions` row on
+    relogin, it inserts a fresh one — but `EnsureDeviceNotRevoked` checked
+    *any* row for that fingerprint ever revoked, not the latest one, so a
+    legitimately-relogged-in device got force-logged-out on every request
+    forever, permanently. (2) `RoleAssignmentPolicy::assign()` wrote its
+    `'role.assigned'` audit row *before* the seat-quota check that can
+    still throw `SeatLimitExceededException` — a seat-limit-blocked
+    assignment left a false "success" row in the general audit sink for a
+    grant that never took effect. Both fixed with regression tests, plus
+    one new full lifecycle E2E test (`SecurityLifecycleE2ETest`, chains
+    login → device-limit-hit → remote-logout → login-history-flagged in
+    one run, mirroring S11 B16's own `SubscriptionLifecycleE2ETest`
+    posture) proving the pieces still fit together end to end.
+  - Tests green: **1094/1093** (same 1 pre-existing, unrelated
+    `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+    scope) — 168 new tests across all 15 blocks.
+  - `docs/PROJECT-STATUS.md` updated to COMPLETE, matching S1-S11's own
+    post-completion format.
 
 - **S11 — Plan Tiers + Institute Billing: COMPLETE, all 17 blocks
   (2026-08-17).** `docs/superpowers/specs/2026-08-16-s11-plan-billing-design.md`,
@@ -1269,6 +1329,32 @@ at the source.
   app ever un-suspends a tenant automatically. Whenever a mirrored pair of
   columns gets a "enters state X" fix, check the code path that reverses
   it too, even if no test was asserting the reverse path was broken.
+- When a "revoked"/"disabled"/"cancelled" check queries a table that
+  *inserts a new row* rather than *updating the old one* on the reversing
+  action (re-registration, re-subscription, etc.), an unscoped
+  `->exists()`/`->where(...)->count()` over every historical row for that
+  key will keep matching the old, still-flagged row forever — found in
+  S12 B14's own review pass: `DeviceRegistrar::registerLogin()` (B1)
+  inserts a fresh `device_sessions` row when a revoked fingerprint logs
+  back in rather than reviving the old one (matches `MyDevices`'s own "log
+  back in afterward, using up one of your device slots again" UX text),
+  but `EnsureDeviceNotRevoked` (B2) checked `->whereNotNull('revoked_at')->exists()`
+  across every row ever, not the latest — permanently locking out a
+  legitimately-relogged-in device. Any check like this needs `->latest('id')->first()`
+  (or an equivalent "current row" scope), not a blanket existence check
+  over the row's full history.
+- Don't write an audit-log entry (or any "this thing happened" record)
+  before the code that can still fail to make it happen — found in S12
+  B14's own review pass: `RoleAssignmentPolicy::assign()` wrote its
+  `AuditLogger`-backed `'role.assigned'` row *before* the seat-quota
+  `DB::transaction()` branch that can throw `SeatLimitExceededException`
+  after the privilege check already passed, leaving a false "success" row
+  in the general audit sink for a role grant that never actually took
+  effect. `AuditLogger`/`RoleAssignmentAudit` writes belong strictly after
+  every operation that can still throw, never before — `ImpersonationService::start()`
+  and `EditTenant`'s `changePlan` action both already got this right
+  (checked directly in the same review pass), this was the one call site
+  that didn't.
 
 ## Where the detail actually lives
 

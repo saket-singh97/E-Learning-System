@@ -40,13 +40,16 @@ stop and report before starting the next block.
 | B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ✅ done |
 | B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ✅ done |
 | B13 | Soft-delete gap closure — `FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` + admin restore UI on all 4 (V3); Form Request extraction on the 2 remaining inline-`validate()` controllers (V4) | ✅ done |
-| B14 | Full test coverage, isolation registration sweep, review pass, V5 regression-guard confirmation, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
+| B14 | Full test coverage, isolation registration sweep, review pass, V5 regression-guard confirmation, `PROJECT-STATUS.md`/`HANDOVER.md` update | ✅ done |
 
 **Test suite:** 925/926 at slice start (1 pre-existing, unrelated
 `CourseSlugUniquenessTest` failure carried since S1/S2, out of scope here
 same as every prior slice). Design doc §5 estimates ~70-85 new tests by
 B14 (~995-1010 total) — a rough anchor, not a target; every prior slice's
-own estimate undershot its actual by a wide margin.
+own estimate undershot its actual by a wide margin. **Final: 1094/1093
+passing** (same 1 pre-existing failure, still out of scope) — 168 new
+tests across B0-B14, well past the design doc's own rough anchor, same
+"every prior slice's estimate undershot" pattern repeating.
 
 ---
 
@@ -938,22 +941,77 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1092 total, 1091 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B14 — Full test coverage, review pass — not started
+### B14 — Full test coverage, review pass — done
 
-- Sweep for anything the per-block tests didn't cover end-to-end (a full
-  login → device-limit-hit → remote-logout → login-history-flagged chain
-  as one integration test, mirroring S7/S11's own precedent for a
-  lifecycle E2E test).
-- Confirm `TenantModelRegistry` picked up all 5 new `BelongsToTenant`
-  models (`device_sessions`, `login_history`, `account_sharing_flags`,
-  `gdpr_export_requests`, `gdpr_deletion_requests`) — already enforced by
-  B0's own registration, just confirm nothing slipped through.
-- V5 regression-guard: re-run `tests/Feature/Security/SecurityBaselineTest.php`
-  explicitly and confirm it still passes with zero `DB::raw`/`whereRaw`/
-  `DB::statement` introduced by any of B1-B13's own new code.
-- Explicit review pass across every B0-B13 file for real bugs, not just a
-  green suite — same discipline S9 B14/S10 B15/S11 B16 each already
-  established and each already found real, fixed bugs this way.
-- Update `HANDOVER.md` (S12 complete entry + any new `## Avoid` entries)
-  and `docs/PROJECT-STATUS.md` (new S12 section, matching S1-S11's exact
-  format).
+- **Lifecycle E2E test**: `tests/Feature/Security/SecurityLifecycleE2ETest.php`,
+  new. Chains device-limit (B1) → remote-logout (B2) → impossible-travel
+  flagging (B3) in one run, mirroring S11 B16's own `SubscriptionLifecycleE2ETest`
+  posture. Dispatches real `Illuminate\Auth\Events\Login` events via
+  `Auth::login()` with the request rebound into the container per attempt
+  (not a full HTTP round-trip) — the same deliberate workaround B2's own
+  `EnsureDeviceNotRevokedTest` already documents for why this app's custom
+  device cookie can't reliably survive the test HTTP client's encryption
+  pass. Proves, in one flow: a first login is never flagged; a second
+  device within a plausible travel window is registered and unflagged;
+  a third device is refused once the (configured) limit of 2 is hit, and
+  the half-established session is torn down with **no** `login_history`
+  row written for the rejected attempt (`RegisterDeviceOnLogin` is
+  registered before `RecordLoginHistory`, so the exception it throws
+  never lets the second listener run — a real, deliberate ordering
+  consequence, not an oversight); revoking a device and having it send
+  its next request logs it out; and a later login from a *different*
+  location within minutes gets `flagged_impossible_travel = true`.
+- **`TenantModelRegistry` sweep**: confirmed all 5 — `DeviceSession`,
+  `LoginHistory`, `AccountSharingFlag`, `GdprExportRequest`,
+  `GdprDeletionRequest` — already present with `seedAttributes()`/
+  `updateAttributes()` entries (B0's own registration held up; nothing
+  slipped through across B1-B13).
+- **V5 regression-guard**: `tests/Feature/Security/SecurityBaselineTest.php`
+  re-run explicitly, standalone — 4/4 passing, zero `DB::raw`/`whereRaw`/
+  `DB::statement` introduced anywhere in `app/Domains/` by B1-B13.
+- **Review pass** (`git diff 727c050..6c5cff6`, the full B0-B13 range) —
+  same discipline S9 B14/S10 B15/S11 B16 each already established, and
+  it found real bugs again, not just a green suite. **2 confirmed, both
+  fixed with regression tests:**
+  1. `DeviceRegistrar::registerLogin()` (B1) never revives an old revoked
+     `device_sessions` row for a fingerprint that logs back in — it
+     inserts a fresh one (matching `MyDevices`'s own modal text, "It can
+     log back in afterward, using up one of your device slots again").
+     `EnsureDeviceNotRevoked` (B2) then checked `->whereNotNull('revoked_at')->exists()`
+     across **every** row for that fingerprint ever, not just the current
+     one — so the stale revoked row kept matching forever, permanently
+     locking a legitimately-relogged-in device out on every subsequent
+     request. Fixed by checking only the *latest* row
+     (`->latest('id')->first()`) per user+fingerprint. New test in
+     `EnsureDeviceNotRevokedTest.php` creates both an old revoked row and
+     a newer active one for the same fingerprint and asserts the request
+     now passes through.
+  2. `RoleAssignmentPolicy::assign()` (B5's own audit-sink wiring) wrote
+     the general `audit_log_entries` `'role.assigned'` row *before* the
+     seat-quota check (S11 B15's own `lockForUpdate()` branch) that can
+     still throw `SeatLimitExceededException` after the privilege check
+     passes — a seat-limit-blocked assignment left a false "success"
+     audit row behind for a role grant that never actually took effect.
+     Fixed by moving the seat-consuming branch and the plain
+     `syncRoles()` branch both ahead of the single `AuditLogger::record()`
+     call, so the exception (still thrown, still propagates) now
+     prevents the write instead of racing past it. `RoleAssignmentTest.php`'s
+     existing seat-limit test extended with an assertion that zero
+     `'role.assigned'` `AuditLogEntry` rows exist after the throw.
+  - Checked and cleared, no bug: the same "write audit before/after a
+    side effect that can fail" pattern in `ImpersonationService::start()`
+    and `EditTenant`'s `changePlan` action — both already write the audit
+    row only after the operation that can throw, correctly ordered.
+    `SuspendOverdueTenantSubscriptions::suspend()`'s audit write sits
+    inside the same `DB::transaction()` as its own status updates, after
+    both — also correctly ordered, nothing follows it that could still
+    fail and roll the write back unnoticed.
+- `HANDOVER.md` updated: S12 entry flipped from "design done, build not
+  started" to a full "COMPLETE, all 15 blocks" summary matching S9-S11's
+  own post-completion format, plus 2 new `## Avoid` entries for the two
+  bugs above. `docs/PROJECT-STATUS.md` given a new S12 section, same
+  format as S9/S10/S11's own.
+- `composer test`: **1094 total, 1093 passed**, the same one
+  pre-existing unrelated `CourseSlugUniquenessTest` failure carried since
+  S1/S2 — confirmed still the *only* failure after all of B0-B14, no new
+  regressions anywhere.

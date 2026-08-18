@@ -48,6 +48,34 @@ class RoleAssignmentPolicy
             throw PrivilegeEscalationException::forAttempt($actorRole, $role);
         }
 
+        if (! $this->addsNewSeat($target, $role)) {
+            $target->syncRoles([$role]);
+        } else {
+            // S11 B15 — two concurrent assign() calls promoting two
+            // *different* targets to a seat-consuming role on the same
+            // tenant could otherwise both pass remainingFor() === 0 before
+            // either commits, over-provisioning by one seat (no unique DB
+            // constraint exists to catch this the way S10 B15's version-
+            // number race had). Locking the Tenant row (same technique
+            // PlanChangeService's own B15 fix uses) serializes only this
+            // seat-consuming path — every other role assignment (student/
+            // parent/a tier change) is untouched by the lock, since only
+            // this branch needs it.
+            DB::transaction(function () use ($target, $role): void {
+                $tenant = Tenant::where('id', $target->tenant_id)->lockForUpdate()->first();
+
+                if ($tenant !== null && app(SeatQuota::class)->remainingFor($tenant) === 0) {
+                    throw SeatLimitExceededException::forTenant($tenant->id);
+                }
+
+                $target->syncRoles([$role]);
+            });
+        }
+
+        // Written only once the role has actually taken effect (S12 B14's
+        // own review pass) — this used to fire before the seat-quota check
+        // above, so a SeatLimitExceededException left a 'role.assigned'
+        // audit row behind for an assignment that never happened.
         app(AuditLogger::class)->record(
             action: 'role.assigned',
             subject: $target,
@@ -55,31 +83,6 @@ class RoleAssignmentPolicy
             tenantId: $target->tenant_id ?? $actor->tenant_id,
             metadata: ['role' => $role, 'actor_role' => $actorRole],
         );
-
-        if (! $this->addsNewSeat($target, $role)) {
-            $target->syncRoles([$role]);
-
-            return;
-        }
-
-        // S11 B15 — two concurrent assign() calls promoting two *different*
-        // targets to a seat-consuming role on the same tenant could
-        // otherwise both pass remainingFor() === 0 before either commits,
-        // over-provisioning by one seat (no unique DB constraint exists to
-        // catch this the way S10 B15's version-number race had). Locking
-        // the Tenant row (same technique PlanChangeService's own B15 fix
-        // uses) serializes only this seat-consuming path — every other
-        // role assignment (student/parent/a tier change) is untouched by
-        // the lock, since only this branch needs it.
-        DB::transaction(function () use ($target, $role): void {
-            $tenant = Tenant::where('id', $target->tenant_id)->lockForUpdate()->first();
-
-            if ($tenant !== null && app(SeatQuota::class)->remainingFor($tenant) === 0) {
-                throw SeatLimitExceededException::forTenant($tenant->id);
-            }
-
-            $target->syncRoles([$role]);
-        });
     }
 
     /**

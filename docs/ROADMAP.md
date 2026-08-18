@@ -14,14 +14,14 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 11 (S1–S11) |
-| **Designed, not built** | 1 (S12) |
+| **Shipped** | 12 (S1–S12) |
+| **Designed, not built** | 0 |
 | **Proposed, not yet scoped** | 14 (S13–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **16 shipped** (S10, S11), 11 more designed (S12, not built).
+- **P2 — Depth & extras** (~75 features): **27 shipped** (S10, S11, S12).
 - **P3 — Scale & enterprise** (~55 features): not started — by design, this comes after paying customers exist.
 
 ---
@@ -41,7 +41,7 @@ regenerate it from this file.
 | S9 | Hardening & Backlog — 2FA, Google OAuth, AI/bandwidth spend caps, audit-trail fixes | 15 blocks | Aug 12–13 | ✅ Done |
 | S10 | Assignments, Gradebook, Certificates — submissions, rubric grading, weighted gradebook, auto-issued certificates | 16 blocks | Aug 16 | ✅ Done |
 | S11 | Plan Tiers + Billing — seat/storage/bandwidth caps, Razorpay subscriptions, grace period, proration | 17 blocks | Aug 17 | ✅ Done |
-| S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks planned | Aug 17 | 🟡 Designed, build pending |
+| S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks | Aug 17–18 | ✅ Done |
 
 ---
 

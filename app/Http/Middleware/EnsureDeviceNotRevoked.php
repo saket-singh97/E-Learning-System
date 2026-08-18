@@ -38,13 +38,19 @@ class EnsureDeviceNotRevoked
 
         $fingerprint = app(DeviceFingerprintService::class)->fingerprintFor($request);
 
-        $revoked = DeviceSession::withoutGlobalScope('tenant')
+        // Latest row for this fingerprint, not "any row ever revoked" —
+        // DeviceRegistrar::registerLogin() inserts a fresh row (rather than
+        // reviving the old one) when a revoked device logs back in, so an
+        // unscoped exists() check would keep matching that stale revoked
+        // row forever and permanently lock the fingerprint out even after a
+        // genuinely valid relogin (found in S12 B14's own review pass).
+        $latest = DeviceSession::withoutGlobalScope('tenant')
             ->where('user_id', $user->id)
             ->where('device_fingerprint', $fingerprint)
-            ->whereNotNull('revoked_at')
-            ->exists();
+            ->latest('id')
+            ->first();
 
-        if ($revoked) {
+        if ($latest !== null && $latest->isRevoked()) {
             // Single 'web' guard app-wide (config/auth.php) — every real
             // caller here (portals, all three Filament panels, the JSON
             // endpoint) already authenticates through it, same as

@@ -162,6 +162,11 @@ it('blocks assigning a seat-consuming role once the plan seat limit is reached (
         ->toThrow(SeatLimitExceededException::class);
 
     expect($target->fresh()->hasRole('instructor'))->toBeFalse();
+
+    // S12 B14 review-pass fix: the audit sink used to write 'role.assigned'
+    // before this seat-quota check could still throw, leaving a false
+    // record of a grant that never took effect.
+    expect(AuditLogEntry::where('action', 'role.assigned')->count())->toBe(0);
 });
 
 it('allows a tier change between seat-consuming roles even at full capacity, since headcount does not grow', function () {

@@ -1220,3 +1220,80 @@ noted above (B15) stays a documented, deliberately-accepted limitation,
 not a bug queued for a fix.
 
 **All 17 S11 blocks are now built, tested, and reviewed.**
+
+## S12 — Security & Resilience Hardening: COMPLETE (all 15 blocks, 2026-08-18)
+
+Fourth P2-backlog slice (after S9 hardening, S10 assignments/gradebook/
+certificates, S11 billing). `docs/FEATURES.md` Section B (auth/session/
+audit/GDPR items B9-B13, B15) + Section V-a (resilience/correctness items
+V1-V5) — 11 roadmap items, 15 finer-grained build blocks.
+`docs/superpowers/specs/2026-08-17-s12-security-resilience-design.md` and
+`...-plan.md` cover B0-B14:
+
+- **B0-B4** built the new `app/Domains/Security/` domain's device/session/
+  login surface: 5 new `BelongsToTenant` models (`DeviceSession`,
+  `LoginHistory`, `AccountSharingFlag`, `GdprExportRequest`,
+  `GdprDeletionRequest`, all registered in `TenantModelRegistry`) plus 2
+  deliberately-not-tenant-scoped ones (`AuditLogEntry`, `CookieConsent`,
+  same `ImpersonationAudit`-style exception S9 B3 established);
+  `DeviceFingerprintService` (UA + first-party cookie hash) +
+  `DeviceRegistrar` enforcing a config'd registered-device limit (default
+  2) at the one point every login surface already funnels through
+  (`Illuminate\Auth\Events\Login`); an Admin/Teach-panel "My devices" page
+  with remote logout, enforced lazily on the revoked device's next request;
+  `LoginHistory` + a plain-haversine `ImpossibleTravelDetector` (config'd
+  max plausible km/h, `FakeGeoIpResolver` standing in for a real MaxMind
+  driver, deferred — no `.mmdb` file to test against in this environment);
+  a daily account-sharing sweep flagging by distinct-device-count
+  threshold, forcing re-auth rather than locking the account.
+- **B5-B9** built the general audit log + GDPR/DPDP surface: `AuditLogger`
+  (`audit_log_entries`, written synchronously so the record survives even
+  a failed queue worker) wired into role assignment, impersonation, plan
+  change, and tenant suspension; a monthly 365-day-retention prune sweep +
+  Super-panel read-only viewer; a cookie-consent banner recorded
+  per-session before login and reconciled to the user on authentication;
+  an async GDPR export job (zip of every domain's rows for one user,
+  signed download link, matching `ExportRevenueRegister`'s S9 B11 shape)
+  and a GDPR deletion service (anonymize PII on rows with a legal/
+  financial retention requirement, hard-delete everything else, 30-day
+  grace window before a daily sweep executes it).
+- **B10-B13** built the resilience half (V1-V4): `App\Support\Resilience\CircuitBreaker`
+  (Redis `INCR`/`SETEX`, half-open implicit via TTL expiry) wrapped as a
+  decorator around all 6 external-provider drivers (Bunny, Claude, both
+  Razorpay integrations, WhatsApp BSP, live-class) with a Sentry alert on
+  trip and a shared dashboard widget; `AggregateCache` standing up this
+  app's first-ever cache layer for `GradebookService::scoreFor()`/
+  `StudentMetrics::summarize()`/`InstituteOverviewWidget`, busted on every
+  write path that can change the underlying numbers; `SoftDeletes` +
+  `TrashedFilter`/`RestoreAction` closing the 4 real gaps
+  (`FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` —
+  3 of the 4 needed a brand-new minimal browse-only Filament resource,
+  since only `FeeInvoice` already had one); Form Request extraction on the
+  last 2 inline-`validate()` controllers.
+- **B14's own dedicated review pass** — re-read every B0-B13 file for real
+  bugs, not just re-confirmed the suite stayed green — found and fixed 2:
+  `DeviceRegistrar` inserts a fresh `device_sessions` row (not a revived
+  one) when a revoked fingerprint logs back in, but `EnsureDeviceNotRevoked`
+  checked *any* historical row for that fingerprint rather than the latest
+  one, permanently locking out a legitimately-relogged-in device;
+  `RoleAssignmentPolicy::assign()` wrote its `'role.assigned'` audit row
+  before the seat-quota check that can still throw, leaving a false
+  "success" record for a role grant that never took effect. Both fixed
+  with regression tests, plus one new lifecycle E2E test chaining login →
+  device-limit-hit → remote-logout → login-history-flagged in one run,
+  mirroring S11 B16's own `SubscriptionLifecycleE2ETest` posture.
+
+**Test suite: 1094/1093 passing.** Same 1 pre-existing failure carried
+since S1/S2 (`CourseSlugUniquenessTest`, unrelated to S12, still out of
+scope) — 168 new tests across all 15 blocks.
+
+**What's not real yet, on purpose**: `RealGeoIpResolver` — a genuine
+MaxMind GeoLite2 driver — is deferred; `FakeGeoIpResolver` stays the bound
+driver until a real `.mmdb` file is provisioned (MaxMind now gates even
+the free tier behind account registration, so there's no way to build or
+test a real driver in this environment). Circuit-breaker dashboard
+visibility is a read-only widget on the existing Super/Admin overview
+pages, not a dedicated Filament resource — V1 needed breaker state
+visible, not a new CRUD surface.
+
+**All 15 S12 blocks are now built, tested, and reviewed.**

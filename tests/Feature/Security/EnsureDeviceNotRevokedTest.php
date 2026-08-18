@@ -110,3 +110,41 @@ it('lets a guest request through with no authenticated user to check', function 
 
     expect($response->getContent())->toBe('passed');
 });
+
+/**
+ * S12 B14 review-pass fix: `registerLogin()` never revives an old revoked
+ * row for the same fingerprint, it inserts a fresh one (`DeviceRegistrar`'s
+ * own "It can log back in afterward, using up one of your device slots
+ * again" UX text) — so a stale revoked row for that fingerprint can
+ * legitimately coexist with a brand-new active one. The middleware must
+ * key off the *latest* row per fingerprint, not "any row ever revoked",
+ * or a relogged-in device gets force-logged-out on every request forever.
+ */
+it('lets a device through after it re-logs-in post-revoke, even though its old revoked row still exists', function () {
+    $tenant = Tenant::factory()->create();
+    $user = User::factory()->create(['tenant_id' => $tenant->id]);
+    $this->actingAs($user);
+
+    $request = middlewareRequest('relogged-device');
+    $fingerprint = app(DeviceFingerprintService::class)->fingerprintFor($request);
+
+    DeviceSession::withoutEvents(fn () => DeviceSession::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $user->id,
+        'device_fingerprint' => $fingerprint,
+        'last_seen_at' => now()->subHour(),
+        'revoked_at' => now()->subHour(),
+    ]));
+
+    DeviceSession::withoutEvents(fn () => DeviceSession::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $user->id,
+        'device_fingerprint' => $fingerprint,
+        'last_seen_at' => now(),
+    ]));
+
+    $response = (new EnsureDeviceNotRevoked)->handle($request, fn ($req) => response('passed'));
+
+    expect($response->getContent())->toBe('passed')
+        ->and(Auth::check())->toBeTrue();
+});
