@@ -53,4 +53,17 @@ return [
     */
     'audit_log_retention_days' => (int) env('SECURITY_AUDIT_LOG_RETENTION_DAYS', 365),
 
+    /*
+    |--------------------------------------------------------------------------
+    | GDPR/DPDP deletion grace window (S12 B9 — FEATURES.md B15 pt.3)
+    |--------------------------------------------------------------------------
+    |
+    | Days between a deletion request and the daily sweep actually executing
+    | it. Defaulted to 30 per the design doc's own §6 note — explicitly
+    | flagged there as a business decision the actual owner can override,
+    | not a hardcoded legal opinion, so it's a config value.
+    |
+    */
+    'gdpr_deletion_grace_days' => (int) env('SECURITY_GDPR_DELETION_GRACE_DAYS', 30),
+
 ];

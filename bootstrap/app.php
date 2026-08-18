@@ -10,6 +10,7 @@ use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
 use App\Domains\Fees\Jobs\SendFeeReminders;
 use App\Domains\Security\Jobs\DetectAccountSharing;
+use App\Domains\Security\Jobs\ProcessGdprDeletions;
 use App\Domains\Security\Jobs\PruneAuditLogEntries;
 use App\Exceptions\AiSpendCapExceededException;
 use App\Exceptions\BandwidthQuotaExceededException;
@@ -18,6 +19,7 @@ use App\Exceptions\CannotImpersonateException;
 use App\Exceptions\CouponNotRedeemableException;
 use App\Exceptions\DeviceLimitExceededException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
+use App\Exceptions\GdprDeletionRequestNotPendingException;
 use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\InvalidWebhookSignatureException;
 use App\Exceptions\MissingTenantContextException;
@@ -116,6 +118,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // month with no practical difference in what gets pruned.
         $schedule->job(new PruneAuditLogEntries, 'scheduled')->monthly();
 
+        // S12 B9 — design doc §4 decision 8: daily, same shape as the
+        // other sweeps above — a due deletion's own 30-day grace window
+        // tolerates a once-a-day check with no practical delay concern.
+        $schedule->job(new ProcessGdprDeletions, 'scheduled')->daily();
+
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
         // instant. backup:clean runs first so a stale/oversized prior
@@ -174,6 +181,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TenantAlreadySubscribedException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (PlanDowngradeBlockedException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (TenantNotSubscribedException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (GdprDeletionRequestNotPendingException $e) => abort(409, $e->getMessage()));
 
         // "Should never happen" — a programmer error (tenant-scoped code
         // reached with no tenant bound), not a client-recoverable state, so

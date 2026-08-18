@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ✅ done |
 | B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ✅ done |
 | B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ✅ done |
-| B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ⬜ not started |
+| B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ✅ done |
 | B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ⬜ not started |
 | B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ⬜ not started |
 | B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ⬜ not started |
@@ -581,7 +581,73 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1020 total, 1019 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B9 — GDPR data deletion — not started
+### B9 — GDPR data deletion — DONE (2026-08-18)
+
+- **Real schema finding, confirmed not assumed**: decision 8 names "PII
+  columns (`name`, `email`, `phone`)" to null/hash on "rows the law
+  requires kept" — reading `FeeInvoice`'s and `SubscriptionInvoice`'s own
+  migrations directly shows neither carries a `name`/`email`/`phone`
+  column at all (`FeeInvoice` only has `gstin_snapshot`). Those 3 PII
+  columns live on `User` itself; anonymizing the `User` row is what
+  protects the retained financial rows still pointing at its `user_id` —
+  they keep a real, valid FK, just to a de-identified account. This
+  settles decision 8's own wording precisely rather than guessing at a
+  literal per-invoice anonymization that the schema doesn't support.
+  `email` is anonymized to `deleted-user-{id}@deleted.invalid`, not
+  nulled — the column is `unique()` + `NOT NULL` (confirmed from the base
+  migration), so a null or repeated placeholder would collide across
+  more than one deletion.
+- **Staff-initiated, same reasoning B8 already settled** —
+  `requested_by_id` is a real distinct actor from `user_id` in B0's own
+  schema; no self-service surface exists to hang this on either.
+- `GdprDeletionService::request()` only schedules (`scheduled_for`,
+  `config('security.gdpr_deletion_grace_days')`, default 30 — explicitly
+  flagged in the design doc's own §6 as a business decision, not a
+  hardcoded legal opinion, so it's a config value like every other
+  tunable threshold this slice has added). Nothing is dispatched at
+  request time, unlike B8's export — deletion has a mandatory wait, so
+  only the daily sweep (`ProcessGdprDeletions`) ever calls
+  `GdprDeletionService::execute()`.
+- `cancel()` — decision 8's own "a grace window to cancel" made concrete:
+  a pending request is simply deleted (schema has no `cancelled` status
+  to set), refusing via a new `GdprDeletionRequestNotPendingException`
+  (409) once a request has moved past `pending` — same one-exception-
+  per-class + `bootstrap/app.php` `$exceptions->render()` convention
+  every prior domain exception already follows.
+- Hard-delete scope: `QuizAttempt` and `VideoWatchEvent`, decision 8's
+  own two named examples — not an exhaustive sweep of every domain
+  (`Enrolment`, `Certificate`, `AssignmentSubmission`, this slice's own
+  `LoginHistory`/`DeviceSession`), same "smallest version that delivers
+  the block's value" posture B8's export job already took; a real
+  fast-follow if a genuine compliance audit demands more.
+- **Real Carbon gotcha, hit again**: `$request->scheduled_for->diffInDays(now())`
+  returned a *negative* value in a test assertion — the same signed-
+  `diffIn*()` surprise B3 already documented for `diffInSeconds()`, this
+  time on `diffInDays()` with the future-dated operand on the left.
+  Fixed with `abs()` in the test, not by trusting the S11 B9 "plain
+  default is unsigned" precedent blindly a third time.
+- `GdprDeletions` (Admin panel) — same table shape as `GdprExports` (B8):
+  several requests for different users can be in flight per tenant, a
+  single generate/download-style action pair wouldn't fit. Target user
+  picked via the same tenant-scoped searchable `Select` pattern.
+- Tested at four levels: `GdprDeletionServiceTest` (grace-window math,
+  cancel removes a pending row, cancel refuses a non-pending one,
+  anonymization actually lands on the `User` row, `VideoWatchEvent`
+  hard-delete scoped to the right user only — not just the request's own
+  status flip, per the design doc's own testing-strategy warning),
+  `ProcessGdprDeletionsTest` (executes only what's both pending and due,
+  leaves a not-yet-due row alone, never touches an already-`completed`
+  row even if its schedule has passed, one unscoped cross-tenant pass,
+  an empty sweep runs cleanly), `GdprDeletionsPageTest` (request action,
+  cross-tenant isolation, cancel action + its own pending-only
+  visibility, one real HTTP page load). `QuizAttempt`'s own hard-delete
+  path has no dedicated positive-data test — its own FK chain (`Quiz` ->
+  `Lesson` -> `CourseSection` -> `Course`) is deeper than
+  `VideoWatchEvent`'s, and the code path (`Model::where('user_id',
+  ...)->delete()`) is mechanically identical to the one already proven;
+  flagged rather than silently skipped.
+- `composer test`: 1035 total, 1034 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B10 — Circuit breaker core + Bunny/Claude — not started
 
