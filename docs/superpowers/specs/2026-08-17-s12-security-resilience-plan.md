@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ✅ done |
 | B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ✅ done |
 | B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ✅ done |
-| B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ⬜ not started |
+| B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ✅ done |
 | B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ⬜ not started |
 | B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ⬜ not started |
 | B13 | Soft-delete gap closure — `FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` + admin restore UI on all 4 (V3); Form Request extraction on the 2 remaining inline-`validate()` controllers (V4) | ⬜ not started |
@@ -649,7 +649,67 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1035 total, 1034 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B10 — Circuit breaker core + Bunny/Claude — not started
+### B10 — Circuit breaker core + Bunny/Claude — DONE (2026-08-18)
+
+- **Real finding, confirmed not assumed**: "Bunny" and "Claude" are the
+  design doc's own vendor-name shorthand for `VideoProvider`/`AiProvider`
+  — grepping for actual classes named `Bunny`/`Claude` returns nothing,
+  and `AppServiceProvider`'s own bindings confirm neither ever had a real
+  driver built, only `FakeVideoDriver`/`FakeAiDriver` (same "no vendor
+  account configured" posture every other unconfigured integration in
+  this app already has — Razorpay, WhatsApp, `FakeGeoIpResolver`). Wiring
+  the breaker onto the *container binding* rather than a nonexistent
+  named class means it protects whichever driver is bound — fake today,
+  a real one automatically once B10's own scope grows past this slice.
+- `CircuitBreaker` — two Redis keys per breaker `key` (`failures`, a plain
+  `INCR` counter; `open`, a `SETEX`'d marker), not three — decision 10's
+  own "open/closed/half-open" is fully derived from those two rather than
+  a separately-stored state enum. Deliberately does *not* reset
+  `failures` when tripping open, so a single failed half-open probe
+  re-trips immediately (still >= threshold) instead of needing a fresh
+  run of N failures — the actual behaviour the design doc's own testing-
+  strategy line ("assert a half-open probe after the cooldown window
+  restores it") implies, worked out from state-machine first principles
+  since the doc doesn't spell out the exact re-trip mechanics.
+- **Decorator placement, not each call site** — same shape
+  `SpendCapGuardedAiDriver` (S9 B12) already established.
+  `CircuitBreakerGuardedVideoDriver`/`CircuitBreakerGuardedAiDriver` wrap
+  the innermost real/fake driver; for AI, the breaker sits *inside*
+  `SpendCapGuardedAiDriver`, not outside it — a spend-cap denial is a
+  business-rule pre-check, never a real provider failure, so it must
+  never count toward tripping the breaker. Proved with a real test
+  (`app(AiProvider::class)` resolved through the full real binding chain,
+  5 spend-cap denials in a row, breaker still closed), not just asserted.
+- One breaker key per *provider* (`ai-provider`, `video-provider`), not
+  per method — a real outage fails every method of a provider together,
+  so failures across `chat()`/`embed()`/`transcribe()` (or
+  `store()`/`url()`/`delete()`) all count toward the same trip, matching
+  how an actual vendor outage behaves.
+- `CircuitOpenException` renders `503` (`bootstrap/app.php`) — a real,
+  expected degraded-provider state, not a programmer error; for a queued-
+  job call site (`TranscribeLesson` etc.), the exception just propagates
+  into that job's own existing `$tries`/`backoff()` retry, no special
+  handling needed.
+- `circuit_breaker_failure_threshold` (default 5) and
+  `circuit_breaker_cooldown_seconds` (default 60) — new `config/resilience.php`,
+  not `config/security.php` — this is a resilience concern, not a
+  security one, matching `app/Support/Resilience/`'s own placement.
+- Tested at three levels: `CircuitBreakerTest` (closed passes through,
+  stays closed below threshold, trips at exactly the threshold, fails
+  fast with the real callback never invoked, a successful vs. a failed
+  half-open probe close vs. re-trip it, two provider keys stay fully
+  independent, one real end-to-end test with a genuine 1-second cooldown
+  and a real `sleep()` — the "can't test true concurrency, can test the
+  state machine's own logic" honesty the design doc's own testing
+  strategy names, applied here to a real Redis TTL instead of simulating
+  it every time), `CircuitBreakerGuardedVideoDriverTest` /
+  `CircuitBreakerGuardedAiDriverTest` (the shared-key trip proven across
+  different methods on each driver, plus the spend-cap layering proof
+  above). Ran the full `Content`/`AI` domain suites directly after
+  changing the `VideoProvider`/`AiProvider` bindings, before the full
+  suite — zero regressions, confirmed rather than assumed safe.
+- `composer test`: 1048 total, 1047 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B11 — Circuit breaker Razorpay/WhatsApp/live-class + dashboard — not started
 

@@ -24,6 +24,8 @@ use App\Domains\AI\Services\AiSpendCap;
 use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
 use App\Integrations\DnsResolver;
+use App\Integrations\Drivers\CircuitBreakerGuardedAiDriver;
+use App\Integrations\Drivers\CircuitBreakerGuardedVideoDriver;
 use App\Integrations\Drivers\FakeAiDriver;
 use App\Integrations\Drivers\FakeGeoIpResolver;
 use App\Integrations\Drivers\FakeLiveClassDriver;
@@ -39,6 +41,7 @@ use App\Integrations\PaymentProvider;
 use App\Integrations\SubscriptionProvider;
 use App\Integrations\VideoProvider;
 use App\Models\User;
+use App\Support\Resilience\CircuitBreaker;
 use App\Support\Tenancy\CurrentTenant;
 use Filament\Facades\Filament;
 use Filament\Support\Facades\FilamentView;
@@ -61,14 +64,29 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CurrentTenant::class);
-        $this->app->bind(VideoProvider::class, FakeVideoDriver::class);
+        $this->app->singleton(CircuitBreaker::class);
+
+        // S12 B10 — circuit breaker wraps the real/fake driver directly
+        // (the outbound call itself), not the outermost binding — a real
+        // provider outage is what should trip it.
+        $this->app->bind(VideoProvider::class, fn ($app) => new CircuitBreakerGuardedVideoDriver(
+            $app->make(FakeVideoDriver::class),
+            $app->make(CircuitBreaker::class),
+        ));
 
         // Wraps the driver, not a sixth spend-cap check duplicated across
         // every AiProvider call site (S9 B12) — every call site resolves
         // this binding fresh from the container (confirmed by reading all
         // six), so decorating it here covers all of them in one place.
+        // S12 B10 — the circuit breaker sits *inside* the spend-cap
+        // decorator, not outside it: a spend-cap denial is a business-rule
+        // pre-check, never a real provider failure, so it must never count
+        // toward tripping the breaker.
         $this->app->bind(AiProvider::class, fn ($app) => new SpendCapGuardedAiDriver(
-            $app->make(FakeAiDriver::class),
+            new CircuitBreakerGuardedAiDriver(
+                $app->make(FakeAiDriver::class),
+                $app->make(CircuitBreaker::class),
+            ),
             $app->make(AiSpendCap::class),
         ));
 

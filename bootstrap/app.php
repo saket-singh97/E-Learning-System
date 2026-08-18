@@ -16,6 +16,7 @@ use App\Exceptions\AiSpendCapExceededException;
 use App\Exceptions\BandwidthQuotaExceededException;
 use App\Exceptions\BatchFullException;
 use App\Exceptions\CannotImpersonateException;
+use App\Exceptions\CircuitOpenException;
 use App\Exceptions\CouponNotRedeemableException;
 use App\Exceptions\DeviceLimitExceededException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
@@ -196,4 +197,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ], 422));
 
         $exceptions->render(fn (CannotImpersonateException $e) => abort(403, $e->getMessage()));
+
+        // 503, not 500 — an open breaker is a real, expected degraded-
+        // provider state (design doc §4 decision 10), not a programmer
+        // error; the standard "service temporarily unavailable" code.
+        $exceptions->render(fn (CircuitOpenException $e) => abort(503, $e->getMessage()));
     })->create();
