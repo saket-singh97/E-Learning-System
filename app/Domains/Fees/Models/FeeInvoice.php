@@ -9,10 +9,16 @@ use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * S12 B13 (design doc §3.2, V3) — SoftDeletes added, same reasoning
+ * FeePayment's own docblock gives: a real invoice hard-deleted by a
+ * mis-click had no recovery path before this block.
+ */
 class FeeInvoice extends Model
 {
-    use BelongsToTenant;
+    use BelongsToTenant, SoftDeletes;
 
     public const STATUSES = ['pending', 'paid', 'overdue', 'cancelled'];
 

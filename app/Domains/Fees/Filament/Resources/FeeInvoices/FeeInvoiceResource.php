@@ -7,12 +7,16 @@ use App\Domains\Fees\Models\FeeInvoice;
 use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 /**
  * Admin-only — like BatchResource, billing/operational data isn't a
@@ -56,6 +60,11 @@ class FeeInvoiceResource extends Resource
             ->defaultSort('due_date', 'desc')
             ->filters([
                 SelectFilter::make('status')->options(array_combine(FeeInvoice::STATUSES, FeeInvoice::STATUSES)),
+                // S12 B13 (V3) — same Filament-native pattern Course/Batch
+                // already use; requires the modifyQueryUsing() call below
+                // to drop SoftDeletingScope, or the filter has nothing to
+                // show.
+                TrashedFilter::make(),
             ])
             ->recordActions([
                 Action::make('view')
@@ -66,8 +75,12 @@ class FeeInvoiceResource extends Resource
                         'invoice' => $record->id,
                     ]))
                     ->openUrlInNewTab(),
+                ForceDeleteAction::make(),
+                RestoreAction::make(),
             ])
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['batch', 'user', 'coupon']));
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['batch', 'user', 'coupon'])->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]));
     }
 
     public static function getPages(): array

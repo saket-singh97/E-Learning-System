@@ -5,10 +5,15 @@ namespace App\Domains\Billing\Models;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * S12 B13 (design doc §3.2, V3) — SoftDeletes added, same reasoning
+ * FeePayment's own docblock gives.
+ */
 class SubscriptionInvoice extends Model
 {
-    use BelongsToTenant;
+    use BelongsToTenant, SoftDeletes;
 
     public const KIND_RECURRING = 'recurring';
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Domains\Tenancy\Services\TenantAuthenticator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\TwoFactorChallengeRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,10 +39,8 @@ class AuthenticatedSessionController extends Controller
      * session (set above), same "validate first, log in only after the
      * code also passes" shape every other surface in this app now follows.
      */
-    public function storeTwoFactorChallenge(Request $request): JsonResponse
+    public function storeTwoFactorChallenge(TwoFactorChallengeRequest $request): JsonResponse
     {
-        $request->validate(['code' => ['required', 'string']]);
-
         $userId = $request->session()->get('two_factor.pending_user_id');
 
         abort_unless($userId, 419);

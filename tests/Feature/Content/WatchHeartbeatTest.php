@@ -107,6 +107,28 @@ it('rejects a heartbeat from a guest', function () {
     expect(VideoWatchEvent::count())->toBe(0);
 });
 
+it('rejects a heartbeat missing required fields via the extracted WatchHeartbeatRequest (S12 B13)', function () {
+    [, $lesson, $student] = heartbeatLesson();
+
+    $url = URL::route('watch.heartbeat', ['subdomain' => 'physics', 'lesson' => $lesson->id]);
+
+    $this->actingAs($student)
+        ->postJson($url, [])
+        ->assertJsonValidationErrors(['start_s', 'end_s']);
+
+    expect(VideoWatchEvent::count())->toBe(0);
+});
+
+it('rejects end_s less than start_s', function () {
+    [, $lesson, $student] = heartbeatLesson();
+
+    $url = URL::route('watch.heartbeat', ['subdomain' => 'physics', 'lesson' => $lesson->id]);
+
+    $this->actingAs($student)
+        ->postJson($url, ['start_s' => 10, 'end_s' => 5])
+        ->assertJsonValidationErrors(['end_s']);
+});
+
 it('resumes the player at the last recorded end_s for that user and lesson', function () {
     [$tenant, $lesson, $student] = heartbeatLesson();
 

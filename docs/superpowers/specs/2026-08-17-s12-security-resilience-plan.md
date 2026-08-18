@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ✅ done |
 | B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ✅ done |
 | B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ✅ done |
-| B13 | Soft-delete gap closure — `FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` + admin restore UI on all 4 (V3); Form Request extraction on the 2 remaining inline-`validate()` controllers (V4) | ⬜ not started |
+| B13 | Soft-delete gap closure — `FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` + admin restore UI on all 4 (V3); Form Request extraction on the 2 remaining inline-`validate()` controllers (V4) | ✅ done |
 | B14 | Full test coverage, isolation registration sweep, review pass, V5 regression-guard confirmation, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
 
 **Test suite:** 925/926 at slice start (1 pre-existing, unrelated
@@ -860,7 +860,83 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1073 total, 1072 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B13 — Soft-delete gap closure + Form Request extraction — not started
+### B13 — Soft-delete gap closure + Form Request extraction — DONE (2026-08-18)
+
+- **Real gap in the design doc's own assumption, caught before building
+  anything, not after**: decision 12 says "each of the 4 newly-soft-
+  deleted resources' `ListRecords` page gains a `TrashedFilter` +
+  `RestoreAction`" — phrased as if all 4 already had a `ListRecords` page.
+  Verified directly (not assumed): only `FeeInvoice` does. `FeePayment`,
+  `TenantSubscription`, `SubscriptionInvoice` had no Filament resource of
+  any kind before this block. Flagged to the user rather than silently
+  picking a scope — chose to build 3 new minimal, browse-only Resources
+  (`FeePaymentResource` on Admin, matching `FeeInvoiceResource`'s own
+  "browse-only ledger" precedent; `TenantSubscriptionResource`/
+  `SubscriptionInvoiceResource` on Super, matching `PlanResource`'s own
+  placement — `AdminPanelProvider` has no Billing-domain discovery line
+  at all) rather than the lighter "trait+migration only, restore UI
+  deferred" option, so "must be exposed in the admin panel" is genuinely
+  true for all 4, not 1 of 4.
+- SoftDeletes added to all 4 models cleanly — confirmed by reading each
+  file first that none had an existing `booted()`/model-event hook to
+  collide with (unlike `Lesson`'s own `forceDeleting` storage-release
+  hook). 4 new `Schema::table(...)->softDeletes()` follow-on migrations,
+  not edits to the original `create_` migrations — this codebase's own
+  established convention for adding a column to an already-shipped table.
+- `TrashedFilter::make()` + `RestoreAction::make()` + `ForceDeleteAction::make()`
+  + `->modifyQueryUsing(fn ($q) => $q->withoutGlobalScopes([SoftDeletingScope::class]))`
+  on all 4 resources' `table()` — the exact `Course`/`Batch` shape,
+  confirmed by reading both directly rather than assumed from the design
+  doc's own one-line description. No new `DeleteAction` added anywhere —
+  none of the 4 had one before (all read-only/system-generated ledgers),
+  and adding one would be a new UI capability this block was never asked
+  to add; the restore path matters regardless of how a row became
+  trashed (a future service/job/tinker call, not only a UI click).
+- **Real test-infrastructure gap, closed alongside the code it protects**:
+  decision 12's own explicit warning — "confirm the tenant scope still
+  excludes a different tenant's soft-deleted row when `withTrashed()` is
+  used" — was not covered by any existing test; the generated
+  `CrossTenantTest` suite never calls `delete()`/`withTrashed()` on any
+  registered model. Proven directly in both new soft-delete test files
+  (`FeeInvoicePaymentSoftDeleteTest`, `SubscriptionSoftDeleteTest`):
+  `BelongsToTenant`'s own scope (registered under the string key
+  `'tenant'`) and `SoftDeletingScope` (dropped by class) are independent,
+  so `withTrashed()` alone never crosses a tenant boundary — confirmed by
+  a real test, not just reasoned about.
+- V4 half — `TwoFactorChallengeRequest` (`app/Http/Requests/Auth/`) and
+  `WatchHeartbeatRequest` (`app/Http/Requests/Content/`, the first Form
+  Request outside `Auth/`), both matching `LoginRequest`'s own
+  `authorize(): true` + `rules()` shape. **Real, deliberately-accepted
+  behavior change flagged, not glossed over**: converting
+  `WatchHeartbeatController` to a Form Request means Laravel now runs
+  validation during dependency resolution, *before* the controller
+  body's own `401`/`404`/`403` access-gate checks — reversed from the
+  original inline-`validate()` ordering, which ran the access checks
+  first. A guest sending a malformed body would now see `422` before the
+  `401` check is ever reached. Accepted rather than worked around (e.g.
+  moving the gate into the Form Request's own `authorize()`, which would
+  have meant duplicating `LessonAccess` calls outside the one place
+  `CLAUDE.md` says lesson-visibility rules must live) — matches
+  `LoginRequest`'s own already-established validate-first ordering in
+  this exact codebase, and the existing test suite (which always sends
+  well-formed bodies on its auth-check tests) confirmed no observable
+  regression.
+- Tested at three levels for V3: `FeeInvoicePaymentSoftDeleteTest`/
+  `SubscriptionSoftDeleteTest` (delete/withTrashed/restore round-trip per
+  model, plus the cross-tenant proof above), `FeeInvoiceResourceTest`/
+  `FeePaymentResourceTest`/`TenantSubscriptionResourceTest`/
+  `SubscriptionInvoiceResourceTest` (a trashed row hidden by default,
+  visible under the Trashed filter, restorable via the real row action,
+  plus a non-privileged-role 403 on each new resource). For V4:
+  `WatchHeartbeatTest`/`TwoFactorAuthenticationTest` extended with a
+  missing-required-field `422` case each, run alongside every pre-
+  existing test in both files to confirm the validate-first reordering
+  changed nothing observable. Ran the full `Fees`/`Billing`/`Auth`/
+  `Content` domain suites directly after all model/controller changes,
+  before the full suite — zero regressions, confirmed rather than
+  assumed safe.
+- `composer test`: 1092 total, 1091 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B14 — Full test coverage, review pass — not started
 

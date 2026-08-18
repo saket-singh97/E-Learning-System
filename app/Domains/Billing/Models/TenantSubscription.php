@@ -7,10 +7,16 @@ use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * S12 B13 (design doc §3.2, V3) — SoftDeletes added, same reasoning
+ * FeePayment's own docblock gives, for the S11 billing-domain equivalent
+ * of the Fees-domain gap.
+ */
 class TenantSubscription extends Model
 {
-    use BelongsToTenant;
+    use BelongsToTenant, SoftDeletes;
 
     public const STATUS_TRIALING = 'trialing';
 

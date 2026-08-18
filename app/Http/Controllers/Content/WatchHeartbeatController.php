@@ -6,12 +6,12 @@ use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Content\Services\LessonAccess;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Content\WatchHeartbeatRequest;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class WatchHeartbeatController extends Controller
 {
-    public function __invoke(Request $request, LessonAccess $access): JsonResponse
+    public function __invoke(WatchHeartbeatRequest $request, LessonAccess $access): JsonResponse
     {
         $viewer = $request->user();
 
@@ -28,11 +28,7 @@ class WatchHeartbeatController extends Controller
         abort_unless($access->canStream($lesson, $viewer), 403);
         abort_unless($access->isPlayable($lesson), 404);
 
-        $data = $request->validate([
-            'start_s' => ['required', 'integer', 'min:0'],
-            'end_s' => ['required', 'integer', 'gte:start_s'],
-            'duration_s' => ['nullable', 'integer', 'min:1'],
-        ]);
+        $data = $request->validated();
 
         VideoWatchEvent::create([
             'user_id' => $viewer->id,

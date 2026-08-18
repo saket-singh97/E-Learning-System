@@ -88,6 +88,20 @@ it('links the view action to the invoice download route for the current tenant',
         ->assertTableActionHasUrl('view', "http://physics.lms.test/invoices/{$this->invoice->id}", $this->invoice);
 });
 
+it('hides a deleted invoice by default, shows it under the Trashed filter, and restores it (S12 B13)', function () {
+    $this->invoice->delete();
+
+    Livewire::test(ListFeeInvoices::class)
+        ->assertCanNotSeeTableRecords([$this->invoice]);
+
+    Livewire::test(ListFeeInvoices::class)
+        ->filterTable('trashed', false)
+        ->assertCanSeeTableRecords([$this->invoice])
+        ->callTableAction('restore', $this->invoice);
+
+    expect($this->invoice->fresh()->deleted_at)->toBeNull();
+});
+
 it('refuses a non-admin', function () {
     $instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
     $instructor->assignRole('instructor');

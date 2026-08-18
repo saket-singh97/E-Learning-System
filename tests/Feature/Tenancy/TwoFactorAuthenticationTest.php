@@ -232,6 +232,24 @@ it('rejects a wrong code on the JSON two-factor challenge endpoint', function ()
     RateLimiter::clear('two-factor-lockout:'.$student->id);
 });
 
+it('rejects a two-factor challenge missing the code field via the extracted TwoFactorChallengeRequest (S12 B13)', function () {
+    $tenant = Tenant::factory()->create(['subdomain' => 'physics']);
+    $student = User::factory()->create(['tenant_id' => $tenant->id, 'password' => bcrypt('secret-password')]);
+    enableTwoFactor($student);
+
+    app(CurrentTenant::class)->set($tenant);
+
+    $this->postJson('http://physics.lms.test/login', [
+        'email' => $student->email,
+        'password' => 'secret-password',
+    ])->assertOk();
+
+    $this->postJson('http://physics.lms.test/login/two-factor-challenge', [])
+        ->assertJsonValidationErrors(['code']);
+
+    $this->assertGuest();
+});
+
 it('logs a student in normally with no 2FA challenge when it is not enabled', function () {
     $tenant = Tenant::factory()->create(['subdomain' => 'physics']);
     $student = User::factory()->create(['tenant_id' => $tenant->id, 'password' => bcrypt('secret-password')]);
