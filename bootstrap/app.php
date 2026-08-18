@@ -9,6 +9,7 @@ use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
 use App\Domains\Fees\Jobs\SendFeeReminders;
+use App\Domains\Security\Jobs\DetectAccountSharing;
 use App\Exceptions\AiSpendCapExceededException;
 use App\Exceptions\BandwidthQuotaExceededException;
 use App\Exceptions\BatchFullException;
@@ -30,6 +31,7 @@ use App\Exceptions\TenantAlreadySubscribedException;
 use App\Exceptions\TenantNotFoundException;
 use App\Exceptions\TenantNotSubscribedException;
 use App\Exceptions\TenantSuspendedException;
+use App\Http\Middleware\EnsureAccountNotFlaggedForSharing;
 use App\Http\Middleware\EnsureDeviceNotRevoked;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\ResolveImpersonation;
@@ -103,6 +105,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // S11 B14 — same unscoped-sweep shape as the jobs above.
         $schedule->job(new SendGraceSuspensionReminders, 'scheduled')->daily();
 
+        // S12 B4 — same unscoped-sweep shape as the jobs above; design
+        // doc §4 decision 4 — a rolling-7-day device-cycling pattern, not
+        // a single event.
+        $schedule->job(new DetectAccountSharing, 'scheduled')->daily();
+
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
         // instant. backup:clean runs first so a stale/oversized prior
@@ -135,6 +142,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ResolveTenant::class.':optional',
             ResolveImpersonation::class,
             EnsureDeviceNotRevoked::class,
+            EnsureAccountNotFlaggedForSharing::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Domains\Tenancy\Services\BrandingService;
 use App\Filament\Admin\Auth\Login;
 use App\Filament\Widgets\TokenSpendWidget;
+use App\Http\Middleware\EnsureAccountNotFlaggedForSharing;
 use App\Http\Middleware\EnsureDeviceNotRevoked;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\ResolveImpersonation;
@@ -67,6 +68,7 @@ class AdminPanelProvider extends PanelProvider
                 ResolveTenant::class,
                 ResolveImpersonation::class,
                 EnsureDeviceNotRevoked::class,
+                EnsureAccountNotFlaggedForSharing::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

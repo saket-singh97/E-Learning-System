@@ -27,4 +27,17 @@ return [
     */
     'impossible_travel_max_kmh' => (int) env('SECURITY_IMPOSSIBLE_TRAVEL_MAX_KMH', 900),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Account-sharing device threshold (S12 B4 — FEATURES.md B12)
+    |--------------------------------------------------------------------------
+    |
+    | Distinct device_sessions.device_fingerprint values, first-seen within
+    | a rolling 7-day window, that trip the daily account-sharing sweep.
+    | Defaulted to 4 per the design doc's own §6 note — a config value, not
+    | a hardcoded constant, so it's tunable without a redeploy.
+    |
+    */
+    'account_sharing_device_threshold' => (int) env('SECURITY_ACCOUNT_SHARING_DEVICE_THRESHOLD', 4),
+
 ];
