@@ -17,6 +17,7 @@ use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Events\LessonVideoReady;
 use App\Domains\Fees\Events\PaymentCaptured;
 use App\Domains\Fees\Listeners\CreateInvoiceForPendingEnrolment;
+use App\Domains\Security\Listeners\ReconcileCookieConsent;
 use App\Domains\Security\Listeners\RecordLoginHistory;
 use App\Domains\Security\Listeners\RegisterDeviceOnLogin;
 use App\Domains\AI\Services\AiSpendCap;
@@ -118,6 +119,11 @@ class AppServiceProvider extends ServiceProvider
         // class; see the listener's own docblock.
         Event::listen(Login::class, RecordLoginHistory::class);
 
+        // S12 B7 — a third sibling listener on the same event; unlike the
+        // two above, never skipped for a null-tenant login (see the
+        // listener's own docblock).
+        Event::listen(Login::class, ReconcileCookieConsent::class);
+
         // Lives at App\Domains\AI\Livewire, outside Livewire's default
         // App\Livewire auto-discovery root, so the <livewire:ai.doubt-chat />
         // tag needs an explicit alias.
@@ -131,7 +137,16 @@ class AppServiceProvider extends ServiceProvider
         // each PanelProvider.
         FilamentView::registerRenderHook(
             PanelsRenderHook::TOPBAR_END,
-            fn (): string => Blade::render('<livewire:notification-centre /><livewire:impersonation-banner /><livewire:user-profile />'),
+            fn (): string => Blade::render('<livewire:notification-centre /><livewire:impersonation-banner /><livewire:user-profile /><livewire:cookie-consent-banner />'),
+        );
+
+        // S12 B7 — TOPBAR_END above only renders inside an authenticated
+        // panel shell; the guest login page (no topbar) needs the same
+        // banner on its own hook, or a visitor who never logs in never
+        // sees it at all.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::SIMPLE_PAGE_END,
+            fn (): string => Blade::render('<livewire:cookie-consent-banner />'),
         );
 
         // S11 B9 — grace period is an institute-level billing concern an

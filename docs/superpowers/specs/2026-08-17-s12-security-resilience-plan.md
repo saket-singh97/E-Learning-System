@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B4 | Account-sharing detection — daily sweep, forced re-auth on flag (B12) | ✅ done |
 | B5 | General `audit_log_entries` sink (`AuditLogger`) + wire into the highest-value existing sensitive actions (role assignment, impersonation, plan change, tenant suspension) | ✅ done |
 | B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ✅ done |
-| B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ⬜ not started |
+| B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ✅ done |
 | B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ⬜ not started |
 | B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ⬜ not started |
 | B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ⬜ not started |
@@ -465,7 +465,60 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 990 total, 989 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B7 — GDPR cookie consent — not started
+### B7 — GDPR cookie consent — DONE (2026-08-18)
+
+- **Real mechanical gotcha, traced not assumed**: design doc §4 decision 9
+  says consent is "reconciled to the user once authenticated," but a
+  naive `session()->getId()` lookup inside a `Login` listener finds
+  nothing — `SessionGuard::login()` calls `updateSession()` (which
+  regenerates the session ID) *before* firing `Login`, so by the time any
+  listener runs, the pre-login ID `CookieConsentService::record()` wrote
+  against is already gone. Session *data* survives that regeneration
+  (only the ID rotates), so `record()` stashes the pre-login session ID
+  under a session key (`CookieConsentService::PENDING_SESSION_KEY`)
+  instead of relying on the ID itself; `ReconcileCookieConsent` reads that
+  key back, still intact, and forgets it once used. Traced through
+  `SessionGuard::login()` -> `updateSession()` -> `Store::regenerate()` in
+  the vendor source, not assumed from the design doc's own wording alone.
+- `ReconcileCookieConsent` — a third sibling listener on the same `Login`
+  chokepoint `RegisterDeviceOnLogin` (B1) established, alongside
+  `RecordLoginHistory` (B3). Unlike those two, never skipped for a
+  null-tenant (`super_admin`) login — cookie consent isn't a tenant-scoped
+  concern, a platform-level visitor's own consent is exactly as real.
+- `CookieConsentService::reconcile()` takes an explicit `$sessionId` param
+  rather than reading `session()` internally — same "explicit, never
+  ambient" discipline `DeviceRegistrar` (B1) already established, keeps it
+  a plain directly-testable unit; the listener is what reads/forgets the
+  session key at the edges.
+- `CookieConsentBanner` (Livewire) — two choices only ("accept all" /
+  "necessary only"), not a per-category toggle UI; the smallest surface
+  `cookie_consents.categories` actually needs recorded, matching every
+  other block's own "smallest version that delivers the block's value."
+  Wired onto every real first-contact surface, mirroring exactly where
+  `ImpersonationBanner`/`NotificationCentre` already sit: `TOPBAR_END`
+  (authenticated Filament shell, all 3 panels, one registration) *plus* a
+  new `SIMPLE_PAGE_END` hook (`AppServiceProvider`) since `TOPBAR_END`
+  never renders on Filament's own guest login page — confirmed, not
+  assumed, that a login-page-only banner needs the second hook. Both
+  portals get it through their single shared dashboard blade
+  (`student/dashboard.blade.php`, `parent/dashboard.blade.php`), which
+  already toggles guest/authenticated internally, so one include per
+  portal covers both states.
+- Tested at three levels: `CookieConsentServiceTest` (record with/without
+  a user, the session stash written only for the anonymous case,
+  `hasDecision()` by session vs. by user, `reconcile()` scoped to the
+  right session only and never overwriting an already-attached row),
+  `ReconcileCookieConsentTest` (the listener directly, a no-op with
+  nothing stashed, plus one real HTTP login using `withSession()` to
+  pre-seed the pending key — sidesteps B2's own cookie-encryption saga
+  entirely since this mechanism never reads a cookie, only session data),
+  `CookieConsentBannerTest` (shows/hides correctly across anonymous,
+  logged-in, and already-reconciled states, records the bound tenant
+  correctly, plus two real HTTP page loads proving the banner actually
+  renders on both the guest login page and an authenticated panel page —
+  the two render hooks, not just the component in isolation).
+- `composer test`: 1007 total, 1006 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B8 — GDPR data export — not started
 

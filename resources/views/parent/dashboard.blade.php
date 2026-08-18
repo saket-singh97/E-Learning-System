@@ -25,6 +25,7 @@
     <livewire:notification-centre />
     <livewire:impersonation-banner />
     <livewire:user-profile />
+    <livewire:cookie-consent-banner />
 
     @livewireScripts
 </body>
