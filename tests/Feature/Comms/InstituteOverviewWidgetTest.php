@@ -13,6 +13,7 @@ use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Filament\Admin\Widgets\InstituteOverviewWidget;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 use App\Support\Tenancy\CurrentTenant;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -130,4 +131,22 @@ it('counts a student below the gradebook threshold as at-risk on grades, but not
 
     Livewire::test(InstituteOverviewWidget::class)
         ->assertSeeInOrder(['At-risk on grades', '1']);
+});
+
+it('caches the whole stats set — a direct DB change is not reflected until the cache is explicitly forgotten (S12 B12)', function () {
+    $batch = widgetBatch($this->tenant);
+    Enrolment::create(['batch_id' => $batch->id, 'user_id' => User::factory()->create(['tenant_id' => $this->tenant->id])->id, 'status' => 'active', 'source' => 'manual_add', 'requested_at' => now()]);
+
+    Livewire::test(InstituteOverviewWidget::class)
+        ->assertSeeInOrder(['Active enrolments', '1']);
+
+    Enrolment::create(['batch_id' => $batch->id, 'user_id' => User::factory()->create(['tenant_id' => $this->tenant->id])->id, 'status' => 'active', 'source' => 'manual_add', 'requested_at' => now()]);
+
+    Livewire::test(InstituteOverviewWidget::class)
+        ->assertSeeInOrder(['Active enrolments', '1']);
+
+    app(AggregateCache::class)->forgetInstituteOverview($this->tenant->id);
+
+    Livewire::test(InstituteOverviewWidget::class)
+        ->assertSeeInOrder(['Active enrolments', '2']);
 });

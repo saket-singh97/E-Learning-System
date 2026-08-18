@@ -5,6 +5,7 @@ use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Services\QuizAttemptService;
+use App\Domains\Comms\Services\StudentMetrics;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
@@ -96,4 +97,12 @@ it('recomputes the attempts total score once the pending answer is reviewed, not
     app(QuizAttemptService::class)->reviewAnswer($this->pendingAnswer, 0.5, $this->instructor);
 
     expect((float) $this->attempt->fresh()->score)->toBe(1.5);
+});
+
+it('busts the student-metrics cache on review, since it changes the same score data submit() already busts (S12 B12)', function () {
+    expect(app(StudentMetrics::class)->summarize($this->student)['quiz_average_percent'])->toBe(50.0);
+
+    app(QuizAttemptService::class)->reviewAnswer($this->pendingAnswer, 0.5, $this->instructor);
+
+    expect(app(StudentMetrics::class)->summarize($this->student)['quiz_average_percent'])->toBe(75.0);
 });

@@ -2,9 +2,11 @@
 
 namespace App\Domains\Assignments\Services;
 
+use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Exceptions\UnknownRubricCriterionException;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 
 /**
  * Marks-only vs rubric grading (design doc §2.4 decision 2) coexist
@@ -13,6 +15,8 @@ use App\Models\User;
  */
 class AssignmentGradingService
 {
+    public function __construct(private readonly AggregateCache $cache) {}
+
     /**
      * @param  array<string, float>|null  $rubricScores  Keyed by the
      *     assignment's own rubric[].id, points awarded per criterion.
@@ -35,27 +39,47 @@ class AssignmentGradingService
                 'graded_by_user_id' => $grader->id,
                 'graded_at' => now(),
             ]);
+        } else {
+            $validCriterionIds = collect($rubric)->pluck('id')->all();
 
+            foreach (array_keys($rubricScores ?? []) as $criterionId) {
+                if (! in_array($criterionId, $validCriterionIds, true)) {
+                    throw UnknownRubricCriterionException::forAssignment($assignment->id, (string) $criterionId);
+                }
+            }
+
+            // marks_awarded is derived from rubric_scores, not accepted as
+            // a separate manually-typed number — a grader could otherwise
+            // submit a total that disagrees with its own criterion
+            // breakdown.
+            $submission->update([
+                'marks_awarded' => array_sum($rubricScores ?? []),
+                'feedback' => $feedback,
+                'rubric_scores' => $rubricScores,
+                'graded_by_user_id' => $grader->id,
+                'graded_at' => now(),
+            ]);
+        }
+
+        $this->bustGradebookCache($submission, $assignment);
+    }
+
+    /**
+     * S12 B12 — design doc §4 decision 11's own named bust trigger. A
+     * missing lesson/section/course link (deleted mid-flight, or a data
+     * gap) skips the bust rather than throwing — grading itself already
+     * succeeded above; a cache staying stale one TTL window is a far
+     * smaller problem than a grade failing to save over a dangling link.
+     */
+    protected function bustGradebookCache(AssignmentSubmission $submission, Assignment $assignment): void
+    {
+        $course = $assignment->lesson?->section?->course;
+
+        if ($course === null) {
             return;
         }
 
-        $validCriterionIds = collect($rubric)->pluck('id')->all();
-
-        foreach (array_keys($rubricScores ?? []) as $criterionId) {
-            if (! in_array($criterionId, $validCriterionIds, true)) {
-                throw UnknownRubricCriterionException::forAssignment($assignment->id, (string) $criterionId);
-            }
-        }
-
-        // marks_awarded is derived from rubric_scores, not accepted as a
-        // separate manually-typed number — a grader could otherwise submit
-        // a total that disagrees with its own criterion breakdown.
-        $submission->update([
-            'marks_awarded' => array_sum($rubricScores ?? []),
-            'feedback' => $feedback,
-            'rubric_scores' => $rubricScores,
-            'graded_by_user_id' => $grader->id,
-            'graded_at' => now(),
-        ]);
+        $this->cache->forgetGradebookScore($submission->tenant_id, $submission->user_id, $course->id);
+        $this->cache->forgetInstituteOverview($submission->tenant_id);
     }
 }

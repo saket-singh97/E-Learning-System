@@ -14,6 +14,7 @@ use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -24,7 +25,9 @@ beforeEach(function () {
     app(CurrentTenant::class)->set($this->tenant);
 
     $this->student = User::factory()->create(['tenant_id' => $this->tenant->id]);
-    $this->metrics = new StudentMetrics;
+    // S12 B12 — StudentMetrics now takes AggregateCache via constructor
+    // DI, so it must be container-resolved, not `new`'d directly.
+    $this->metrics = app(StudentMetrics::class);
 });
 
 function batchSessionRow(): BatchSession
@@ -208,4 +211,37 @@ it('lists only pending/overdue invoices as outstanding, ordered by due date', fu
     $outstanding = $this->metrics->summarize($this->student)['outstanding_invoices'];
 
     expect($outstanding->pluck('id')->all())->toBe([$sooner->id, $later->id]);
+});
+
+it('caches quiz_average_percent — a direct DB change is not reflected until the cache is explicitly forgotten (S12 B12)', function () {
+    $quiz = quizRow();
+    $attempt = QuizAttempt::create(['quiz_id' => $quiz->id, 'user_id' => $this->student->id, 'question_ids' => [1], 'status' => 'submitted', 'started_at' => now(), 'expires_at' => now()->addMinutes(30), 'score' => 5, 'max_score' => 10]);
+
+    expect($this->metrics->summarize($this->student)['quiz_average_percent'])->toBe(50.0);
+
+    $attempt->update(['score' => 10]);
+    expect($this->metrics->summarize($this->student)['quiz_average_percent'])->toBe(50.0);
+
+    app(AggregateCache::class)->forgetStudentMetrics($this->student->tenant_id, $this->student->id);
+
+    expect($this->metrics->summarize($this->student)['quiz_average_percent'])->toBe(100.0);
+});
+
+/**
+ * S12 B12 — `outstanding_invoices` is deliberately excluded from the
+ * cached fields (see the service's own docblock: a raw model-row list,
+ * not a computed aggregate, and its write path has no bust hook in this
+ * block's own scope). Proven here by mutating invoice state *without*
+ * ever calling `forgetStudentMetrics()` and still seeing the fresh list.
+ */
+it('never caches outstanding_invoices, even while the rest of the summary is served from cache', function () {
+    $invoice = feeInvoiceRow($this->student, 'pending', now()->addWeek()->toDateString());
+
+    $first = $this->metrics->summarize($this->student);
+    expect($first['outstanding_invoices']->pluck('id')->all())->toBe([$invoice->id]);
+
+    $invoice->update(['status' => 'paid']);
+
+    $second = $this->metrics->summarize($this->student);
+    expect($second['outstanding_invoices']->pluck('id')->all())->toBe([]);
 });

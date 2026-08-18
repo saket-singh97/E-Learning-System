@@ -5,6 +5,8 @@ use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Services\QuizAttemptService;
+use App\Domains\Assignments\Services\GradebookService;
+use App\Domains\Comms\Services\StudentMetrics;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
@@ -178,4 +180,21 @@ it('throws when submitting an attempt that has already been submitted', function
         ->toThrow(QuizAttemptAlreadySubmittedException::class);
 
     expect(QuizAnswer::count())->toBe(1);
+});
+
+it('busts the gradebook and student-metrics caches for the attempts own tenant/student/course (S12 B12)', function () {
+    $question = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    $attempt = ($this->makeAttempt)([$question->id]);
+
+    // Warm both caches with a "no data yet" read before the real submit.
+    app(GradebookService::class)->scoreFor($this->student, $this->course->fresh());
+    app(StudentMetrics::class)->summarize($this->student);
+
+    app(QuizAttemptService::class)->submit($attempt, [$question->id => '4']);
+
+    $freshGradebook = app(GradebookService::class)->scoreFor($this->student, $this->course->fresh());
+    $freshMetrics = app(StudentMetrics::class)->summarize($this->student);
+
+    expect($freshGradebook['quiz_percent'])->toBe(100.0)
+        ->and($freshMetrics['quiz_average_percent'])->toBe(100.0);
 });

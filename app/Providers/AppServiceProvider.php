@@ -11,6 +11,7 @@ use App\Domains\Batches\Events\EnrolmentAwaitingPayment;
 use App\Domains\Batches\Listeners\FinalizeEnrolmentOnPaymentCaptured;
 use App\Domains\Batches\Listeners\SendEnrolmentExpiredNotification;
 use App\Domains\Batches\Livewire\BatchCatalog;
+use App\Domains\Batches\Listeners\BustAggregateCacheOnAttendance;
 use App\Domains\Comms\Listeners\SendAbsenceAlert;
 use App\Domains\Comms\Listeners\SendLowAttendanceAlert;
 use App\Domains\Content\Events\LessonIngestionRetryRequested;
@@ -145,6 +146,11 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(PaymentCaptured::class, FinalizeEnrolmentOnPaymentCaptured::class);
         Event::listen(AttendanceRecorded::class, SendAbsenceAlert::class);
         Event::listen(AttendanceRecorded::class, SendLowAttendanceAlert::class);
+
+        // S12 B12 — a third listener on the same event, its own concern
+        // (aggregate-cache invalidation), not merged into either alert
+        // listener above.
+        Event::listen(AttendanceRecorded::class, BustAggregateCacheOnAttendance::class);
 
         // S12 B1 — the one point every login surface already funnels
         // through (password, TOTP, Google OAuth, all three Filament

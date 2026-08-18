@@ -9,6 +9,7 @@ use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 use Illuminate\Support\Collection;
 
 /**
@@ -41,7 +42,25 @@ class StudentMetrics
      */
     public const AT_RISK_THRESHOLD = 60.0;
 
+    public function __construct(private readonly AggregateCache $cache) {}
+
     /**
+     * S12 B12 (design doc §4 decision 11) — only the first 4 fields are
+     * cached; `outstanding_invoices` is deliberately excluded and always
+     * fetched fresh. Two reasons, not one: decision 11 itself scopes the
+     * cache layer to "computed aggregates... not raw model reads," and a
+     * list of live `FeeInvoice` rows returned verbatim is exactly the raw
+     * read that line rules out — but even setting that wording aside,
+     * invoice status changes via payment webhooks/`FlagOverdueInvoices`,
+     * neither of which is in this block's own bust list
+     * (`AssignmentSubmission` graded / `QuizAttempt` submitted /
+     * `AttendanceRecord` created-updated), so caching it would go stale
+     * with no invalidation path at all, not just a `TTL`-bounded one.
+     * `fee_status` has the identical staleness exposure but is a plain
+     * derived string, not a raw row list, so it's cached anyway and
+     * leans on the TTL safety net for that one gap (`AggregateCache`'s
+     * own docblock).
+     *
      * @return array{
      *     attendance_percent: ?float,
      *     coverage_percent: ?float,
@@ -52,11 +71,18 @@ class StudentMetrics
      */
     public function summarize(User $student): array
     {
-        return [
-            'attendance_percent' => $this->attendancePercent($student),
-            'coverage_percent' => $this->coveragePercent($student),
-            'quiz_average_percent' => $this->quizAveragePercent($student),
-            'fee_status' => $this->feeStatus($student),
+        $cached = $this->cache->rememberStudentMetrics(
+            $student->tenant_id,
+            $student->id,
+            fn (): array => [
+                'attendance_percent' => $this->attendancePercent($student),
+                'coverage_percent' => $this->coveragePercent($student),
+                'quiz_average_percent' => $this->quizAveragePercent($student),
+                'fee_status' => $this->feeStatus($student),
+            ],
+        );
+
+        return $cached + [
             'outstanding_invoices' => FeeInvoice::where('user_id', $student->id)
                 ->whereIn('status', ['pending', 'overdue'])
                 ->orderBy('due_date')

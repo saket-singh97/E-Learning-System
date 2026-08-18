@@ -5,6 +5,7 @@ use App\Domains\Assignments\Filament\Resources\AssignmentSubmissions\Pages\ListA
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Assignments\Services\AssignmentGradingService;
+use App\Domains\Assignments\Services\GradebookService;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
@@ -205,3 +206,31 @@ it('refuses to grade with a rubric criterion id that does not belong to the assi
         ['not-a-real-criterion-id' => 10],
     );
 })->throws(App\Exceptions\UnknownRubricCriterionException::class);
+
+it('busts the gradebook cache for the submissions own student/course on grade (S12 B12)', function () {
+    $assignment = Assignment::create([
+        'lesson_id' => $this->lesson->id,
+        'title' => 'Marks-only homework',
+        'due_at' => now()->addWeek(),
+        'max_marks' => 20,
+        'allowed_file_types' => ['pdf'],
+        'max_file_size_kb' => 2000,
+    ]);
+    $submission = AssignmentSubmission::create([
+        'assignment_id' => $assignment->id,
+        'user_id' => $this->student->id,
+        'version_number' => 1,
+        'files' => [['disk_path' => 'a.pdf', 'original_name' => 'a.pdf', 'size_kb' => 100]],
+        'submitted_at' => now(),
+        'is_late' => false,
+    ]);
+
+    // Warm the cache with a "nothing graded yet" read before grading.
+    $before = app(GradebookService::class)->scoreFor($this->student, $this->course->fresh());
+    expect($before['assignment_percent'])->toBeNull();
+
+    app(AssignmentGradingService::class)->grade($submission, $this->instructor, 18.0, 'Nice', null);
+
+    $after = app(GradebookService::class)->scoreFor($this->student, $this->course->fresh());
+    expect($after['assignment_percent'])->toBe(90.0);
+});

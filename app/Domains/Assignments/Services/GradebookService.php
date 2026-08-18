@@ -9,6 +9,7 @@ use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\Lesson;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 use Illuminate\Support\Collection;
 
 /**
@@ -38,10 +39,32 @@ class GradebookService
      */
     public const GRADEBOOK_AT_RISK_THRESHOLD = 60.0;
 
+    public function __construct(private readonly AggregateCache $cache) {}
+
     /**
+     * S12 B12 (design doc §4 decision 11) — cached whole, not partially:
+     * every field this returns is a computed number/boolean derived from
+     * QuizAttempt + AssignmentSubmission, and both are covered by an
+     * explicit bust hook (`AssignmentGradingService::grade()`,
+     * `QuizAttemptService::submit()`/`reviewAnswer()`) — unlike
+     * `StudentMetrics::summarize()`, nothing here needs excluding.
+     *
      * @return array{quiz_percent: ?float, assignment_percent: ?float, weighted_percent: float, is_passing: bool, is_at_risk: bool}
      */
     public function scoreFor(User $student, Course $course): array
+    {
+        return $this->cache->rememberGradebookScore(
+            $student->tenant_id,
+            $student->id,
+            $course->id,
+            fn (): array => $this->computeScoreFor($student, $course),
+        );
+    }
+
+    /**
+     * @return array{quiz_percent: ?float, assignment_percent: ?float, weighted_percent: float, is_passing: bool, is_at_risk: bool}
+     */
+    protected function computeScoreFor(User $student, Course $course): array
     {
         $quizPercent = $this->quizPercentFor($student, $course);
         $assignmentPercent = $this->assignmentPercentFor($student, $course);

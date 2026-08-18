@@ -10,6 +10,7 @@ use App\Exceptions\QuizAttemptAlreadySubmittedException;
 use App\Exceptions\QuizAttemptLimitExceededException;
 use App\Exceptions\QuizNotAvailableException;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 
 /**
  * "Start" half of design doc §3.0's start/draw/submit/auto-grade contract is
@@ -18,6 +19,7 @@ use App\Models\User;
  */
 class QuizAttemptService
 {
+    public function __construct(private readonly AggregateCache $cache) {}
     public function start(Quiz $quiz, User $user): QuizAttempt
     {
         // Re-checked here, not just at the page gate: QuizRunner's own
@@ -128,6 +130,8 @@ class QuizAttemptService
             'score' => $this->recomputeScore($attempt),
         ]);
 
+        $this->bustCachesFor($attempt);
+
         return $attempt->fresh();
     }
 
@@ -170,6 +174,15 @@ class QuizAttemptService
      * rather than leaving that to the caller, so a review can never land
      * without the attempt's own total catching up to it (this block's own
      * plan note: verified via a dedicated test, not just at submit time).
+     *
+     * S12 B12 — also busts the gradebook/student-metrics caches, same as
+     * submit() itself: a short-answer review changes the exact same
+     * `score`/`max_score` data those aggregates read, even though decision
+     * 11's own bust list names "QuizAttempt submitted," not "reviewed" —
+     * leaving this uninvalidated would let a review silently disagree with
+     * a cached score until the next unrelated bust or the TTL catches up,
+     * a real staleness gap the design doc's own wording didn't spell out
+     * but the underlying data change makes necessary either way.
      */
     public function reviewAnswer(QuizAnswer $answer, float $score, User $reviewer): QuizAnswer
     {
@@ -184,7 +197,26 @@ class QuizAttemptService
         $attempt = $answer->attempt;
         $attempt->update(['score' => $this->recomputeScore($attempt)]);
 
+        $this->bustCachesFor($attempt);
+
         return $answer->fresh();
+    }
+
+    /**
+     * A missing quiz/lesson/section/course link skips the gradebook bust
+     * (same defensive posture `AssignmentGradingService::bustGradebookCache()`
+     * takes) — the attempt itself already saved successfully above.
+     */
+    protected function bustCachesFor(QuizAttempt $attempt): void
+    {
+        $this->cache->forgetStudentMetrics($attempt->tenant_id, $attempt->user_id);
+        $this->cache->forgetInstituteOverview($attempt->tenant_id);
+
+        $course = $attempt->quiz?->lesson?->section?->course;
+
+        if ($course !== null) {
+            $this->cache->forgetGradebookScore($attempt->tenant_id, $attempt->user_id, $course->id);
+        }
     }
 
     /**

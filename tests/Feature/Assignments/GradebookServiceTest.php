@@ -10,6 +10,7 @@ use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use App\Support\Caching\AggregateCache;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -293,4 +294,54 @@ it('marks a course incomplete when everything was attempted but the weighted sco
     ]);
 
     expect($this->service->isComplete($this->student, $this->course->fresh()))->toBeFalse();
+});
+
+it('caches scoreFor() — a direct DB change is not reflected until the cache is explicitly forgotten (S12 B12)', function () {
+    $quiz = Quiz::create([
+        'lesson_id' => quizLessonForGradebook()->id,
+        'title' => 'Checkpoint', 'blueprint' => [], 'time_limit_minutes' => 20, 'max_attempts' => 3,
+    ]);
+    $attempt = QuizAttempt::create([
+        'quiz_id' => $quiz->id, 'user_id' => $this->student->id, 'question_ids' => [],
+        'status' => 'submitted', 'started_at' => now(), 'expires_at' => now()->addMinutes(20),
+        'submitted_at' => now(), 'score' => 5, 'max_score' => 10,
+    ]);
+
+    $first = $this->service->scoreFor($this->student, $this->course->fresh());
+    expect($first['quiz_percent'])->toBe(50.0);
+
+    // Bypasses the service entirely, so no bust fires — the cache should
+    // still hand back the stale 50.0 on this next call.
+    $attempt->update(['score' => 10]);
+    $stale = $this->service->scoreFor($this->student, $this->course->fresh());
+    expect($stale['quiz_percent'])->toBe(50.0);
+
+    app(AggregateCache::class)->forgetGradebookScore($this->student->tenant_id, $this->student->id, $this->course->id);
+
+    $fresh = $this->service->scoreFor($this->student, $this->course->fresh());
+    expect($fresh['quiz_percent'])->toBe(100.0);
+});
+
+it('keys the cache per student and per course, not shared across either', function () {
+    $quiz = Quiz::create([
+        'lesson_id' => quizLessonForGradebook()->id,
+        'title' => 'Checkpoint', 'blueprint' => [], 'time_limit_minutes' => 20, 'max_attempts' => 3,
+    ]);
+    QuizAttempt::create([
+        'quiz_id' => $quiz->id, 'user_id' => $this->student->id, 'question_ids' => [],
+        'status' => 'submitted', 'started_at' => now(), 'expires_at' => now()->addMinutes(20),
+        'submitted_at' => now(), 'score' => 3, 'max_score' => 10,
+    ]);
+    $otherStudent = User::factory()->create(['tenant_id' => $this->course->tenant_id]);
+    QuizAttempt::create([
+        'quiz_id' => $quiz->id, 'user_id' => $otherStudent->id, 'question_ids' => [],
+        'status' => 'submitted', 'started_at' => now(), 'expires_at' => now()->addMinutes(20),
+        'submitted_at' => now(), 'score' => 9, 'max_score' => 10,
+    ]);
+
+    $mine = $this->service->scoreFor($this->student, $this->course->fresh());
+    $theirs = $this->service->scoreFor($otherStudent, $this->course->fresh());
+
+    expect($mine['quiz_percent'])->toBe(30.0)
+        ->and($theirs['quiz_percent'])->toBe(90.0);
 });

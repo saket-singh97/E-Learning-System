@@ -20,6 +20,25 @@ pest()->extend(TestCase::class)
 
 /*
 |--------------------------------------------------------------------------
+| Cache isolation
+|--------------------------------------------------------------------------
+|
+| S12 B12 introduced this app's first-ever Cache:: usage (AggregateCache).
+| RefreshDatabase resets the database between tests, but not Redis — and
+| auto-increment ids restart from 1 each time, so a tenant/student id from
+| one test can collide with a stale AggregateCache entry left by an
+| earlier test that happened to reuse the same id. Flushed on the 'cache'
+| Redis connection only (config/database.php's own REDIS_CACHE_DB, a
+| separate logical database from 'default', which session/queue use), so
+| this never touches session or queue state.
+|
+*/
+afterEach(function () {
+    \Illuminate\Support\Facades\Cache::flush();
+});
+
+/*
+|--------------------------------------------------------------------------
 | Expectations
 |--------------------------------------------------------------------------
 |

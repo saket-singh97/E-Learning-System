@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ✅ done |
 | B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ✅ done |
 | B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ✅ done |
-| B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ⬜ not started |
+| B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ✅ done |
 | B13 | Soft-delete gap closure — `FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` + admin restore UI on all 4 (V3); Form Request extraction on the 2 remaining inline-`validate()` controllers (V4) | ⬜ not started |
 | B14 | Full test coverage, isolation registration sweep, review pass, V5 regression-guard confirmation, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
 
@@ -772,7 +772,93 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1058 total, 1057 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B12 — Cache layer + invalidation — not started
+### B12 — Cache layer + invalidation — DONE (2026-08-18)
+
+- `AggregateCache` (`app/Support/Caching/`) — one `remember*()`/`forget*()`
+  pair per named target (`rememberGradebookScore`, `rememberStudentMetrics`,
+  `rememberInstituteOverview`), not one generic `remember(string $key, ...)`
+  a caller keys however it likes — a typo'd ad-hoc key string would
+  silently create an orphaned entry no `forget*()` call could ever reach.
+  Redis via `config('cache.default')` (already `redis` per `.env`, not the
+  config file's own `database` fallback — confirmed, not assumed), no new
+  infrastructure.
+- **Real scoping decision, not directly stated in the design doc**:
+  decision 11 says cache "computed aggregates... not raw model reads,"
+  and `StudentMetrics::summarize()` returns `outstanding_invoices` — a
+  live list of `FeeInvoice` rows returned verbatim, exactly the raw read
+  that line rules out. Excluded from what gets cached; always fetched
+  fresh on every call, merged onto the cached scalar fields. `fee_status`
+  has the identical staleness exposure (no bust hook — payment webhooks
+  and `FlagOverdueInvoices` aren't in this block's own bust list) but is
+  a derived string, not a raw row list, so it's cached anyway and leans
+  on the TTL safety net for that specific gap.
+  `InstituteOverviewWidget`'s own `active_enrolments`/`paid_revenue` have
+  the same gap and the same treatment, for consistency — decision 11
+  names the widget's numbers as one target without carving out a subset.
+- **Bust hooks, one per named trigger**: `AssignmentGradingService::grade()`
+  (both marks-only and rubric branches, restructured from early-return to
+  if/else so the bust fires exactly once regardless of path) busts
+  `GradebookScore` + `InstituteOverview`; `QuizAttemptService::submit()`
+  busts `GradebookScore` + `StudentMetrics` + `InstituteOverview` (it's
+  the one write that feeds both aggregates); `AttendanceRecorded`'s own
+  event gets a third listener, `BustAggregateCacheOnAttendance`
+  (`app/Domains/Batches/Listeners/`) — covers both real writers
+  (`RecordVideoCoverageAttendance`, `BatchSessionsRelationManager`) for
+  free since both already funnel through that one event, busting only
+  `StudentMetrics` (confirmed by reading `GradebookService`'s own two
+  private helpers that attendance never feeds it, so a gradebook bust
+  there would clear data that was never stale).
+- **Real extension beyond decision 11's literal wording, flagged not
+  glossed over**: `QuizAttemptService::reviewAnswer()` also busts —
+  decision 11's bust list says "QuizAttempt submitted," not "reviewed,"
+  but a short-answer review changes the exact same `score`/`max_score`
+  data `quizPercentFor()`/`quizAveragePercent()` read. Leaving it
+  uninvalidated would let a review silently disagree with a cached score
+  until an unrelated bust or the TTL caught up — a real gap the design
+  doc's own wording didn't spell out but the underlying data change made
+  necessary regardless.
+- Course/tenant derivation for the two write-side services needed a real
+  chain, not a direct column: `assignment->lesson->section->course`,
+  `attempt->quiz->lesson->section->course` — both defensively skip the
+  bust (not throw) on a missing link, since the write itself already
+  succeeded; a stale cache for one TTL window is a smaller problem than
+  failing a grade/submission over a dangling relation.
+- **Real cross-cutting test-infrastructure gap, caught before it could
+  bite silently**: this is the app's first-ever `Cache::` usage.
+  `RefreshDatabase` resets the database between tests but never touches
+  Redis, and auto-increment ids restart from 1 each test run — so a
+  tenant/student id from one test could collide with a stale
+  `AggregateCache` entry left by an earlier test that happened to reuse
+  the same id, corrupting an unrelated test's assertions with no visible
+  connection between the two. Fixed at the root: a global `afterEach(fn
+  () => Cache::flush())` in `tests/Pest.php`, applying to every test in
+  the suite — flushes only the `cache` Redis connection/database
+  (`config/database.php`'s own `REDIS_CACHE_DB`, separate from `default`,
+  which session/queue use), so it can never touch session or queue state.
+  Worth remembering for any future block that adds more `Cache::` usage.
+- `GradebookService`, `StudentMetrics`, `AssignmentGradingService`,
+  `QuizAttemptService` all gained a constructor (`AggregateCache` DI) for
+  the first time — confirmed via grep that nothing in `app/` or `tests/`
+  ever calls any of the four with `new X()` directly before making the
+  change; one exception found and fixed, `StudentMetricsTest`'s own
+  `new StudentMetrics` in its `beforeEach`, updated to `app(StudentMetrics::class)`.
+- Tested at seven levels: `AggregateCacheTest` (remember/forget per
+  shape, cross-key independence, the configured TTL actually reaches the
+  cache store), `GradebookServiceTest`/`StudentMetricsTest`/
+  `InstituteOverviewWidgetTest` (each: a direct DB mutation stays
+  invisible until an explicit forget, then a fresh recompute lands;
+  per-student/per-course key isolation), `QuizAttemptServiceSubmitTest`/
+  `QuizAttemptServiceReviewTest` (both busts proven through the real
+  services, not by inspecting `AggregateCache` calls directly),
+  `AssignmentSubmissionResourceTest` (grade() busts gradebook through the
+  real Filament-adjacent call path), `BustAggregateCacheOnAttendanceTest`
+  (the listener directly, plus one real end-to-end test through the
+  actual `AttendanceRecord::updateOrCreate()` + `event()` dispatch, no
+  bypass). Ran the full `Assignments`/`Assessments`/`Comms`/`Batches`
+  domain suites directly after adding the four constructors, before the
+  full suite — zero regressions, confirmed rather than assumed safe.
+- `composer test`: 1073 total, 1072 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B13 — Soft-delete gap closure + Form Request extraction — not started
 
