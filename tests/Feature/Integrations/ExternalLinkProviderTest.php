@@ -6,8 +6,8 @@ use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Integrations\Drivers\CircuitBreakerGuardedLiveClassDriver;
 use App\Integrations\Drivers\ExternalLinkProvider;
-use App\Integrations\Drivers\FakeLiveClassDriver;
 use App\Integrations\LiveClassProvider;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -47,8 +47,10 @@ beforeEach(function () {
     $this->driver = new ExternalLinkProvider;
 });
 
-it('resolves LiveClassProvider from the container as FakeLiveClassDriver', function () {
-    expect(app(LiveClassProvider::class))->toBeInstanceOf(FakeLiveClassDriver::class);
+// S12 B11 — the binding now resolves the circuit-breaker decorator
+// wrapping FakeLiveClassDriver, not the bare fake directly.
+it('resolves LiveClassProvider from the container as the circuit-breaker-guarded driver', function () {
+    expect(app(LiveClassProvider::class))->toBeInstanceOf(CircuitBreakerGuardedLiveClassDriver::class);
 });
 
 it('passes the teacher-supplied meeting URL through unchanged as the room ref', function () {

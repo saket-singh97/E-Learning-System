@@ -3,6 +3,7 @@
 namespace App\Support\Resilience;
 
 use App\Exceptions\CircuitOpenException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
 
@@ -40,7 +41,7 @@ class CircuitBreaker
         try {
             $result = $callback();
         } catch (Throwable $e) {
-            $this->recordFailure($key);
+            $this->recordFailure($key, $e);
 
             throw $e;
         }
@@ -55,12 +56,28 @@ class CircuitBreaker
         return (bool) Redis::exists($this->openKey($key));
     }
 
-    protected function recordFailure(string $key): void
+    /**
+     * `Log::critical()`, not a dedicated Sentry SDK call — `SENTRY_LARAVEL_DSN`
+     * is a documented, not-yet-configured env var (`SETUP.md`, same V6/V7
+     * "ops/deployment concern" boundary the design doc already draws
+     * around installing the SDK itself). Sentry's own Laravel integration
+     * auto-captures `critical`-level log entries once that DSN lands, with
+     * zero extra app code — this is the real, permanent hook, not a stub
+     * standing in for one.
+     */
+    protected function recordFailure(string $key, Throwable $e): void
     {
         $failures = Redis::incr($this->failuresKey($key));
 
         if ($failures >= $this->threshold()) {
             Redis::setex($this->openKey($key), $this->cooldownSeconds(), '1');
+
+            Log::critical("Circuit breaker tripped for [{$key}]", [
+                'provider' => $key,
+                'failures' => $failures,
+                'cooldown_seconds' => $this->cooldownSeconds(),
+                'last_error' => $e->getMessage(),
+            ]);
         }
     }
 

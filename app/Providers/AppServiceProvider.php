@@ -25,6 +25,10 @@ use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
 use App\Integrations\DnsResolver;
 use App\Integrations\Drivers\CircuitBreakerGuardedAiDriver;
+use App\Integrations\Drivers\CircuitBreakerGuardedCommsDriver;
+use App\Integrations\Drivers\CircuitBreakerGuardedLiveClassDriver;
+use App\Integrations\Drivers\CircuitBreakerGuardedPaymentDriver;
+use App\Integrations\Drivers\CircuitBreakerGuardedSubscriptionDriver;
 use App\Integrations\Drivers\CircuitBreakerGuardedVideoDriver;
 use App\Integrations\Drivers\FakeAiDriver;
 use App\Integrations\Drivers\FakeGeoIpResolver;
@@ -90,10 +94,25 @@ class AppServiceProvider extends ServiceProvider
             $app->make(AiSpendCap::class),
         ));
 
-        $this->app->bind(LiveClassProvider::class, FakeLiveClassDriver::class);
-        $this->app->bind(PaymentProvider::class, FakeRazorpayDriver::class);
-        $this->app->bind(SubscriptionProvider::class, FakeRazorpaySubscriptionDriver::class);
-        $this->app->bind(CommsProvider::class, FakeWhatsAppDriver::class);
+        // S12 B11 — same "wrap the container binding" shape B10 already
+        // established for Video/AiProvider; protects whichever driver is
+        // bound, fake today or a real one later.
+        $this->app->bind(LiveClassProvider::class, fn ($app) => new CircuitBreakerGuardedLiveClassDriver(
+            $app->make(FakeLiveClassDriver::class),
+            $app->make(CircuitBreaker::class),
+        ));
+        $this->app->bind(PaymentProvider::class, fn ($app) => new CircuitBreakerGuardedPaymentDriver(
+            $app->make(FakeRazorpayDriver::class),
+            $app->make(CircuitBreaker::class),
+        ));
+        $this->app->bind(SubscriptionProvider::class, fn ($app) => new CircuitBreakerGuardedSubscriptionDriver(
+            $app->make(FakeRazorpaySubscriptionDriver::class),
+            $app->make(CircuitBreaker::class),
+        ));
+        $this->app->bind(CommsProvider::class, fn ($app) => new CircuitBreakerGuardedCommsDriver(
+            $app->make(FakeWhatsAppDriver::class),
+            $app->make(CircuitBreaker::class),
+        ));
 
         // Unlike every driver above, this needs no vendor account —
         // dns_get_record() is a plain PHP builtin, confirmed callable on

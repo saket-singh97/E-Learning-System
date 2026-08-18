@@ -1,10 +1,16 @@
 <?php
 
 use App\Integrations\CommsProvider;
+use App\Integrations\Drivers\CircuitBreakerGuardedCommsDriver;
 use App\Integrations\Drivers\FakeWhatsAppDriver;
 
-it('resolves CommsProvider from the container as FakeWhatsAppDriver', function () {
-    expect(app(CommsProvider::class))->toBeInstanceOf(FakeWhatsAppDriver::class);
+/**
+ * S12 B11 — the container binding now resolves the circuit-breaker
+ * decorator wrapping FakeWhatsAppDriver, not the bare fake directly; see
+ * AppServiceProvider's own binding.
+ */
+it('resolves CommsProvider from the container as the circuit-breaker-guarded driver', function () {
+    expect(app(CommsProvider::class))->toBeInstanceOf(CircuitBreakerGuardedCommsDriver::class);
 });
 
 it('sends a template message and returns a message_id and status', function () {

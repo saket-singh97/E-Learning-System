@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Domains\Tenancy\Services\BrandingService;
 use App\Filament\Admin\Auth\Login;
+use App\Filament\Widgets\CircuitBreakerStatusWidget;
 use App\Filament\Widgets\TokenSpendWidget;
 use App\Http\Middleware\EnsureAccountNotFlaggedForSharing;
 use App\Http\Middleware\EnsureDeviceNotRevoked;
@@ -54,6 +55,7 @@ class AdminPanelProvider extends PanelProvider
                 AccountWidget::class,
                 FilamentInfoWidget::class,
                 TokenSpendWidget::class,
+                CircuitBreakerStatusWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,

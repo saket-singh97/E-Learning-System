@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ✅ done |
 | B9 | GDPR/DPDP data deletion — anonymize-vs-hard-delete split, 30-day grace window, scheduled sweep (B15 pt.3) | ✅ done |
 | B10 | Circuit breaker core (`App\Support\Resilience\CircuitBreaker`, Redis-backed) + wire onto Bunny + Claude drivers (V1 pt.1) | ✅ done |
-| B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ⬜ not started |
+| B11 | Circuit breaker wired onto Razorpay (both integrations) + WhatsApp BSP + live-class provider, Sentry alert on trip, dashboard visibility (V1 pt.2) | ✅ done |
 | B12 | Cache layer + explicit invalidation — `GradebookService::scoreFor()`, `StudentMetrics::summarize()`, `InstituteOverviewWidget` (V2) | ⬜ not started |
 | B13 | Soft-delete gap closure — `FeePayment`/`FeeInvoice`/`TenantSubscription`/`SubscriptionInvoice` + admin restore UI on all 4 (V3); Form Request extraction on the 2 remaining inline-`validate()` controllers (V4) | ⬜ not started |
 | B14 | Full test coverage, isolation registration sweep, review pass, V5 regression-guard confirmation, `PROJECT-STATUS.md`/`HANDOVER.md` update | ⬜ not started |
@@ -711,7 +711,66 @@ own estimate undershot its actual by a wide margin.
 - `composer test`: 1048 total, 1047 passed, the same one pre-existing
   unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
-### B11 — Circuit breaker Razorpay/WhatsApp/live-class + dashboard — not started
+### B11 — Circuit breaker Razorpay/WhatsApp/live-class + dashboard — DONE (2026-08-18)
+
+- Same decorate-the-container-binding shape B10 already established, for
+  the 4 remaining providers: `CircuitBreakerGuardedPaymentDriver`
+  (`payment-provider`), `CircuitBreakerGuardedSubscriptionDriver`
+  (`subscription-provider`), `CircuitBreakerGuardedCommsDriver`
+  (`comms-provider`), `CircuitBreakerGuardedLiveClassDriver`
+  (`live-class-provider`).
+- **Selective wrapping, not blanket per-interface** — `PaymentProvider`/
+  `SubscriptionProvider` each carry one `verifyWebhookSignature()` method
+  alongside their real outbound calls; that method is a pure local HMAC
+  comparison, never a network call, so it's deliberately left unwrapped —
+  wrapping it would let ordinary webhook-replay/invalid-signature traffic
+  falsely count as provider failures and trip a breaker over something
+  that never touched the vendor at all. Every method on `CommsProvider`/
+  `LiveClassProvider` is a real outbound call, so both are wrapped in
+  full, same as B10's Video/AiProvider.
+- **Sentry alert, without installing the Sentry SDK** — `SETUP.md`
+  already lists `SENTRY_LARAVEL_DSN` as a documented, not-yet-configured
+  env var, the same V6/V7 "ops/deployment concern" boundary the design
+  doc draws around installing/configuring the SDK itself. `CircuitBreaker::recordFailure()`
+  now calls `Log::critical()` with structured context (provider, failure
+  count, cooldown, last error) at the exact moment a breaker trips —
+  Sentry's own Laravel integration auto-captures `critical`-level log
+  entries with zero extra app code the moment that DSN lands, so this is
+  the real, permanent hook, not a stub standing in for a package this
+  slice was never going to install speculatively.
+- `CircuitBreakerStatusWidget` — a `StatsOverviewWidget`, not a new
+  Filament resource, per design doc §2.3's own explicit call ("V1 needs
+  breaker state *visible*, not a dedicated CRUD surface"). Lists all 6
+  wired providers (B10's 2 plus B11's own 4), not just this block's own
+  four — a partial dashboard would be a worse status page than a
+  complete one. One shared class for both panels, same reasoning
+  `TokenSpendWidget` already established (breaker state isn't tenant-
+  scoped, nothing to branch on); auto-discovered on Super via its own
+  `app/Filament/Widgets` scan, registered explicitly in
+  `AdminPanelProvider`'s `widgets()` array since its own discovery root
+  is `Filament/Admin/Widgets` instead.
+- **Real regressions caught by the domain sanity sweep, not the full
+  suite** — 3 pre-existing tests asserted the bare `LiveClassProvider`/
+  `CommsProvider` container binding resolved directly to
+  `FakeLiveClassDriver`/`FakeWhatsAppDriver`
+  (`BatchSessionLiveClassTest`, `ExternalLinkProviderTest`,
+  `FakeWhatsAppDriverTest`) — now correctly resolves the circuit-breaker
+  decorator instead, same update `SpendCapGuardedAiDriverTest` itself
+  already needed when S9 B12 first wrapped `AiProvider`. Fixed by
+  updating the expected class, not by loosening the binding.
+- Tested at four levels: one test file per new decorator (the shared-key
+  trip across every real method on that interface, plus a dedicated
+  proof for both `verifyWebhookSignature()`-carrying interfaces that it
+  never counts toward the breaker), 2 new `CircuitBreakerTest` cases (a
+  `Log::critical()` call fires exactly once with the right context at
+  the trip moment, never fires below threshold), `CircuitBreakerStatusWidgetTest`
+  (every provider shown closed when healthy, a tripped one shown open).
+  Ran the full `Billing`/`Batches`/`Comms`/`Fees`/`Integrations` domain
+  suites directly after changing the 4 bindings, before the full suite —
+  caught and fixed the 3 regressions above, confirmed rather than
+  assumed safe.
+- `composer test`: 1058 total, 1057 passed, the same one pre-existing
+  unrelated `CourseSlugUniquenessTest` failure carried since S1/S2.
 
 ### B12 — Cache layer + invalidation — not started
 

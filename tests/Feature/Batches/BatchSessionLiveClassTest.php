@@ -9,6 +9,7 @@ use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Integrations\Drivers\CircuitBreakerGuardedLiveClassDriver;
 use App\Integrations\Drivers\FakeLiveClassDriver;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -108,7 +109,9 @@ it('resolveLiveClassProvider() routes zoom_video_sdk through the LiveClassProvid
         'live_provider' => 'zoom_video_sdk',
     ]);
 
-    expect($session->resolveLiveClassProvider())->toBeInstanceOf(FakeLiveClassDriver::class);
+    // S12 B11 — the binding now resolves the circuit-breaker decorator
+    // wrapping FakeLiveClassDriver, not the bare fake directly.
+    expect($session->resolveLiveClassProvider())->toBeInstanceOf(CircuitBreakerGuardedLiveClassDriver::class);
 });
 
 it('leaves a plain timetable entry with no lesson link unrouted and fires no room event', function () {

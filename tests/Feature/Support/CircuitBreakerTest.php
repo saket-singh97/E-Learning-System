@@ -2,6 +2,7 @@
 
 use App\Exceptions\CircuitOpenException;
 use App\Support\Resilience\CircuitBreaker;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 
 beforeEach(function () {
@@ -52,6 +53,44 @@ it('trips open after N consecutive failures, matching the configured threshold',
     }
 
     expect($breaker->isOpen($this->key))->toBeTrue();
+});
+
+/**
+ * `Log::critical()` is the real, permanent Sentry hook (`SETUP.md`'s own
+ * not-yet-configured `SENTRY_LARAVEL_DSN`) — proving it fires exactly
+ * once, at the trip moment, with real context, not a stub call.
+ */
+it('logs a critical alert exactly once, at the moment the breaker trips', function () {
+    Log::spy();
+    $breaker = app(CircuitBreaker::class);
+
+    foreach (range(1, 3) as $i) {
+        try {
+            $breaker->call($this->key, fn () => throw new RuntimeException('boom'));
+        } catch (RuntimeException) {
+        }
+    }
+
+    Log::shouldHaveReceived('critical')
+        ->once()
+        ->withArgs(fn (string $message, array $context) => str_contains($message, $this->key)
+            && $context['provider'] === $this->key
+            && $context['failures'] === 3
+            && $context['last_error'] === 'boom');
+});
+
+it('never logs a critical alert while still below the failure threshold', function () {
+    Log::spy();
+    $breaker = app(CircuitBreaker::class);
+
+    foreach (range(1, 2) as $i) {
+        try {
+            $breaker->call($this->key, fn () => throw new RuntimeException('boom'));
+        } catch (RuntimeException) {
+        }
+    }
+
+    Log::shouldNotHaveReceived('critical');
 });
 
 it('fails fast once open, never invoking the callback', function () {
