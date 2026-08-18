@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Billing\Models\Plan;
+use App\Domains\Security\Models\AuditLogEntry;
 use App\Domains\Tenancy\Models\RoleAssignmentAudit;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Policies\RoleAssignmentPolicy;
@@ -51,6 +52,8 @@ it('blocks an institute admin from creating a super admin, and audits it', funct
     expect($audit->allowed)->toBeFalse();
     expect($audit->actor_role)->toBe('institute_admin');
     expect($audit->attempted_role)->toBe('super_admin');
+
+    expect(AuditLogEntry::where('action', 'role.assigned')->count())->toBe(0);
 });
 
 it('blocks an institute admin from creating another institute admin, and audits it', function () {
@@ -92,6 +95,12 @@ it('lets an institute admin assign instructor, student, and parent', function (s
     app(RoleAssignmentPolicy::class)->assign($admin, $target, $role);
 
     expect($target->fresh()->hasRole($role))->toBeTrue();
+
+    $entry = AuditLogEntry::latest('id')->first();
+    expect($entry->action)->toBe('role.assigned')
+        ->and($entry->actor_id)->toBe($admin->id)
+        ->and($entry->subject_id)->toBe($target->id)
+        ->and($entry->metadata['role'])->toBe($role);
 })->with(['instructor', 'student', 'parent']);
 
 it('blocks an institute admin from assigning a role to a user in a different tenant, and audits it', function () {

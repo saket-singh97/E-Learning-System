@@ -3,6 +3,7 @@
 namespace App\Domains\Tenancy\Policies;
 
 use App\Domains\Billing\Services\SeatQuota;
+use App\Domains\Security\Services\AuditLogger;
 use App\Domains\Tenancy\Models\RoleAssignmentAudit;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\RoleHierarchy;
@@ -46,6 +47,14 @@ class RoleAssignmentPolicy
         if (! $allowed) {
             throw PrivilegeEscalationException::forAttempt($actorRole, $role);
         }
+
+        app(AuditLogger::class)->record(
+            action: 'role.assigned',
+            subject: $target,
+            actor: $actor,
+            tenantId: $target->tenant_id ?? $actor->tenant_id,
+            metadata: ['role' => $role, 'actor_role' => $actorRole],
+        );
 
         if (! $this->addsNewSeat($target, $role)) {
             $target->syncRoles([$role]);

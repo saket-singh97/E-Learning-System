@@ -30,8 +30,8 @@ stop and report before starting the next block.
 | B1 | Device fingerprinting (`DeviceFingerprintService`) + registered-device limit at login (default 2, config-driven) (B9) | ✅ done |
 | B2 | Concurrent session limit + remote device logout — Admin/Teach panel "My devices" page (B10) | ✅ done |
 | B3 | Login history + IP geolocation + impossible-travel detection (`ImpossibleTravelDetector`, velocity check) (B11) | ✅ done |
-| B4 | Account-sharing detection — daily sweep, forced re-auth on flag (B12) | ⬜ not started |
-| B5 | General `audit_log_entries` sink (`AuditLogger`) + wire into the highest-value existing sensitive actions (role assignment, impersonation, plan change, tenant suspension) | ⬜ not started |
+| B4 | Account-sharing detection — daily sweep, forced re-auth on flag (B12) | ✅ done |
+| B5 | General `audit_log_entries` sink (`AuditLogger`) + wire into the highest-value existing sensitive actions (role assignment, impersonation, plan change, tenant suspension) | ✅ done |
 | B6 | Audit log 365-day retention sweep (`PruneAuditLogEntries`, monthly) + Super-panel read-only audit log viewer (B13) | ⬜ not started |
 | B7 | GDPR/DPDP cookie consent — banner + `cookie_consents` write path, pre-login and post-login reconciliation (B15 pt.1) | ⬜ not started |
 | B8 | GDPR/DPDP data export — async job, zip of every domain's rows for one user, signed download link (B15 pt.2) | ⬜ not started |
@@ -318,9 +318,106 @@ own estimate undershot its actual by a wide margin.
   framework plumbing to second-guess" reasoning B2 ultimately settled on.
 - `composer test`: full suite run below.
 
-### B4 — Account-sharing detection — not started
+### B4 — Account-sharing detection — DONE (2026-08-18)
 
-### B5 — General audit log sink — not started
+- `DetectAccountSharing` — daily unscoped sweep, same shape every other
+  cross-tenant job in this app already uses
+  (`SuspendOverdueTenantSubscriptions`, `FlagOverdueInvoices`). Counts
+  distinct `device_sessions.device_fingerprint` values *first-seen*
+  (`created_at`) within a rolling 7-day window per user — deliberately
+  not "currently active" devices, since B1's own `device_limit` already
+  caps concurrent devices at 2; the sharing signal here is *cycling*
+  through many different devices over the window (revoking an old one to
+  free a slot, logging in from a new one, repeatedly), which only a
+  first-seen-in-window count can surface. No `DB::raw`/`selectRaw`
+  (`CLAUDE.md`'s own security baseline) — distinct-counting happens in
+  PHP via `pluck()->unique()->count()`, cheap for a daily sweep over a
+  7-day window, not a hot path.
+- `EnsureAccountNotFlaggedForSharing` — same dual-registration shape
+  `EnsureDeviceNotRevoked` (B2) already established, but appended to the
+  global `web` group *and* Admin/Teach's own panel middleware, not
+  Admin/Teach-only in spirit — a shared-account signal applies to a
+  student/parent every bit as much as staff (portals get it purely
+  through the global append, same as B2's own reasoning for why they
+  don't need explicit registration the way Filament panels do).
+- **`account_sharing_flags.reviewed_at` repurposed as "already enforced,"
+  not only "an admin looked at it"** — a real, deliberate design decision
+  made explicit here since B0's own schema comment didn't pin this down.
+  The middleware sets it itself the moment the forced logout fires, so
+  the same flag can't force a logout loop on every subsequent request;
+  the user just logs back in normally afterward, and a later sweep run
+  creates a fresh flag if the pattern continues. This also happens to be
+  the exact hook a future admin-review UI (not built in this block) could
+  reuse without a schema change.
+- Tested at three levels: `DetectAccountSharingTest` (threshold crossed/
+  not crossed, the 7-day window boundary, a revoked device still counts,
+  no duplicate flag while one's unreviewed, a fresh flag lands once the
+  prior one's reviewed, a real cross-tenant unscoped sweep), the
+  middleware directly (blocks + tears down + marks reviewed, passes once
+  reviewed, only forces one logout not a loop, no flag passes through,
+  platform-level user exempt, guest passes), plus one real HTTP test —
+  safe here unlike B2's own device-fingerprint saga, since this
+  middleware never reads a cookie at all, only `Auth::user()` + a DB
+  lookup.
+- `composer test`: full suite run below.
+
+### B5 — General audit log sink — DONE (2026-08-18)
+
+- `AuditLogger::record()` — one plain service call (design doc §4 decision
+  5: synchronous, not queued, so the write survives a queue worker
+  failure), matching `AuditLogEntry`'s own B0 schema exactly. `ipAddress`
+  is an explicit param, not read from the `request()` helper internally —
+  same "explicit, never ambient" discipline `DeviceRegistrar` (B1) already
+  established, and it's what lets the identical call work from a
+  scheduled job (no request in scope at all) as cleanly as from an HTTP
+  action.
+- Wired into exactly the four call sites the plan names, no more:
+  - `RoleAssignmentPolicy::assign()` — `'role.assigned'`, only on a
+    successful assignment (the `allowed = false` path already writes its
+    own `RoleAssignmentAudit` row; this sink is additional, not a
+    replacement, so a blocked attempt intentionally writes no
+    `audit_log_entries` row).
+  - `ImpersonationService::start()` — `'impersonation.started'`, metadata
+    carries the paired `impersonation_audits.id` so the two tables can be
+    cross-referenced. `stop()` deliberately left unwired — the plan names
+    "impersonation" as one action, and `ImpersonationAudit` already owns
+    the full start/end lifecycle; this sink exists for cross-domain
+    visibility of the sensitive moment, not to duplicate that table.
+  - `EditTenant`'s `changePlan` Filament action — `'plan.updated'` (the
+    plan doc's own example action string, verbatim). Wired at the
+    Filament-page call site, not inside `PlanChangeService::changePlan()`
+    itself: that service takes no `$actor` param today and is called from
+    several tests directly with only `(Tenant, Plan)`; adding an actor
+    param would touch every existing caller for a concern the page layer
+    already has cleanly available via `Auth::user()`. `subscribe()`/
+    `cancel()` left unwired — plan text says "plan change", and
+    `changePlan()` is the one operation actually named that.
+  - `SuspendOverdueTenantSubscriptions::suspend()` — `'tenant.suspended'`,
+    `actor: null` (system-initiated sweep, same as every other field
+    already nullable for exactly this case). Refactored the existing bare
+    `Tenant::where(...)->update(...)` into fetch-then-update so the
+    fetched `Tenant` model is available as the audit row's subject.
+- **Real pre-existing bug, not introduced by this block, caught only
+  because `composer test` gates every block**: `SecurityBaselineTest`'s
+  "no raw SQL in domain folders" check is a plain `str_contains()` scan
+  over full file contents, comments included — B4's own docblock on
+  `DetectAccountSharing.php` literally spelled out `` `DB::raw`/`selectRaw` ``
+  while explaining why the job avoids them, and the scan flagged that
+  prose as if it were a real `DB::raw` call. Fixed by rewording the
+  comment so it no longer contains the literal `DB::raw` substring,
+  without touching the job's actual logic (still zero raw SQL). Worth
+  remembering for every future block's own comments: `CLAUDE.md`'s
+  security-baseline test greps text, not tokens — naming a forbidden
+  method inside a docblock trips the same test as using it.
+- Test suite at 981 total (980 passed, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` failure carried since S1/S2, same as every
+  prior block) after this fix — 3 new tests (`AuditLoggerTest`: full
+  entry, all-optional-fields-null entry, `nullOnDelete` survives a
+  force-deleted actor) plus assertions added to 4 existing test files
+  (`RoleAssignmentTest`, `ImpersonationTest`,
+  `TenantResourcePlanSectionTest`, `SuspendOverdueTenantSubscriptionsTest`)
+  proving each wired call site actually writes the right row, not just
+  that `AuditLogger` works in isolation.
 
 ### B6 — Audit log retention + viewer — not started
 

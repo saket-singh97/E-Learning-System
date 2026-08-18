@@ -2,6 +2,7 @@
 
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Billing\Models\Plan;
+use App\Domains\Security\Models\AuditLogEntry;
 use App\Domains\Billing\Models\TenantSubscription;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
@@ -45,6 +46,13 @@ it('suspends a subscription and its tenant once the grace deadline has passed', 
 
     expect($subscription->fresh()->status)->toBe(TenantSubscription::STATUS_SUSPENDED)
         ->and($tenant->fresh()->status)->toBe(Tenant::STATUS_SUSPENDED);
+
+    $entry = AuditLogEntry::latest('id')->first();
+    expect($entry->action)->toBe('tenant.suspended')
+        ->and($entry->actor_id)->toBeNull()
+        ->and($entry->tenant_id)->toBe($tenant->id)
+        ->and($entry->subject_id)->toBe($tenant->id)
+        ->and($entry->metadata['reason'])->toBe('grace_period_expired');
 });
 
 it('leaves a subscription alone while the grace deadline is still in the future', function () {

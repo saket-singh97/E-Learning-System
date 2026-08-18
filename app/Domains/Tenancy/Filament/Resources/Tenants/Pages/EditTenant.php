@@ -4,11 +4,13 @@ namespace App\Domains\Tenancy\Filament\Resources\Tenants\Pages;
 
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Services\PlanChangeService;
+use App\Domains\Security\Services\AuditLogger;
 use App\Domains\Tenancy\Filament\Resources\Tenants\TenantResource;
 use App\Domains\Tenancy\Models\Tenant;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\Auth;
 
 class EditTenant extends EditRecord
 {
@@ -57,7 +59,18 @@ class EditTenant extends EditRecord
                         ->required(),
                 ])
                 ->action(function (Tenant $record, array $data): void {
-                    app(PlanChangeService::class)->changePlan($record, Plan::findOrFail($data['plan_id']));
+                    $fromPlanId = $record->plan_id;
+                    $newPlan = Plan::findOrFail($data['plan_id']);
+
+                    app(PlanChangeService::class)->changePlan($record, $newPlan);
+
+                    app(AuditLogger::class)->record(
+                        action: 'plan.updated',
+                        subject: $record,
+                        actor: Auth::user(),
+                        tenantId: $record->id,
+                        metadata: ['from_plan_id' => $fromPlanId, 'to_plan_id' => $newPlan->id],
+                    );
 
                     $this->redirect(static::getResource()::getUrl('edit', ['record' => $record]));
                 }),

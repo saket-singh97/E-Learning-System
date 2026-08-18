@@ -2,6 +2,7 @@
 
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\TenantSubscription;
+use App\Domains\Security\Models\AuditLogEntry;
 use App\Domains\Tenancy\Filament\Resources\Tenants\Pages\EditTenant;
 use App\Domains\Tenancy\Filament\Resources\Tenants\TenantResource;
 use App\Domains\Tenancy\Models\Tenant;
@@ -79,6 +80,12 @@ it('changes a tenants plan via the Change Plan action (S11 B10)', function () {
         ->callAction('changePlan', data: ['plan_id' => $enterprise->id]);
 
     expect($this->tenant->fresh()->plan_id)->toBe($enterprise->id);
+
+    $entry = AuditLogEntry::latest('id')->first();
+    expect($entry->action)->toBe('plan.updated')
+        ->and($entry->actor_id)->toBe($this->superAdmin->id)
+        ->and($entry->subject_id)->toBe($this->tenant->id)
+        ->and($entry->metadata['to_plan_id'])->toBe($enterprise->id);
 });
 
 it('hides the Cancel Subscription action until a tenant has a plan', function () {

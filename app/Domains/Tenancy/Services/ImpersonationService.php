@@ -2,6 +2,7 @@
 
 namespace App\Domains\Tenancy\Services;
 
+use App\Domains\Security\Services\AuditLogger;
 use App\Domains\Tenancy\Models\ImpersonationAudit;
 use App\Exceptions\CannotImpersonateException;
 use App\Models\User;
@@ -45,6 +46,14 @@ class ImpersonationService
             'target_user_id' => $target->id,
             'started_at' => now(),
         ]);
+
+        app(AuditLogger::class)->record(
+            action: 'impersonation.started',
+            subject: $target,
+            actor: $actor,
+            tenantId: $target->tenant_id,
+            metadata: ['impersonation_audit_id' => $audit->id],
+        );
 
         session([
             'impersonating_user_id' => $target->id,

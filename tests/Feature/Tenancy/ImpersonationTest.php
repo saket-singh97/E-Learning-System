@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Security\Models\AuditLogEntry;
 use App\Domains\Tenancy\Models\ImpersonationAudit;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\ImpersonationService;
@@ -32,6 +33,13 @@ it('starts an impersonation session, writes an audit row, and sets the session f
 
     expect(session('impersonating_user_id'))->toBe($instructor->id);
     expect(session('impersonator_id'))->toBe($superAdmin->id);
+
+    $entry = AuditLogEntry::latest('id')->first();
+    expect($entry->action)->toBe('impersonation.started')
+        ->and($entry->actor_id)->toBe($superAdmin->id)
+        ->and($entry->subject_id)->toBe($instructor->id)
+        ->and($entry->tenant_id)->toBe($tenant->id)
+        ->and($entry->metadata['impersonation_audit_id'])->toBe($audit->id);
 });
 
 it('refuses to impersonate another super_admin and writes no audit row', function () {
@@ -45,6 +53,7 @@ it('refuses to impersonate another super_admin and writes no audit row', functio
         ->toThrow(CannotImpersonateException::class);
 
     expect(ImpersonationAudit::count())->toBe(0);
+    expect(AuditLogEntry::where('action', 'impersonation.started')->count())->toBe(0);
 });
 
 it('stops an impersonation session by stamping ended_at and clearing the session', function () {

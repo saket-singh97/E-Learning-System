@@ -3,6 +3,7 @@
 namespace App\Domains\Billing\Jobs;
 
 use App\Domains\Billing\Models\TenantSubscription;
+use App\Domains\Security\Services\AuditLogger;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Bus\Queueable;
@@ -79,7 +80,15 @@ class SuspendOverdueTenantSubscriptions implements ShouldQueue
 
             $locked->update(['status' => TenantSubscription::STATUS_SUSPENDED]);
 
-            Tenant::where('id', $locked->tenant_id)->update(['status' => Tenant::STATUS_SUSPENDED]);
+            $tenant = Tenant::where('id', $locked->tenant_id)->first();
+            $tenant->update(['status' => Tenant::STATUS_SUSPENDED]);
+
+            app(AuditLogger::class)->record(
+                action: 'tenant.suspended',
+                subject: $tenant,
+                tenantId: $tenant->id,
+                metadata: ['reason' => 'grace_period_expired', 'subscription_id' => $locked->id],
+            );
         });
     }
 }
