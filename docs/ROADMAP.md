@@ -15,18 +15,18 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 12 (S1–S12) |
-| **Designed, not built** | 0 |
-| **Proposed, not yet scoped** | 14 (S13–S26) |
+| **Designed, not built** | 1 (S13) |
+| **Proposed, not yet scoped** | 13 (S14–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **27 shipped** (S10, S11, S12).
+- **P2 — Depth & extras** (~75 features): **27 shipped** (S10, S11, S12), 8 more designed (S13, not built).
 - **P3 — Scale & enterprise** (~55 features): not started — by design, this comes after paying customers exist.
 
 ---
 
-## Shipped + designed — S1 to S12
+## Shipped + designed — S1 to S13
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -42,20 +42,20 @@ regenerate it from this file.
 | S10 | Assignments, Gradebook, Certificates — submissions, rubric grading, weighted gradebook, auto-issued certificates | 16 blocks | Aug 16 | ✅ Done |
 | S11 | Plan Tiers + Billing — seat/storage/bandwidth caps, Razorpay subscriptions, grace period, proration | 17 blocks | Aug 17 | ✅ Done |
 | S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks | Aug 17–18 | ✅ Done |
+| S13 | Discovery & Content Engagement — categories/tags/catalog filtering, prerequisites + sequential unlocking, course bundles (Programs), catalog search/wishlist/recommendations, lesson Q&A, video notes/bookmarks, direct messaging, ratings/reviews | 18 blocks planned | Aug 19 | 🟡 Designed, build pending |
 
 ---
 
-## Full roadmap — S13 onward (proposed)
+## Full roadmap — S14 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10 and S11 were shaped only once they
+slice's turn comes, the same way S10-S13 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S13 | Discovery & Content Engagement — categories, prerequisites, course bundles, catalog search, lesson Q&A, notes/bookmarks, direct messaging, ratings | 8 | C7-C10, N7-N10 |
 | S14 | Video & Live-Class Depth — concurrent-play limits, multi-DRM, auto-subtitles, doc print-block, live recording → AI ingestion, Zoom OAuth, live polls | 12 | D9-D13, E4, G5-G10 |
 | S15 | Batch & Institute Operations — discussion forums, timetable conflict detection, bulk CSV import, per-instructor permissions, admissions CRM, ID cards | 11 | F6-F10, S2-S7 |
 | S16 | Assessment & Attendance Depth — extended question types, proctoring, All-India rank test series, OMR scanning, low-attendance alerts, geofencing | 9 | I6-I11, H10-H13 |

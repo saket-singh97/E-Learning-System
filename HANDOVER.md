@@ -5,7 +5,25 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-18)
+## Right now (2026-08-19)
+
+- **S13 — Discovery & Content Engagement: DESIGN + PLAN DONE, build not
+  started.** `docs/superpowers/specs/2026-08-19-s13-discovery-engagement-design.md`,
+  `...-plan.md`. `docs/FEATURES.md` C7-C10 (categories/tags/catalog
+  filtering, prerequisites + sequential unlocking, `Program` bundles,
+  catalog/search/wishlist/recommendations) + N7-N10 (lesson Q&A, video
+  notes/bookmarks, 1:1 direct messaging, course ratings/reviews). Picked
+  as the next P2-backlog slice per `docs/ROADMAP.md`'s own S13 row (that
+  row's scope was already earmarked, not invented fresh). Extends the
+  existing `Content` domain (7 of 8 items — discovery/engagement is
+  Content's own business logic, not a cross-cutting layer the way
+  `Billing`/`Security` were) plus `Comms` (direct messaging only); no new
+  domain. 12 new `BelongsToTenant` models — the widest single-slice model
+  count so far (S12 had 5). Verified before writing the design: all 8
+  items fully greenfield, zero existing category/tag/prerequisite/
+  program/wishlist/note/bookmark/rating/review/chat schema anywhere
+  (grepped, not assumed). 18 blocks (B0-B17). Next step: run the
+  per-block build command in the plan doc starting at B0.
 
 - **S12 — Security & Resilience Hardening: COMPLETE, all 15 blocks
   (2026-08-18).** `docs/superpowers/specs/2026-08-17-s12-security-resilience-design.md`,
