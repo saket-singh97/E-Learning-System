@@ -15,6 +15,7 @@ use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Batches\Models\InstituteZoomConnection;
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\SubscriptionInvoice;
 use App\Domains\Billing\Models\TenantStorageUsage;
@@ -107,6 +108,7 @@ class TenantModelRegistry
         MessageReport::class,
         CourseReview::class,
         LessonStreamSession::class,
+        InstituteZoomConnection::class,
     ];
 
     /**
@@ -583,6 +585,13 @@ class TenantModelRegistry
                 'started_at' => now(),
                 'last_heartbeat_at' => now(),
             ],
+            InstituteZoomConnection::class => [
+                'account_id' => 'acct_'.uniqid(),
+                'access_token' => 'row-access-token',
+                'refresh_token' => 'row-refresh-token',
+                'token_expires_at' => now()->addHour(),
+                'connected_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -642,6 +651,7 @@ class TenantModelRegistry
             MessageReport::class => ['status' => 'tampered'],
             CourseReview::class => ['rating' => 1],
             LessonStreamSession::class => ['ended_at' => now()],
+            InstituteZoomConnection::class => ['account_id' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

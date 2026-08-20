@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Assignments\VerifyCertificateController;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Batches\ZoomOAuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -22,6 +23,12 @@ Route::middleware('auth')->get('/settings/two-factor', function () {
 // which rules out a per-tenant subdomain route here.
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])
     ->name('auth.google.callback');
+
+// Host-agnostic on purpose (see ZoomOAuthController's own docblock) — the
+// redirect_uri Zoom calls back to must be one fixed, pre-registered URL,
+// same constraint GoogleAuthController's own callback already established.
+Route::get('/auth/zoom/callback', [ZoomOAuthController::class, 'callback'])
+    ->name('zoom.oauth.callback');
 
 // Host-agnostic (see ParentInviteRedemption's own docblock) — a prospective
 // parent's invite code, not the subdomain they land on, carries the tenant.
@@ -67,3 +74,7 @@ Route::domain('{subdomain}.lms.test')
 Route::domain('{subdomain}.lms.test')
     ->middleware(['web', 'resolve.tenant'])
     ->group(base_path('routes/security.php'));
+
+Route::domain('{subdomain}.lms.test')
+    ->middleware(['web', 'resolve.tenant'])
+    ->group(base_path('routes/batches.php'));

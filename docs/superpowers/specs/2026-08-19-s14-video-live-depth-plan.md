@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B3 | Instructor-editable subtitles — Filament textarea on `LessonResource`, `<track>` wiring on the player (D13 pt.2) | ✅ done |
 | B4 | Print/save protection — PDF lessons (toolbar-suppressed iframe + context-menu guard) (E4 pt.1) | ✅ done |
 | B5 | Print/save protection — text lessons (`@media print` block + context-menu guard) + `lessons.print_disabled` per-lesson toggle (E4 pt.2) | ✅ done |
-| B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ⬜ not started |
+| B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ✅ done |
 | B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ⬜ not started |
 | B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ⬜ not started |
 | B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ⬜ not started |
@@ -191,16 +191,47 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1226/1227 pass (4 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B6 — Zoom OAuth connect flow — not started
+### B6 — Zoom OAuth connect flow — done
 
-- `institute_zoom_connections` migration (`tenant_id`, `account_id`,
-  `access_token`/`refresh_token` encrypted, `token_expires_at`,
-  `connected_by_user_id`).
-- `InstituteZoomConnection` model, registered in `TenantModelRegistry`.
-- Admin-panel page: "Connect Zoom" (OAuth redirect + callback, same
-  host-agnostic-callback shape `GoogleAuthController`'s own S9 B2
-  precedent already established for an identical "one fixed redirect_uri"
-  constraint) / "Disconnect" action.
+- [x] `institute_zoom_connections` migration (`tenant_id` with a unique
+  constraint — one row per tenant, decision 2 — `account_id`,
+  `access_token`/`refresh_token` as `text` columns for the `encrypted`
+  cast's longer ciphertext, `token_expires_at`, `connected_by_user_id`).
+- [x] `InstituteZoomConnection` model (`App\Domains\Batches\Models`),
+  `access_token`/`refresh_token` cast `encrypted`, registered in
+  `TenantModelRegistry` (seed/update attributes included).
+- [x] No Socialite driver exists for Zoom (only `laravel/socialite`'s own
+  built-in providers) — `ZoomOAuthController` talks to Zoom's
+  `oauth/authorize`/`oauth/token`/`v2/users/me` endpoints directly via
+  `Http`, same direction B7's own `ZoomMeetingsProvider` will take rather
+  than adding a new package dependency.
+- [x] `redirect()` runs on the tenant's own subdomain, gated
+  `auth`+`role:institute_admin` (`routes/batches.php`, new domain group in
+  `routes/web.php`); `callback()` is host-agnostic (`routes/web.php`, no
+  domain constraint) — same "Zoom's own redirect_uri must be one fixed,
+  pre-registered URL, so the tenant id rides in the session instead of the
+  host" shape `GoogleAuthController`'s own S9 B2 callback already
+  established. `InstituteZoomConnection::updateOrCreate()` keyed on
+  `tenant_id` so a re-connect replaces the one row rather than duplicating
+  it.
+- [x] `App\Filament\Admin\Pages\ZoomConnection` — shows current connection
+  status, "Connect Zoom" (`->url()` to the redirect route, a full
+  navigation since it has to leave the app) when disconnected,
+  "Disconnect" (a real in-page action, deletes the row) when connected.
+- [x] `config/services.php` gains `zoom.oauth_client_id`/
+  `oauth_client_secret` (`ZOOM_OAUTH_CLIENT_ID`/`ZOOM_OAUTH_CLIENT_SECRET`
+  in `.env.example`) — separate from the existing `sdk_key`/`sdk_secret`
+  pair, which signs a different, unrelated Video SDK JWT (decision 1).
+- [x] `ZoomOAuthConnectionTest` — redirect URL + session, non-admin 403,
+  callback token exchange + storage (`Http::fake()`, no real account, same
+  precedent `RazorpayProviderTest` already uses), re-connect doesn't
+  duplicate, missing-session 419, page connect/disconnect visibility and
+  action, and the real admin-panel route.
+
+`composer test`: 1235/1236 pass (8 new tests, plus 1 new `CrossTenantTest`
+dataset case for the newly-registered `InstituteZoomConnection`) — sole
+failure is the pre-existing `CourseSlugUniquenessTest`, carried since
+S1/S2, unrelated.
 
 ### B7 — `ZoomMeetingsProvider` driver — not started
 

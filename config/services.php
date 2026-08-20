@@ -38,6 +38,12 @@ return [
     'zoom' => [
         'sdk_key' => env('ZOOM_SDK_KEY'),
         'sdk_secret' => env('ZOOM_SDK_SECRET'),
+        // Meetings API OAuth (S14 G7) — a separate credential pair from the
+        // sdk_key/sdk_secret above: those sign a client-side Video SDK JWT
+        // against one platform-wide app, these are the OAuth app used to
+        // connect each institute's own Zoom account (design doc decision 1).
+        'oauth_client_id' => env('ZOOM_OAUTH_CLIENT_ID'),
+        'oauth_client_secret' => env('ZOOM_OAUTH_CLIENT_SECRET'),
     ],
 
     'razorpay' => [
