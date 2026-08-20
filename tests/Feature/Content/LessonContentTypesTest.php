@@ -280,8 +280,8 @@ it('marks the video player with download-protection attributes', function () {
         ->assertSee('oncontextmenu="return false"', false);
 });
 
-it('marks the pdf viewer with print/save-protection attributes (S14 B4)', function () {
-    [$tenant, $lesson, $student] = contentTypeFixture(['type' => 'pdf']);
+it('marks the pdf viewer with print/save-protection attributes once print_disabled is on (S14 B4/B5)', function () {
+    [$tenant, $lesson, $student] = contentTypeFixture(['type' => 'pdf', 'print_disabled' => true]);
     $lesson->update(['pdf_disk_path' => "pdfs/{$tenant->id}/{$lesson->id}.pdf"]);
     Storage::disk('local')->put($lesson->pdf_disk_path, 'fake pdf bytes');
 
@@ -290,4 +290,65 @@ it('marks the pdf viewer with print/save-protection attributes (S14 B4)', functi
         ->assertOk()
         ->assertSee('#toolbar=0', false)
         ->assertSee('oncontextmenu="return false"', false);
+});
+
+it('renders an unprotected pdf iframe when print_disabled is off (default, S14 B5)', function () {
+    [$tenant, $lesson, $student] = contentTypeFixture(['type' => 'pdf']);
+    $lesson->update(['pdf_disk_path' => "pdfs/{$tenant->id}/{$lesson->id}.pdf"]);
+    Storage::disk('local')->put($lesson->pdf_disk_path, 'fake pdf bytes');
+
+    expect($lesson->print_disabled)->toBeFalse();
+
+    $this->actingAs($student)
+        ->get("http://physics.lms.test/lessons/{$lesson->id}")
+        ->assertOk()
+        ->assertDontSee('#toolbar=0', false)
+        ->assertDontSee('oncontextmenu="return false"', false);
+});
+
+it('marks the text lesson body with print/save-protection once print_disabled is on (S14 B5)', function () {
+    [, $lesson, $student] = contentTypeFixture([
+        'type' => 'text',
+        'text_body' => 'Hello',
+        'print_disabled' => true,
+    ]);
+
+    $this->actingAs($student)
+        ->get("http://physics.lms.test/lessons/{$lesson->id}")
+        ->assertOk()
+        ->assertSee('oncontextmenu="return false"', false)
+        ->assertSee('@media print', false);
+});
+
+it('renders an unprotected text lesson body when print_disabled is off (default, S14 B5)', function () {
+    [, $lesson, $student] = contentTypeFixture(['type' => 'text', 'text_body' => 'Hello']);
+
+    expect($lesson->print_disabled)->toBeFalse();
+
+    $this->actingAs($student)
+        ->get("http://physics.lms.test/lessons/{$lesson->id}")
+        ->assertOk()
+        ->assertDontSee('oncontextmenu="return false"', false)
+        ->assertDontSee('@media print', false);
+});
+
+it('toggles print_disabled on a pdf lesson through the lesson form (S14 B5)', function () {
+    [$tenant, $lesson] = contentTypeFixture(['type' => 'pdf']);
+    $instructor = User::factory()->create(['tenant_id' => $tenant->id]);
+    $instructor->assignRole('instructor');
+
+    $this->actingAs($instructor)
+        ->get("http://physics.lms.test/teach/lessons/{$lesson->id}/edit")
+        ->assertOk();
+
+    Livewire::test(EditLesson::class, ['record' => $lesson->id])
+        ->fillForm([
+            'title' => 'Reading material',
+            'type' => 'pdf',
+            'print_disabled' => true,
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($lesson->fresh()->print_disabled)->toBeTrue();
 });

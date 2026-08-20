@@ -14,6 +14,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
@@ -91,6 +92,13 @@ class LessonResource extends Resource
                 // trait regardless of what this textarea submits — this
                 // isn't the only line of defense.
                 ->helperText('Basic formatting only (bold, italic, lists) — other HTML is stripped on save.'),
+            Toggle::make('print_disabled')
+                ->label('Disable print/save')
+                // Only pdf/text render differently on this flag (design doc
+                // decision 9) — video's own S9 B6 protection stays
+                // unconditional, embed has no protection to gate.
+                ->visible(fn (Get $get): bool => in_array($get('type'), ['pdf', 'text'], true))
+                ->helperText('Suppresses the PDF toolbar / blocks right-click and printing for this lesson. A deterrent, not real DRM — off by default so free-preview and low-stakes content isn\'t taxed with extra friction (decision 10).'),
             TextInput::make('embed_url')
                 ->label('Embed URL')
                 ->url()

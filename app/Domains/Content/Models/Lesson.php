@@ -59,6 +59,7 @@ class Lesson extends Model
         'pdf_disk_path',
         'subtitle_disk_path',
         'subtitle_status',
+        'print_disabled',
     ];
 
     protected function casts(): array
@@ -67,6 +68,7 @@ class Lesson extends Model
             'scheduled_at' => 'datetime',
             'is_free_preview' => 'boolean',
             'video_duration_seconds' => 'integer',
+            'print_disabled' => 'boolean',
         ];
     }
 

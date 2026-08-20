@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B2 | Auto-subtitle generation — `SubtitleGenerator` (transcript chunks → SRT/VTT), `lessons.subtitle_disk_path`/`subtitle_status` (D13 pt.1) | ✅ done |
 | B3 | Instructor-editable subtitles — Filament textarea on `LessonResource`, `<track>` wiring on the player (D13 pt.2) | ✅ done |
 | B4 | Print/save protection — PDF lessons (toolbar-suppressed iframe + context-menu guard) (E4 pt.1) | ✅ done |
-| B5 | Print/save protection — text lessons (`@media print` block + context-menu guard) + `lessons.print_disabled` per-lesson toggle (E4 pt.2) | ⬜ not started |
+| B5 | Print/save protection — text lessons (`@media print` block + context-menu guard) + `lessons.print_disabled` per-lesson toggle (E4 pt.2) | ✅ done |
 | B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ⬜ not started |
 | B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ⬜ not started |
 | B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ⬜ not started |
@@ -166,15 +166,30 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1222/1223 pass (1 new test) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B5 — Print/save protection — text lessons — not started
+### B5 — Print/save protection — text lessons — done
 
-- `oncontextmenu="return false"` guard + `@media print { display: none;
-  }` CSS rule on the text lesson body (decision 9).
-- `lessons.print_disabled` boolean migration, default `false`
-  (decision 10 — opt-in per lesson), `LessonResource` toggle field.
-- Both B4's and B5's own protection gated behind `print_disabled` being
-  true for that lesson (video's own S9 B6 protection stays unconditional,
-  unchanged — this is new, opt-in ground for the two newly-covered types).
+- [x] `oncontextmenu="return false"` guard + `@media print { display:
+  none; }` CSS rule on the text lesson body in `content/watch.blade.php`
+  (decision 9).
+- [x] `lessons.print_disabled` boolean migration, default `false`
+  (decision 10 — opt-in per lesson), added to `Lesson`'s `$fillable`
+  and boolean cast, `LessonResource` `Toggle::make('print_disabled')`
+  field (visible for pdf/text lessons only — video's own protection
+  stays unconditional, embed has no protection to gate). A real model
+  column, so unlike `subtitle_text` it needs no manual
+  `afterStateHydrated()`/`EditLesson::afterSave()` wiring — Filament's
+  own default attribute hydration/save handles it.
+- [x] Both B4's and B5's own protection now gated behind `print_disabled`
+  being true for that lesson — the pdf branch's B4 markup got an `@if
+  ($lesson->print_disabled)` wrapper with an unprotected `@else`, the
+  text branch got the equivalent new-from-scratch.
+- [x] `LessonContentTypesTest`: renamed the B4 pdf-protection test to
+  assert it only fires with `print_disabled` on, plus 4 new cases —
+  unprotected pdf (default off), protected text, unprotected text
+  (default off), and a form-save round trip toggling the flag.
+
+`composer test`: 1226/1227 pass (4 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B6 — Zoom OAuth connect flow — not started
 
