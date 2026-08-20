@@ -5,6 +5,7 @@ namespace App\Domains\Batches\Models;
 use App\Domains\Batches\Events\LiveSessionRoomCreated;
 use App\Domains\Content\Models\Lesson;
 use App\Integrations\Drivers\ExternalLinkProvider;
+use App\Integrations\Drivers\ZoomMeetingsProvider;
 use App\Integrations\LiveClassProvider;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
@@ -20,7 +21,7 @@ class BatchSession extends Model
      *
      * @var array<int, string>
      */
-    public const LIVE_PROVIDERS = ['external_link', 'zoom_video_sdk'];
+    public const LIVE_PROVIDERS = ['external_link', 'zoom_video_sdk', 'zoom_meetings_oauth'];
 
     public const STATE_SCHEDULED = 'scheduled';
 
@@ -127,6 +128,7 @@ class BatchSession extends Model
         return match ($this->live_provider) {
             'external_link' => app(ExternalLinkProvider::class),
             'zoom_video_sdk' => app(LiveClassProvider::class),
+            'zoom_meetings_oauth' => app(ZoomMeetingsProvider::class),
             default => throw new InvalidArgumentException("Unknown live_provider [{$this->live_provider}]."),
         };
     }

@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B4 | Print/save protection — PDF lessons (toolbar-suppressed iframe + context-menu guard) (E4 pt.1) | ✅ done |
 | B5 | Print/save protection — text lessons (`@media print` block + context-menu guard) + `lessons.print_disabled` per-lesson toggle (E4 pt.2) | ✅ done |
 | B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ✅ done |
-| B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ⬜ not started |
+| B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ✅ done |
 | B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ⬜ not started |
 | B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ⬜ not started |
 | B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ⬜ not started |
@@ -233,14 +233,33 @@ dataset case for the newly-registered `InstituteZoomConnection`) — sole
 failure is the pre-existing `CourseSlugUniquenessTest`, carried since
 S1/S2, unrelated.
 
-### B7 — `ZoomMeetingsProvider` driver — not started
+### B7 — `ZoomMeetingsProvider` driver — done
 
-- New driver implementing `LiveClassProvider`, real Zoom Meetings REST
-  API calls (`Http::fake()`-tested, no real account — same
-  `RazorpayProvider`-test precedent), authenticating via the connected
-  institute's own stored OAuth token (B6), refreshing it when expired.
-- `BatchSession::resolveLiveClassProvider()` gains a `'zoom_meetings_oauth'`
-  arm (decision 1 — additive, `ZoomVideoSdkProvider` untouched).
+- [x] New driver (`app/Integrations/Drivers/ZoomMeetingsProvider.php`)
+  implementing `LiveClassProvider`, real Zoom Meetings REST API calls
+  (`Http::fake()`-tested, no real account — same `RazorpayProvider`-test
+  precedent): `createRoom()` POSTs `v2/users/me/meetings`, `joinUrl()`
+  GETs `v2/meetings/{id}` and returns `start_url` for instructor/
+  institute_admin, `join_url` otherwise, `markEnded()` best-effort PUTs
+  the meeting status to `end`. Authenticates via the tenant's
+  `InstituteZoomConnection` (B6) access token as-is — reading
+  `token_expires_at` and refreshing via `refresh_token` before an
+  expired-token call is B11's own scope, not built here yet, same
+  "this block ships it, the next completes it" order B4/B5 already
+  established.
+- [x] `BatchSession::LIVE_PROVIDERS` gains `'zoom_meetings_oauth'`;
+  `resolveLiveClassProvider()` gains a `'zoom_meetings_oauth'` arm
+  (decision 1 — additive, `ZoomVideoSdkProvider` untouched);
+  `BatchSessionsRelationManager`'s `live_provider` Select gains the new
+  option.
+- [x] `ZoomMeetingsProviderTest`: no-connection throws, real meeting
+  creation with the right auth header/body, host vs student join URL,
+  markEnded PUTs (and no-ops with nothing sent when no meeting was ever
+  created), and the `resolveLiveClassProvider()` dispatch.
+
+`composer test`: 1241/1242 pass (7 new tests, incl. a `RoleSeeder` fix
+after the first run) — sole failure is the pre-existing
+`CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B8 — Zoom recording-completed webhook — not started
 
