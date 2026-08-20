@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ✅ done |
 | B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ✅ done |
 | B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ✅ done |
-| B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ⬜ not started |
+| B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ✅ done |
 | B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ⬜ not started |
 | B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ⬜ not started |
 | B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ⬜ not started |
@@ -303,16 +303,44 @@ unrelated. (Caught one real bug during this block's own testing:
 it. Widened to `Symfony\Component\HttpFoundation\Response`, matching
 `DownloadLessonPdfController`'s own precedent.)
 
-### B9 — `DownloadLiveRecording` job — not started
+### B9 — `DownloadLiveRecording` job — done
 
-- Real `ShouldQueue` job (decision 4): downloads the recording file from
-  Zoom's own download URL, stores it on the lesson's existing
-  `video_disk_path` column (no new playback column), updates
-  `live_recordings.status`, fires the *existing* `LessonVideoReady`
-  event unchanged.
-- Idempotency: a retried webhook delivery for an already-`ready` recording
-  no-ops (matches `PaymentReconciler`'s own established idempotent-webhook
-  discipline).
+- [x] Real `ShouldQueue` job (`app/Domains/Batches/Jobs/DownloadLiveRecording.php`,
+  decision 4): lists the meeting's recording files, downloads the MP4,
+  stores it on the lesson's existing `video_disk_path` column (no new
+  playback column, `videos/{tenant_id}/{lesson_id}.mp4` — same convention
+  a manual upload already uses), updates `live_recordings.status`
+  (`downloading` → `ready`/`failed`), fires the *existing*
+  `LessonVideoReady` event unchanged so S3's ingestion pipeline picks it
+  up.
+- [x] `ZoomRecordingWebhookHandler::handleRecordingCompleted()` now
+  dispatches the job right after creating the `pending` row (decision 4 —
+  the controller/handler does no download logic itself, just routes to
+  the job).
+- [x] Idempotency, two layers: the webhook handler no-ops a retried
+  delivery whose `LiveRecording` row already moved past `pending` (no
+  duplicate row, no re-dispatch); the job itself also no-ops if the row
+  is already `ready` — matches `PaymentReconciler`'s own established
+  idempotent-webhook discipline.
+- [x] Found and avoided a latent bug while modeling this on
+  `GenerateLessonSubtitles`' shape: that job calls `$this->fail($e)` but
+  only uses the `Queueable` trait — `fail()` lives on
+  `InteractsWithQueue`, which `CallQueuedHandler::setJobInstanceIfNecessary()`
+  only wires up when a job actually uses that trait. Untested (no
+  failure-path test exists for it), so it's live but unverified; flagged
+  here rather than fixed, out of scope for this block.
+  `DownloadLiveRecording` uses both traits so its own failure path is
+  real and tested.
+- [x] `ZoomRecordingWebhookTest` updated (`Queue::fake()`, asserts the
+  dispatch, new retried-webhook-past-pending case);
+  `DownloadLiveRecordingTest` — success path (disk write, lesson/recording
+  state, event dispatched), no-MP4-file failure marks `failed`, already-
+  `ready` no-op sends no HTTP at all.
+
+`composer test`: 1250/1251 pass (6 new tests, plus one fix mid-block: the
+job needed `Dispatchable`/`InteractsWithQueue` alongside `Queueable` for
+`::dispatch()`/`fail()` to resolve at all) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B10 — Recording playback verification — not started
 

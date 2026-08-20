@@ -2,6 +2,7 @@
 
 namespace App\Domains\Batches\Services;
 
+use App\Domains\Batches\Jobs\DownloadLiveRecording;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\LiveRecording;
 use App\Domains\Tenancy\Models\Tenant;
@@ -13,9 +14,8 @@ use RuntimeException;
  * HMAC-SHA256 webhook signature (mirrors
  * `PaymentProvider::verifyWebhookSignature()`'s established shape) and
  * records a `pending` LiveRecording row for a `recording.completed`
- * event. Downloading the file itself is B9's own `DownloadLiveRecording`
- * job — not dispatched from here yet, same "this block ships it, the
- * next completes it" order B4/B5/B7 already established for this slice.
+ * event, then dispatches `DownloadLiveRecording` (B9) — the controller
+ * itself does no business logic (decision 4).
  */
 class ZoomRecordingWebhookHandler
 {
@@ -70,10 +70,25 @@ class ZoomRecordingWebhookHandler
 
         app(CurrentTenant::class)->set(Tenant::findOrFail($session->tenant_id));
 
-        LiveRecording::create([
+        // Zoom retries webhook delivery on anything but a 2xx response, so
+        // the same event can genuinely arrive twice (decision 4) — an
+        // existing row past 'pending' is left alone rather than
+        // re-dispatched, same idempotent-webhook discipline
+        // PaymentReconciler's own capture() already established.
+        $recording = LiveRecording::where('batch_session_id', $session->id)
+            ->where('provider_recording_id', $recordingId)
+            ->first();
+
+        if ($recording !== null && $recording->status !== 'pending') {
+            return;
+        }
+
+        $recording ??= LiveRecording::create([
             'batch_session_id' => $session->id,
             'provider_recording_id' => $recordingId,
             'status' => 'pending',
         ]);
+
+        DownloadLiveRecording::dispatch($recording->id, $session->tenant_id);
     }
 }

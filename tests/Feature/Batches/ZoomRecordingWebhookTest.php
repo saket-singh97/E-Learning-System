@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Batches\Jobs\DownloadLiveRecording;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\LiveRecording;
@@ -9,6 +10,7 @@ use App\Domains\Content\Models\Lesson;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 
 uses(RefreshDatabase::class);
 
@@ -74,7 +76,9 @@ it('rejects a recording.completed event with a bad signature', function () {
         ->assertStatus(401);
 });
 
-it('creates a pending live recording for the matching batch session, bound to its own tenant', function () {
+it('creates a pending live recording and dispatches the download job, bound to its own tenant', function () {
+    Queue::fake();
+
     zoomSignedPost([
         'event' => 'recording.completed',
         'payload' => ['object' => ['id' => '987654321', 'uuid' => 'rec-uuid-1']],
@@ -86,6 +90,29 @@ it('creates a pending live recording for the matching batch session, bound to it
     expect($recording->tenant_id)->toBe($this->tenant->id)
         ->and($recording->provider_recording_id)->toBe('rec-uuid-1')
         ->and($recording->status)->toBe('pending');
+
+    Queue::assertPushed(DownloadLiveRecording::class, fn ($job) => $job->liveRecordingId === $recording->id
+        && $job->tenantId === $this->tenant->id);
+});
+
+it('does not re-dispatch or duplicate a row for a retried webhook past pending', function () {
+    Queue::fake();
+
+    $body = [
+        'event' => 'recording.completed',
+        'payload' => ['object' => ['id' => '987654321', 'uuid' => 'rec-uuid-1']],
+    ];
+    zoomSignedPost($body)->assertOk();
+
+    app(CurrentTenant::class)->set($this->tenant);
+    LiveRecording::where('batch_session_id', $this->session->id)->sole()->update(['status' => 'ready']);
+    app(CurrentTenant::class)->clear();
+
+    zoomSignedPost($body)->assertOk();
+
+    app(CurrentTenant::class)->set($this->tenant);
+    expect(LiveRecording::count())->toBe(1);
+    Queue::assertPushed(DownloadLiveRecording::class, 1);
 });
 
 it('ignores a recording.completed event for an unknown meeting id', function () {
