@@ -24,6 +24,26 @@ class ResolveTenant
      * silently stops filtering during model hydration. Platform-level hosts
      * (the super panel on the bare domain) legitimately have no tenant, so
      * this mode must not treat "no tenant" as an error.
+     *
+     * `:optional` is also prepended to the app's GLOBAL middleware stack
+     * (bootstrap/app.php withMiddleware — not the `web` group append below
+     * it) for a second reason: Filament always slots its own Authenticate
+     * middleware at a fixed early position in a panel's pipeline regardless
+     * of where ResolveTenant sits in ->middleware() — confirmed via
+     * `route:list -v`, actual order is SetUpPanel, session middleware,
+     * Authenticate, *then* everything the panel provider declared,
+     * ResolveTenant included. An unauthenticated visit to /admin or /teach
+     * therefore hit Authenticate first, which tries to build the login
+     * redirect URL — a `Route::domain('{subdomain}...')` route — before
+     * URL::defaults(['subdomain' => ...]) had ever been set, throwing
+     * UrlGenerationException instead of showing the login page. Global
+     * middleware runs before every route group's own stack, panels
+     * included, so the prepended pass sets the URL default in time; the
+     * panel-level pass (in ->middleware()) still runs afterwards and does
+     * the real CurrentTenant binding + suspension check once a session
+     * exists, same as the existing `web`-group append already did for
+     * Livewire — this is a third, deliberate call site, not a redundancy
+     * to clean up.
      */
     public function handle(Request $request, Closure $next, ?string $mode = null): Response
     {
@@ -47,6 +67,22 @@ class ResolveTenant
         }
 
         if ($tenant->isSuspended()) {
+            // This class also runs prepended to the app's global middleware
+            // stack (bootstrap/app.php), before StartSession — no session
+            // exists yet to flush there. Throwing anyway would win the race
+            // against the later, session-aware pass (web-group append /
+            // panel ->middleware()) and skip the flush entirely, since the
+            // exception aborts the pipeline before that later pass ever
+            // runs. So the session-less pass only sets the URL default
+            // (still needed so a same-tenant redirect doesn't itself crash)
+            // and defers the actual 403 + flush to the later pass, which
+            // sees the same suspended tenant again once a session exists.
+            if (! $request->hasSession()) {
+                URL::defaults(['subdomain' => $tenant->subdomain]);
+
+                return $next($request);
+            }
+
             $request->session()->flush();
 
             throw TenantSuspendedException::forSubdomain($subdomain);

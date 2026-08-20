@@ -7,23 +7,96 @@ at the source.
 
 ## Right now (2026-08-19)
 
-- **S13 — Discovery & Content Engagement: DESIGN + PLAN DONE, build not
-  started.** `docs/superpowers/specs/2026-08-19-s13-discovery-engagement-design.md`,
-  `...-plan.md`. `docs/FEATURES.md` C7-C10 (categories/tags/catalog
-  filtering, prerequisites + sequential unlocking, `Program` bundles,
-  catalog/search/wishlist/recommendations) + N7-N10 (lesson Q&A, video
-  notes/bookmarks, 1:1 direct messaging, course ratings/reviews). Picked
-  as the next P2-backlog slice per `docs/ROADMAP.md`'s own S13 row (that
-  row's scope was already earmarked, not invented fresh). Extends the
-  existing `Content` domain (7 of 8 items — discovery/engagement is
-  Content's own business logic, not a cross-cutting layer the way
-  `Billing`/`Security` were) plus `Comms` (direct messaging only); no new
-  domain. 12 new `BelongsToTenant` models — the widest single-slice model
-  count so far (S12 had 5). Verified before writing the design: all 8
-  items fully greenfield, zero existing category/tag/prerequisite/
-  program/wishlist/note/bookmark/rating/review/chat schema anywhere
-  (grepped, not assumed). 18 blocks (B0-B17). Next step: run the
-  per-block build command in the plan doc starting at B0.
+- **S14 — Video & Live-Class Depth: DESIGN + PLAN DONE, build not
+  started.** `docs/superpowers/specs/2026-08-19-s14-video-live-depth-design.md`,
+  `...-plan.md`. `docs/ROADMAP.md`'s own S14 row lists D9-D13/E4/G5-G10
+  (12 items), but D10/D11/D12 (multi-DRM, forensic watermark, offline
+  DRM) are **P3-tier**, not P2 — cut from this slice's real build scope
+  (9 items) since all three need a real paid vendor relationship (DRM
+  key-server, watermarking service) this platform has no reason to have
+  yet (zero paying institutes). Verified before writing the design: no
+  concurrent-playback tracking, no subtitle/SRT/VTT anything, no
+  live-poll concept anywhere exist (grepped, not assumed); the existing
+  `ZoomVideoSdkProvider` (S5, unbound) is a different mechanism entirely
+  from G7's own "Zoom OAuth per institute" ask (client-side JWT Video
+  SDK vs. a real per-institute OAuth-connected Meetings REST API) — G7
+  is new work, not "flip on the existing driver." 19 blocks (B0-B18).
+  Next step: run the per-block build command in the plan doc starting
+  at B0.
+
+- **S13 — Discovery & Content Engagement: COMPLETE, all 18 blocks
+  (2026-08-19).** `docs/superpowers/specs/2026-08-19-s13-discovery-engagement-design.md`,
+  `...-plan.md` (full per-block build log + B17's own review-pass notes
+  live there, not repeated here). `docs/FEATURES.md` C7-C10 (categories/
+  tags/catalog filtering, prerequisites + sequential unlocking, `Program`
+  bundles, catalog/search/wishlist/recommendations) + N7-N10 (lesson Q&A,
+  video notes/bookmarks, 1:1 direct messaging, course ratings/reviews).
+  Extends the existing `Content` domain (7 of 8 items) plus `Comms`
+  (direct messaging + moderation); no new domain. 12 new `BelongsToTenant`
+  models — the widest single-slice model count so far (S12 had 5), all
+  registered in `TenantModelRegistry`.
+  - **B0-B4** built C7/C10: `Category`/`Tag` + pivots, Admin-panel CRUD;
+    public `CourseCatalog` (filters + Eloquent `LIKE` search, no raw
+    SQL); `Wishlist` toggle; `RecommendationService` (same-category/tag
+    heuristic, explicitly not a real recommender yet — no production
+    traffic to train one on).
+  - **B5-B6** built C8: `lesson_prerequisites` pivot + `PrerequisiteGraph`
+    (bounded-DFS cycle check, write-time); `LessonCompletion` (per-type
+    binary heuristic) wired into `LessonAccess::canStream()`.
+  - **B7-B8** built C9: `Program`/`program_batch` (bundles `Batch` rows,
+    this app's real sellable unit); `fee_invoices.program_id` nullable FK
+    (`batch_id`/`enrolment_id` relaxed to nullable alongside it);
+    `ProgramEnrolmentService` enrols one per bundled batch on payment
+    capture, via a `ProgramInvoicePaid` event (not a direct call — B17
+    fixed an initial version that called it directly).
+  - **B9-B11** built N7/N8: `LessonQuestion`/`Reply`/`Vote` (post/reply/
+    upvote gated by `canStream()`, resolved-marking staff-only);
+    `LessonNote` (nullable `body` doubles as a bookmark), player timeline
+    markers reusing `DoubtChat`'s own seek-to dispatch.
+  - **B12-B13** built N9: new Comms `DirectMessage`/`BlockedUser`/
+    `MessageReport` — symmetric block enforcement at send time; Admin
+    moderation queue (`actioned` hides a message display-time only,
+    `dismissed` clears the flag).
+  - **B14-B15** built N10: `CourseReview` (unique per learner/course, DB
+    `CHECK` on rating); `CourseReviewPolicy` gates on genuine
+    (active/expired) enrolment, any batch of the course; instructor
+    response; Admin hide/show — reversible both ways.
+  - **B16** — `TenantModelRegistry` sweep, confirmed exact-complete.
+  - **B17's own dedicated review pass** — 8 parallel finder agents, same
+    discipline S9 B14/S10 B15/S11 B16/S12 B14 each established. **Found
+    and fixed 7 real bugs**: `PaymentReconciler` called
+    `ProgramEnrolmentService` directly across the Fees→Content domain
+    boundary (a hard CLAUDE.md violation, independently flagged by 3 of
+    the 8 agents) — fixed with a `ProgramInvoicePaid` event, mirroring
+    `PaymentCaptured`'s shape; `TeachPanelProvider`'s directory-wide
+    resource discovery silently exposed Category/Tag/Program/
+    CourseReview management to every instructor (Admin's own explicit
+    `->resources()` array only *added* those to Admin, never removed
+    them from Teach's scan) — fixed by switching Teach to the same
+    explicit-array pattern; `LessonResource`'s prerequisite field and
+    `CourseResource`'s category/tag fields both had same-tenant/
+    same-course scoping that was UI-only — Filament's relationship
+    `Select` syncs whatever raw ids are submitted, `modifyRelationshipQueryUsing`
+    only narrows the dropdown's own options and the detach diff, never
+    what gets attached (confirmed against Filament's own vendor source)
+    — fixed with real `->rule()` server-side checks on both;
+    `CourseReviewPolicy::canReview()` counted any enrolment status,
+    letting a rejected/never-paid applicant post a public review — fixed
+    to require genuine participation; `CourseCatalog::courses()`
+    reimplemented course visibility instead of reusing `LessonAccess`,
+    silently dropping the staff-preview bypass — fixed by widening
+    `LessonAccess::isStaff()` to `public` and reusing it;
+    `ProgramEnrolmentService::enrolFromInvoice()` had a TOCTOU race on
+    concurrent webhook deliveries, unlike `BatchEnrolmentService::createEnrolment()`'s
+    own established try/catch pattern — fixed the same way. All 7 fixed
+    with regression tests, plus one new lifecycle E2E test chaining
+    catalog search → wishlist → enrol → prerequisite-denied →
+    completion-unlocked in one run.
+  - Tests green: **1206/1207** (same 1 pre-existing, unrelated
+    `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+    scope) — 113 new tests across all 18 blocks.
+  - `docs/PROJECT-STATUS.md` updated to COMPLETE, matching S1-S12's own
+    post-completion format.
 
 - **S12 — Security & Resilience Hardening: COMPLETE, all 15 blocks
   (2026-08-18).** `docs/superpowers/specs/2026-08-17-s12-security-resilience-design.md`,
@@ -930,7 +1003,29 @@ at the source.
   functions as a cross-cutting enforcement layer here, not a domain whose
   business logic another domain is reaching into. Every call site
   documents this inline; don't treat it as license to call *any* other
-  domain's service, only this specific, already-established shape
+  domain's service, only this specific, already-established shape.
+  **Caught again in S13 B17's own review pass** (`Fees\Services\PaymentReconciler`
+  called `Content\Services\ProgramEnrolmentService` directly, no event) —
+  fixed with a `ProgramInvoicePaid` event + a Content-side listener,
+  mirroring `PaymentCaptured`'s own shape; not a case that fits the
+  Billing exception above (Content's own business logic, not a
+  cross-cutting quota gate)
+- Don't trust a Filament `Select::relationship(..., modifyQueryUsing:
+  ...)`/`modifyRelationshipQueryUsing` closure to constrain what actually
+  gets **written** on save — it only narrows the dropdown's own rendered
+  options and the auto-*detach* diff. The real save path
+  (`Select::saveRelationshipsUsing()`) calls `$relationship->sync($state,
+  detaching: false)` with the **raw submitted state**, completely
+  unfiltered by that closure (confirmed by reading Filament's own vendor
+  source, S13 B17). A `BelongsToMany` relationship field's own `->rule()`
+  closure is the *only* real server-side gate — it must validate every
+  submitted id itself (existence, tenant scope, any other business
+  constraint) and `$fail()` loudly on anything invalid, never silently
+  skip a null/unexpected value. Found on two fields in the same block:
+  `LessonResource`'s prerequisites (same-course scoping was UI-only, and
+  the existing rule silently skipped an unresolvable id instead of
+  failing) and `CourseResource`'s categories/tags (no `->rule()` existed
+  at all)
 - Don't add a `BelongsToTenant` model without registering it — `CrossTenantTest`
   fails the build if you forget
 - Don't inline a lesson visibility check in a controller — `LessonAccess`

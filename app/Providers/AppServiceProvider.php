@@ -9,14 +9,22 @@ use App\Domains\Batches\Events\AttendanceRecorded;
 use App\Domains\Batches\Events\EnrolmentApprovalExpired;
 use App\Domains\Batches\Events\EnrolmentAwaitingPayment;
 use App\Domains\Batches\Listeners\FinalizeEnrolmentOnPaymentCaptured;
+use App\Domains\AI\Events\LessonArtifactReady;
+use App\Domains\Content\Listeners\EnrolFromProgramPayment;
+use App\Domains\Content\Listeners\GenerateLessonSubtitles;
 use App\Domains\Batches\Listeners\SendEnrolmentExpiredNotification;
 use App\Domains\Batches\Livewire\BatchCatalog;
+use App\Domains\Comms\Livewire\DirectMessages;
+use App\Domains\Content\Livewire\CourseReviews;
+use App\Domains\Content\Livewire\LessonNotes;
+use App\Domains\Content\Livewire\LessonQuestions;
 use App\Domains\Batches\Listeners\BustAggregateCacheOnAttendance;
 use App\Domains\Comms\Listeners\SendAbsenceAlert;
 use App\Domains\Comms\Listeners\SendLowAttendanceAlert;
 use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Events\LessonVideoReady;
 use App\Domains\Fees\Events\PaymentCaptured;
+use App\Domains\Fees\Events\ProgramInvoicePaid;
 use App\Domains\Fees\Listeners\CreateInvoiceForPendingEnrolment;
 use App\Domains\Security\Listeners\ReconcileCookieConsent;
 use App\Domains\Security\Listeners\RecordLoginHistory;
@@ -140,10 +148,18 @@ class AppServiceProvider extends ServiceProvider
         // not app/Domains/*/Listeners) — cross-domain event wiring belongs here,
         // it's the boundary connecting Content -> AI, not either domain's own concern.
         Event::listen(LessonVideoReady::class, StartIngestion::class);
+        // S14 B2 — subtitles ride the same ingestion-complete signal
+        // StartIngestion's own chain produces, not a separate manual trigger.
+        Event::listen(LessonArtifactReady::class, GenerateLessonSubtitles::class);
         Event::listen(LessonIngestionRetryRequested::class, RetryIngestion::class);
         Event::listen(EnrolmentApprovalExpired::class, SendEnrolmentExpiredNotification::class);
         Event::listen(EnrolmentAwaitingPayment::class, CreateInvoiceForPendingEnrolment::class);
         Event::listen(PaymentCaptured::class, FinalizeEnrolmentOnPaymentCaptured::class);
+        // S13 B17 — Fees' program-invoice half of the same PaymentCaptured
+        // shape, fixed from a direct PaymentReconciler -> ProgramEnrolmentService
+        // call the review pass caught (CLAUDE.md: Events only, never a
+        // direct cross-domain service call).
+        Event::listen(ProgramInvoicePaid::class, EnrolFromProgramPayment::class);
         Event::listen(AttendanceRecorded::class, SendAbsenceAlert::class);
         Event::listen(AttendanceRecorded::class, SendLowAttendanceAlert::class);
 
@@ -172,6 +188,10 @@ class AppServiceProvider extends ServiceProvider
         // tag needs an explicit alias.
         Livewire::component('ai.doubt-chat', DoubtChat::class);
         Livewire::component('batches.batch-catalog', BatchCatalog::class);
+        Livewire::component('content.lesson-questions', LessonQuestions::class);
+        Livewire::component('content.lesson-notes', LessonNotes::class);
+        Livewire::component('comms.direct-messages', DirectMessages::class);
+        Livewire::component('content.course-reviews', CourseReviews::class);
 
         // Unscoped (no third $scopes argument) — applies to all three
         // Filament panels (admin/teach/super) with one registration,

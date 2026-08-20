@@ -2,6 +2,10 @@
 
 namespace App\Providers\Filament;
 
+use App\Domains\Content\Filament\Resources\Categories\CategoryResource;
+use App\Domains\Content\Filament\Resources\CourseReviews\CourseReviewResource;
+use App\Domains\Content\Filament\Resources\Programs\ProgramResource;
+use App\Domains\Content\Filament\Resources\Tags\TagResource;
 use App\Domains\Tenancy\Services\BrandingService;
 use App\Filament\Admin\Auth\Login;
 use App\Filament\Widgets\CircuitBreakerStatusWidget;
@@ -46,6 +50,22 @@ class AdminPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Domains/Batches/Filament/Resources'), for: 'App\Domains\Batches\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Fees/Filament/Resources'), for: 'App\Domains\Fees\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Comms/Filament/Resources'), for: 'App\Domains\Comms\Filament\Resources')
+            // Explicit, not discoverResources — Content's own resource dir
+            // also holds CourseResource et al., deliberately kept off this
+            // panel (instructor-only, Teach panel). Category/Tag taxonomy
+            // and Program bundle authoring are the Content concerns that
+            // are an institute_admin job, so each is registered by name
+            // instead of by directory scan. (S13 B7: the plan's own text
+            // said "Super-panel ProgramResource" — Program is tenant-scoped
+            // (BelongsToTenant), and SuperPanelProvider resolves no tenant
+            // at all, so that placement can't actually work; Admin panel
+            // matches every other tenant-owned Content resource instead.)
+            ->resources([
+                CategoryResource::class,
+                TagResource::class,
+                ProgramResource::class,
+                CourseReviewResource::class,
+            ])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\Filament\Admin\Pages')
             ->pages([
                 Dashboard::class,

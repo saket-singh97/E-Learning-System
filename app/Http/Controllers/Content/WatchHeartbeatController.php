@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Content;
 
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Models\VideoWatchEvent;
+use App\Domains\Content\Services\ConcurrentStreamGuard;
 use App\Domains\Content\Services\LessonAccess;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Content\WatchHeartbeatRequest;
@@ -11,7 +12,7 @@ use Illuminate\Http\JsonResponse;
 
 class WatchHeartbeatController extends Controller
 {
-    public function __invoke(WatchHeartbeatRequest $request, LessonAccess $access): JsonResponse
+    public function __invoke(WatchHeartbeatRequest $request, LessonAccess $access, ConcurrentStreamGuard $streamGuard): JsonResponse
     {
         $viewer = $request->user();
 
@@ -27,6 +28,11 @@ class WatchHeartbeatController extends Controller
         abort_unless($access->isVisibleTo($lesson, $viewer), 404);
         abort_unless($access->canStream($lesson, $viewer), 403);
         abort_unless($access->isPlayable($lesson), 404);
+
+        // D9 (S14 B1) — this is the one place lesson_stream_sessions gets
+        // written: refuses a second concurrent stream on a different
+        // lesson, then starts/refreshes this lesson's own session row.
+        $streamGuard->recordHeartbeat($viewer, $lesson);
 
         $data = $request->validated();
 

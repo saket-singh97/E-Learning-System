@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Content;
 
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Content\Services\ConcurrentStreamGuard;
 use App\Domains\Content\Services\LessonAccess;
 use App\Http\Controllers\Controller;
 use App\Integrations\VideoProvider;
@@ -18,7 +19,7 @@ class StreamLessonController extends Controller
      * splices leftover route parameters into method arguments by position, so
      * a scalar $lesson parameter receives the subdomain instead.
      */
-    public function __invoke(Request $request, VideoProvider $video, LessonAccess $access): BinaryFileResponse
+    public function __invoke(Request $request, VideoProvider $video, LessonAccess $access, ConcurrentStreamGuard $streamGuard): BinaryFileResponse
     {
         $lesson = Lesson::findOrFail($request->route('lesson'));
 
@@ -26,6 +27,13 @@ class StreamLessonController extends Controller
 
         abort_unless($access->isPlayable($lesson) && $access->isVisibleTo($lesson, $viewer), 404);
         abort_unless($access->canStream($lesson, $viewer), 403);
+
+        // D9 (S14 B1) — refuse a second concurrent stream on a different
+        // lesson; this controller only checks, WatchHeartbeatController
+        // owns writing/refreshing the session row (see its own note).
+        if ($viewer !== null) {
+            $streamGuard->assertNoOtherActiveStream($viewer, $lesson);
+        }
 
         $path = $video->url($lesson);
         $bytes = $this->bytesServed($request, (int) filesize($path));

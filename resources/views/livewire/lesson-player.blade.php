@@ -77,8 +77,13 @@
         controlsList="nodownload"
         oncontextmenu="return false"
         x-on:loadedmetadata="onLoadedMetadata()"
+        x-on:timeupdate="$dispatch('lesson-time-update', { seconds: Math.floor($refs.video.currentTime) })"
         class="w-full"
-    ></video>
+    >
+        @if ($subtitleUrl)
+            <track kind="subtitles" src="{{ $subtitleUrl }}" srclang="en" label="English" default>
+        @endif
+    </video>
 
     <div
         x-ref="watermark"

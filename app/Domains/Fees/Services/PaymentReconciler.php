@@ -3,6 +3,7 @@
 namespace App\Domains\Fees\Services;
 
 use App\Domains\Fees\Events\PaymentCaptured;
+use App\Domains\Fees\Events\ProgramInvoicePaid;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\InvalidWebhookSignatureException;
@@ -80,7 +81,19 @@ class PaymentReconciler
             $invoice = $payment->invoice;
             $invoice->update(['status' => 'paid', 'paid_at' => now()]);
 
-            PaymentCaptured::dispatch($invoice->enrolment_id, $invoice->tenant_id);
+            // A program-linked invoice has no single enrolment_id to carry
+            // (S13 B8, design doc decision 4), so it can't reuse
+            // PaymentCaptured's shape — but this still dispatches an
+            // event, not a direct call into Content's own
+            // ProgramEnrolmentService (fixed by B17's own review pass,
+            // which caught the original direct-call version of this line
+            // as a CLAUDE.md violation: "Domains talk to each other
+            // through Events/ only").
+            if ($invoice->program_id !== null) {
+                ProgramInvoicePaid::dispatch($invoice->id, $invoice->tenant_id);
+            } else {
+                PaymentCaptured::dispatch($invoice->enrolment_id, $invoice->tenant_id);
+            }
         });
     }
 

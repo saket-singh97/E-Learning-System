@@ -19,14 +19,27 @@ use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\SubscriptionInvoice;
 use App\Domains\Billing\Models\TenantStorageUsage;
 use App\Domains\Billing\Models\TenantSubscription;
+use App\Domains\Comms\Models\BlockedUser;
+use App\Domains\Comms\Models\DirectMessage;
+use App\Domains\Comms\Models\MessageReport;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
 use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\BandwidthUsageDaily;
+use App\Domains\Content\Models\Category;
 use App\Domains\Content\Models\Course;
+use App\Domains\Content\Models\CourseReview;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Content\Models\LessonNote;
+use App\Domains\Content\Models\LessonQuestion;
+use App\Domains\Content\Models\LessonQuestionReply;
+use App\Domains\Content\Models\LessonQuestionVote;
+use App\Domains\Content\Models\LessonStreamSession;
+use App\Domains\Content\Models\Program;
+use App\Domains\Content\Models\Tag;
 use App\Domains\Content\Models\VideoWatchEvent;
+use App\Domains\Content\Models\Wishlist;
 use App\Domains\Fees\Models\FeeCoupon;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
@@ -81,6 +94,19 @@ class TenantModelRegistry
         AccountSharingFlag::class,
         GdprExportRequest::class,
         GdprDeletionRequest::class,
+        Category::class,
+        Tag::class,
+        Wishlist::class,
+        Program::class,
+        LessonQuestion::class,
+        LessonQuestionReply::class,
+        LessonQuestionVote::class,
+        LessonNote::class,
+        DirectMessage::class,
+        BlockedUser::class,
+        MessageReport::class,
+        CourseReview::class,
+        LessonStreamSession::class,
     ];
 
     /**
@@ -494,6 +520,69 @@ class TenantModelRegistry
                 'status' => 'pending',
                 'scheduled_for' => now()->addDays(30),
             ],
+            Category::class => ['name' => 'Row', 'slug' => 'row-'.uniqid()],
+            Tag::class => ['name' => 'Row', 'slug' => 'row-'.uniqid()],
+            Wishlist::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'course_id' => Course::create(['title' => 'Row', 'slug' => 'row-'.uniqid()])->id,
+            ],
+            Program::class => ['title' => 'Row', 'slug' => 'row-'.uniqid(), 'price' => 999],
+            LessonQuestion::class => [
+                'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'body' => 'Row?',
+            ],
+            LessonQuestionReply::class => [
+                'lesson_question_id' => LessonQuestion::create([
+                    'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
+                    'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'body' => 'Row?',
+                ])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'body' => 'Row.',
+            ],
+            LessonQuestionVote::class => [
+                'lesson_question_id' => LessonQuestion::create([
+                    'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
+                    'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'body' => 'Row?',
+                ])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
+            LessonNote::class => [
+                'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'video', 'position' => 0])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'timestamp_s' => 10,
+            ],
+            DirectMessage::class => [
+                'sender_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'recipient_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'body' => 'Row',
+            ],
+            BlockedUser::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'blocked_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
+            MessageReport::class => [
+                'reporter_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'direct_message_id' => DirectMessage::create([
+                    'sender_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'recipient_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'body' => 'Row',
+                ])->id,
+                'reason' => 'Row reason',
+            ],
+            CourseReview::class => [
+                'course_id' => Course::create(['title' => 'Row', 'slug' => 'row-'.uniqid()])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'rating' => 5,
+            ],
+            LessonStreamSession::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'video', 'position' => 0])->id,
+                'started_at' => now(),
+                'last_heartbeat_at' => now(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -540,6 +629,19 @@ class TenantModelRegistry
             AccountSharingFlag::class => ['distinct_device_count_7d' => 999],
             GdprExportRequest::class => ['status' => 'tampered'],
             GdprDeletionRequest::class => ['status' => 'tampered'],
+            Category::class => ['name' => 'tampered'],
+            Tag::class => ['name' => 'tampered'],
+            Wishlist::class => ['course_id' => 999999],
+            Program::class => ['title' => 'tampered'],
+            LessonQuestion::class => ['body' => 'tampered'],
+            LessonQuestionReply::class => ['body' => 'tampered'],
+            LessonQuestionVote::class => ['created_at' => now()->subDay()],
+            LessonNote::class => ['body' => 'tampered'],
+            DirectMessage::class => ['body' => 'tampered'],
+            BlockedUser::class => ['created_at' => now()->subDay()],
+            MessageReport::class => ['status' => 'tampered'],
+            CourseReview::class => ['rating' => 1],
+            LessonStreamSession::class => ['ended_at' => now()],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

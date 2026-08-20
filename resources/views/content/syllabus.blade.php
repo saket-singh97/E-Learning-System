@@ -17,6 +17,21 @@
 
     <livewire:syllabus-tree :course="$course" />
 
+    @if ($recommendations->isNotEmpty())
+        <h2>You might also like</h2>
+        <ul>
+            @foreach ($recommendations as $recommended)
+                <li>
+                    <a href="{{ route('courses.show', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'course' => $recommended->slug]) }}">
+                        {{ $recommended->title }}
+                    </a>
+                </li>
+            @endforeach
+        </ul>
+    @endif
+
+    <livewire:content.course-reviews :course="$course" />
+
     @livewireScripts
 </body>
 </html>

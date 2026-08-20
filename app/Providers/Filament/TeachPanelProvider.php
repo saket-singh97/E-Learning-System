@@ -2,6 +2,9 @@
 
 namespace App\Providers\Filament;
 
+use App\Domains\Content\Filament\Resources\CourseSections\CourseSectionResource;
+use App\Domains\Content\Filament\Resources\Courses\CourseResource;
+use App\Domains\Content\Filament\Resources\Lessons\LessonResource;
 use App\Domains\Tenancy\Services\BrandingService;
 use App\Filament\Teach\Auth\Login;
 use App\Http\Middleware\EnsureAccountNotFlaggedForSharing;
@@ -41,7 +44,24 @@ class TeachPanelProvider extends PanelProvider
             ->favicon(fn () => app(BrandingService::class)->faviconUrl())
             ->brandLogo(fn () => app(BrandingService::class)->logoUrl())
             ->discoverResources(in: app_path('Domains/Tenancy/Filament/Resources'), for: 'App\Domains\Tenancy\Filament\Resources')
-            ->discoverResources(in: app_path('Domains/Content/Filament/Resources'), for: 'App\Domains\Content\Filament\Resources')
+            // Explicit, not discoverResources (S13 B17 fix) — Content's own
+            // resource directory also holds CategoryResource/TagResource/
+            // ProgramResource/CourseReviewResource, all deliberately
+            // Admin-panel-only (institute_admin: taxonomy governance,
+            // bundle pricing, review moderation). A directory-wide scan
+            // here silently exposed all four to any instructor regardless
+            // of AdminPanelProvider's own explicit ->resources() array,
+            // since that array only *adds* them to Admin, it never
+            // *removes* them from a sibling panel's own directory scan —
+            // found by B17's own review pass. CourseSectionResource is
+            // hidden from nav (CLAUDE.md) but still needs its own routes
+            // for SectionsRelationManager's edit deep-link, so it's listed
+            // explicitly here too, not dropped.
+            ->resources([
+                CourseResource::class,
+                CourseSectionResource::class,
+                LessonResource::class,
+            ])
             ->discoverResources(in: app_path('Domains/Assessments/Filament/Resources'), for: 'App\Domains\Assessments\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Assignments/Filament/Resources'), for: 'App\Domains\Assignments\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Teach/Pages'), for: 'App\Filament\Teach\Pages')

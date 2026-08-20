@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Content;
 
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Services\LessonAccess;
+use App\Domains\Content\Services\RecommendationService;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ class ShowSyllabusController extends Controller
      * domain-route splicing gotcha as WatchLessonController/
      * StreamLessonController (CLAUDE.md).
      */
-    public function __invoke(Request $request, LessonAccess $access): View
+    public function __invoke(Request $request, LessonAccess $access, RecommendationService $recommendations): View
     {
         $course = Course::where('slug', $request->route('course'))->firstOrFail();
 
@@ -24,6 +25,9 @@ class ShowSyllabusController extends Controller
         // already correctly gated (found in the S5 B8 review).
         abort_unless($access->isCourseVisibleTo($course, $request->user()), 404);
 
-        return view('content.syllabus', ['course' => $course]);
+        return view('content.syllabus', [
+            'course' => $course,
+            'recommendations' => $recommendations->forCourse($course, $request->user()),
+        ]);
     }
 }

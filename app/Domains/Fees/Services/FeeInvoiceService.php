@@ -4,10 +4,12 @@ namespace App\Domains\Fees\Services;
 
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Content\Models\Program;
 use App\Domains\Fees\Models\FeeCoupon;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Models\User;
 use App\Exceptions\CouponNotRedeemableException;
 use App\Integrations\PaymentProvider;
 use App\Support\Tenancy\CurrentTenant;
@@ -62,6 +64,40 @@ class FeeInvoiceService
                     'gstin_snapshot' => $tenant->gstin,
                 ]);
             });
+        });
+    }
+
+    /**
+     * One invoice for the bundle's whole price, not one per bundled batch
+     * (design doc §3.1/decision 4) — no instalment plan, no linked
+     * enrolment (none exist yet; ProgramEnrolmentService creates them once
+     * this invoice's payment is captured). Same sequencing/numbering this
+     * class already owns for every other invoice, so a program purchase's
+     * invoice number can never collide with or duplicate a batch invoice's.
+     */
+    public function invoiceForProgram(Program $program, User $user): FeeInvoice
+    {
+        return DB::transaction(function () use ($program, $user) {
+            $tenant = app(CurrentTenant::class)->get();
+            $amount = (float) $program->price;
+            $gstAmount = round($amount * self::GST_RATE / 100, 2);
+            $sequenceNumber = $this->nextSequenceNumber($tenant);
+
+            return FeeInvoice::create([
+                'program_id' => $program->id,
+                'user_id' => $user->id,
+                'sequence_number' => $sequenceNumber,
+                'invoice_number' => $this->invoiceNumber($tenant, $sequenceNumber),
+                'description' => "Program: {$program->title}",
+                'amount' => $amount,
+                'gst_rate' => self::GST_RATE,
+                'gst_amount' => $gstAmount,
+                'total_amount' => $amount + $gstAmount,
+                'discount_amount' => 0,
+                'due_date' => now()->toDateString(),
+                'status' => 'pending',
+                'gstin_snapshot' => $tenant->gstin,
+            ]);
         });
     }
 

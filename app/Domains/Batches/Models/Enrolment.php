@@ -14,7 +14,7 @@ class Enrolment extends Model
 
     public const STATUSES = ['pending_payment', 'pending_approval', 'active', 'waitlisted', 'rejected', 'expired', 'cancelled'];
 
-    public const SOURCES = ['manual_add', 'self_enrol_approval', 'self_enrol_direct'];
+    public const SOURCES = ['manual_add', 'self_enrol_approval', 'self_enrol_direct', 'program_purchase'];
 
     protected $fillable = [
         'tenant_id',

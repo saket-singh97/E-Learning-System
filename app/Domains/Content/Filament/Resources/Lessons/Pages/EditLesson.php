@@ -23,6 +23,8 @@ class EditLesson extends EditRecord
 
     protected ?string $uploadedPdfPath = null;
 
+    protected ?string $subtitleText = null;
+
     protected function getHeaderActions(): array
     {
         return [
@@ -43,6 +45,7 @@ class EditLesson extends EditRecord
     {
         $this->uploadedVideoPath = $data['video_upload'] ?? null;
         $this->uploadedPdfPath = $data['pdf_upload'] ?? null;
+        $this->subtitleText = $data['subtitle_text'] ?? null;
 
         return $data;
     }
@@ -55,6 +58,14 @@ class EditLesson extends EditRecord
 
         if (filled($this->uploadedPdfPath)) {
             $this->record->attachUploadedPdf($this->uploadedPdfPath);
+        }
+
+        // filled(), not just !== null: subtitle_text dehydrates on every
+        // save regardless of the field's own visible() (pdf/text/embed
+        // lessons submit it as an empty string), and an empty save must
+        // not overwrite an existing generated/edited VTT file.
+        if (filled($this->subtitleText)) {
+            $this->record->attachSubtitleText($this->subtitleText);
         }
     }
 }

@@ -17,6 +17,8 @@ class LessonPlayer extends Component
 
     public string $heartbeatUrl = '';
 
+    public string $subtitleUrl = '';
+
     public string $viewerName = '';
 
     public string $viewerEmail = '';
@@ -42,6 +44,15 @@ class LessonPlayer extends Component
             'subdomain' => $subdomain,
             'lesson' => $lesson->id,
         ]);
+
+        // D13 pt.2 — only a lesson with a generated/edited VTT file gets a
+        // <track> src at all; most lessons never reach 'ready' here.
+        if ($lesson->subtitle_status === 'ready' && filled($lesson->subtitle_disk_path)) {
+            $this->subtitleUrl = URL::temporarySignedRoute('watch.subtitle', now()->addMinutes(10), [
+                'subdomain' => $subdomain,
+                'lesson' => $lesson->id,
+            ]);
+        }
 
         if ($user) {
             $this->resumeAt = (int) VideoWatchEvent::where('user_id', $user->id)

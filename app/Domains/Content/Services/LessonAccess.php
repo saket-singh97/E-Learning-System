@@ -22,6 +22,7 @@ class LessonAccess
 {
     public function __construct(
         private readonly BandwidthQuota $quota,
+        private readonly LessonCompletion $completion,
     ) {}
     /** @var array<int, string> Roles allowed to stream a gated lesson at all. */
     public const STREAM_ROLES = ['student', 'instructor', 'institute_admin'];
@@ -89,6 +90,13 @@ class LessonAccess
      * id of, once resolved under tenant B's own host. Free-preview lessons
      * stay an unconditional bypass (marketing content, meant to be visible
      * to anyone including guests, same as before this fix).
+     *
+     * S13 B6 — sequential unlocking (C8 pt.2): a lesson whose prerequisites
+     * (per PrerequisiteGraph) aren't all complete for this viewer (per
+     * LessonCompletion) is denied, same as every other gate this method
+     * already enforces. Staff bypass it — they're not "completing" lessons
+     * in sequence, they're previewing their own content, same posture
+     * isVisibleTo()/canJoinLive() already take.
      */
     public function canStream(Lesson $lesson, ?User $viewer): bool
     {
@@ -100,10 +108,28 @@ class LessonAccess
             return false;
         }
 
-        return $viewer->hasAnyRole(self::STREAM_ROLES);
+        if (! $viewer->hasAnyRole(self::STREAM_ROLES)) {
+            return false;
+        }
+
+        if ($this->isStaff($viewer)) {
+            return true;
+        }
+
+        return $lesson->prerequisites->every(
+            fn (Lesson $prerequisite) => $this->completion->isComplete($prerequisite, $viewer),
+        );
     }
 
-    protected function isStaff(?User $viewer): bool
+    /**
+     * Public (S13 B17) — CourseCatalog reuses this rather than
+     * re-deriving "is this viewer staff" with its own inline role check,
+     * the exact CLAUDE.md "one place answers this" gap the review pass
+     * found: CourseCatalog's own `where('status', 'published')` had
+     * silently dropped the staff-preview bypass isCourseVisibleTo()
+     * already establishes for the syllabus page.
+     */
+    public function isStaff(?User $viewer): bool
     {
         return (bool) $viewer?->hasAnyRole(self::STAFF_ROLES);
     }

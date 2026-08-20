@@ -4,6 +4,7 @@ namespace App\Domains\Fees\Models;
 
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Content\Models\Program;
 use App\Models\User;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +27,7 @@ class FeeInvoice extends Model
         'tenant_id',
         'batch_id',
         'enrolment_id',
+        'program_id',
         'user_id',
         'coupon_id',
         'sequence_number',
@@ -63,6 +65,11 @@ class FeeInvoice extends Model
     public function enrolment(): BelongsTo
     {
         return $this->belongsTo(Enrolment::class);
+    }
+
+    public function program(): BelongsTo
+    {
+        return $this->belongsTo(Program::class);
     }
 
     public function user(): BelongsTo

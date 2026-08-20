@@ -10,6 +10,10 @@
     @if ($lesson->type === 'video' || $lesson->type === 'live_session')
         <livewire:lesson-player :lesson="$lesson" />
         <livewire:ai.doubt-chat :lesson="$lesson" />
+        {{-- Timestamp-based, so only meaningful where there's an actual
+             video timeline (design doc §3.1) — text/pdf/embed lessons have
+             no timestamp_s to attach a marker to. --}}
+        <livewire:content.lesson-notes :lesson="$lesson" />
     @elseif ($lesson->type === 'pdf')
         <iframe src="{{ $pdfUrl }}" style="width: 100%; height: 90vh; border: 0;"></iframe>
     @elseif ($lesson->type === 'text')
@@ -22,6 +26,11 @@
              time (LessonResource's own form rule) — not re-validated here. --}}
         <iframe src="{{ $lesson->embed_url }}" style="width: 100%; height: 90vh; border: 0;" allowfullscreen></iframe>
     @endif
+
+    {{-- Every lesson type, not just video/live_session — the page itself
+         is already gated by WatchLessonController's own canStream() check
+         regardless of type (design doc decision 8). --}}
+    <livewire:content.lesson-questions :lesson="$lesson" />
 
     @livewireScripts
 </body>

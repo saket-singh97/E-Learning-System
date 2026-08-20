@@ -1,12 +1,27 @@
 <?php
 
 use App\Http\Controllers\Content\DownloadLessonPdfController;
+use App\Http\Controllers\Content\DownloadLessonSubtitleController;
 use App\Http\Controllers\Content\JoinLiveClassController;
 use App\Http\Controllers\Content\ShowSyllabusController;
 use App\Http\Controllers\Content\StreamLessonController;
 use App\Http\Controllers\Content\WatchHeartbeatController;
 use App\Http\Controllers\Content\WatchLessonController;
 use Illuminate\Support\Facades\Route;
+
+// Public — same "published is readable by anyone" posture ShowSyllabusController
+// already applies (design doc §2.2), no auth middleware.
+Route::get('/courses', fn () => view('content.catalog'))
+    ->name('catalog.index');
+
+// No 'auth' middleware here — this app has no single named 'login' route
+// (3 separate Filament panel logins + StudentPortal, embedded rather than
+// routed) for the default Authenticate middleware to redirect a guest to,
+// so a hard gate 500s instead of redirecting. MyWishlist itself renders a
+// guest-appropriate empty state, same no-op-for-guest posture CourseCatalog/
+// BatchCatalog already established.
+Route::get('/wishlist', fn () => view('content.my-wishlist'))
+    ->name('wishlist.index');
 
 Route::get('/watch/{lesson}', StreamLessonController::class)
     ->middleware('signed')
@@ -15,6 +30,10 @@ Route::get('/watch/{lesson}', StreamLessonController::class)
 Route::get('/watch/{lesson}/pdf', DownloadLessonPdfController::class)
     ->middleware('signed')
     ->name('watch.pdf');
+
+Route::get('/watch/{lesson}/subtitle', DownloadLessonSubtitleController::class)
+    ->middleware('signed')
+    ->name('watch.subtitle');
 
 Route::post('/watch/{lesson}/heartbeat', WatchHeartbeatController::class)
     ->name('watch.heartbeat');

@@ -12,6 +12,7 @@ use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +24,8 @@ class Lesson extends Model
     public const TYPES = ['video', 'pdf', 'text', 'embed', 'quiz', 'live_session', 'assignment'];
 
     public const VIDEO_STATUSES = ['uploading', 'ready', 'failed'];
+
+    public const SUBTITLE_STATUSES = ['none', 'generating', 'ready', 'failed'];
 
     /**
      * S9 B6's own allow-list decision — arbitrary iframe embeds are an
@@ -54,6 +57,8 @@ class Lesson extends Model
         'text_body',
         'embed_url',
         'pdf_disk_path',
+        'subtitle_disk_path',
+        'subtitle_status',
     ];
 
     protected function casts(): array
@@ -68,6 +73,16 @@ class Lesson extends Model
     public function section(): BelongsTo
     {
         return $this->belongsTo(CourseSection::class, 'course_section_id');
+    }
+
+    /**
+     * Lessons this one requires — writes go through PrerequisiteGraph, not
+     * a direct sync()/attach() here, so the circular-dependency check
+     * (design doc decision 6) can't be bypassed.
+     */
+    public function prerequisites(): BelongsToMany
+    {
+        return $this->belongsToMany(self::class, 'lesson_prerequisites', 'lesson_id', 'prerequisite_lesson_id');
     }
 
     /**
@@ -186,5 +201,24 @@ class Lesson extends Model
         $this->update(['pdf_disk_path' => $diskPath]);
 
         $storageQuota->adjust($tenant, $newBytes - $previousBytes);
+    }
+
+    /**
+     * Instructor-edited subtitle text (LessonResource's own Filament
+     * textarea, S14 B3) overwrites the same VTT file
+     * GenerateLessonSubtitles (S14 B2) auto-generates — same
+     * subtitles/{tenant_id}/{lesson_id}.vtt convention, so the player's
+     * existing <track> src never needs to change underneath it.
+     */
+    public function attachSubtitleText(string $vtt): void
+    {
+        $diskPath = "subtitles/{$this->tenant_id}/{$this->id}.vtt";
+
+        Storage::disk('local')->put($diskPath, $vtt);
+
+        $this->update([
+            'subtitle_disk_path' => $diskPath,
+            'subtitle_status' => 'ready',
+        ]);
     }
 }

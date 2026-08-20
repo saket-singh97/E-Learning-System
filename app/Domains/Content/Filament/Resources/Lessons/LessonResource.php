@@ -7,6 +7,7 @@ use App\Domains\Content\Filament\Resources\Lessons\Pages\EditLesson;
 use App\Domains\Content\Filament\Resources\Lessons\Pages\ListLessons;
 use App\Domains\Content\Filament\Resources\Lessons\Pages\ViewLessonArtifact;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Content\Services\PrerequisiteGraph;
 use BackedEnum;
 use Closure;
 use Filament\Forms\Components\FileUpload;
@@ -20,6 +21,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Storage;
 
 class LessonResource extends Resource
 {
@@ -54,6 +57,24 @@ class LessonResource extends Resource
                 ->acceptedFileTypes(['video/mp4', 'video/webm'])
                 ->rules(['mimes:mp4,webm'])
                 ->dehydrated(),
+            Textarea::make('subtitle_text')
+                ->label('Subtitles (WebVTT)')
+                // Same video/live_session visibility as video_upload — only
+                // those types ever get a subtitle track (design doc D13 pt.2).
+                ->visible(fn (Get $get): bool => in_array($get('type'), ['video', 'live_session'], true))
+                ->rows(10)
+                ->dehydrated()
+                // Not a Lesson column (subtitle_disk_path/subtitle_status
+                // are) — this textarea's own state has to be hydrated from
+                // the stored VTT file by hand, same reason FileUpload's temp
+                // path is captured in mutateFormDataBeforeSave rather than
+                // relying on default model-attribute hydration.
+                ->afterStateHydrated(function (Textarea $component, ?Lesson $record): void {
+                    if ($record?->subtitle_disk_path && Storage::disk('local')->exists($record->subtitle_disk_path)) {
+                        $component->state(Storage::disk('local')->get($record->subtitle_disk_path));
+                    }
+                })
+                ->helperText('Raw WebVTT text (WEBVTT header + timestamped cues). Auto-generated once ingestion finishes — edit here to fix wording or timing, not a timeline-scrubbing cue editor.'),
             FileUpload::make('pdf_upload')
                 ->label('PDF file')
                 ->visible(fn (Get $get): bool => $get('type') === 'pdf')
@@ -83,6 +104,64 @@ class LessonResource extends Resource
                             $fail('The embed URL must be from an allowed source (YouTube, Vimeo, or Google Docs/Slides).');
                         }
                     };
+                }),
+            // Options scoped to the same course (sequential unlocking is a
+            // within-course concept, C8) — no create page on this resource
+            // (see getPages()'s own docblock), so $record is always present
+            // here; the -1 fallback is defensive only, never reached.
+            Select::make('prerequisites')
+                ->relationship(
+                    'prerequisites',
+                    'title',
+                    modifyQueryUsing: fn (Builder $query, ?Lesson $record): Builder => $record
+                        ? $query->whereHas('section', fn ($query) => $query->where('course_id', $record->section->course_id))
+                            ->whereKeyNot($record->id)
+                        : $query->whereKey(-1),
+                )
+                ->multiple()
+                ->searchable()
+                ->native(false)
+                ->helperText('A student must complete every selected lesson before this one unlocks.')
+                // modifyQueryUsing above only narrows the dropdown's own
+                // options — Filament's relationship Select still syncs
+                // whatever raw ids the request actually submits
+                // (Select::saveRelationshipsUsing() calls
+                // $relationship->sync($state, ...) directly, never
+                // re-filtered by modifyQueryUsing; confirmed against
+                // Filament's own source by S13 B17's review pass). This
+                // rule() is therefore the only real server-side gate — it
+                // must fail loudly on a cross-course or unresolvable id,
+                // not silently skip it, or a tampered payload against
+                // Livewire's own unguarded /livewire/update endpoint
+                // could attach a prerequisite the student can never
+                // complete, permanently locking the lesson.
+                ->rule(fn (?Lesson $record): Closure => function (string $attribute, mixed $value, Closure $fail) use ($record): void {
+                    if (! $record) {
+                        return;
+                    }
+
+                    foreach ((array) $value as $prerequisiteId) {
+                        // Lesson::find() is tenant-scoped (BelongsToTenant)
+                        // — null means a bogus id or one from another
+                        // tenant, either way rejected, not skipped.
+                        $prerequisite = Lesson::find($prerequisiteId);
+
+                        if (! $prerequisite) {
+                            $fail('One of the selected prerequisites is invalid.');
+
+                            continue;
+                        }
+
+                        if ($prerequisite->section?->course_id !== $record->section?->course_id) {
+                            $fail("\"{$prerequisite->title}\" is not a lesson in this same course.");
+
+                            continue;
+                        }
+
+                        if (app(PrerequisiteGraph::class)->wouldCreateCycle($record, $prerequisite)) {
+                            $fail("Adding \"{$prerequisite->title}\" as a prerequisite would create a circular dependency.");
+                        }
+                    }
                 }),
         ]);
     }

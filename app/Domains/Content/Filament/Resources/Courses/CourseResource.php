@@ -6,7 +6,9 @@ use App\Domains\Content\Filament\Resources\Courses\Pages\CreateCourse;
 use App\Domains\Content\Filament\Resources\Courses\Pages\EditCourse;
 use App\Domains\Content\Filament\Resources\Courses\Pages\ListCourses;
 use App\Domains\Content\Filament\Resources\Courses\RelationManagers\SectionsRelationManager;
+use App\Domains\Content\Models\Category;
 use App\Domains\Content\Models\Course;
+use App\Domains\Content\Models\Tag;
 use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
 use Closure;
@@ -106,6 +108,45 @@ class CourseResource extends Resource
                 ->maxValue(100)
                 ->default(40)
                 ->required(),
+            // Vocabulary itself is Admin-panel-managed (CategoryResource/
+            // TagResource, institute_admin only); an instructor here only
+            // picks from what already exists, doesn't define new terms.
+            // ->relationship()'s own query only scopes the dropdown's
+            // options — Filament's relationship Select still syncs
+            // whatever raw ids the request actually submits, unfiltered
+            // by that query (S13 B17 review pass, same gap found on
+            // LessonResource's own prerequisites field). The ->rule()
+            // below is the real server-side gate: without it, a tampered
+            // payload could attach another tenant's category/tag id
+            // directly to this course.
+            Select::make('categories')
+                ->relationship('categories', 'name')
+                ->multiple()
+                ->searchable()
+                ->native(false)
+                ->rule(function (): Closure {
+                    return function (string $attribute, mixed $value, Closure $fail): void {
+                        $ids = array_map('intval', (array) $value);
+
+                        if (count($ids) !== Category::whereIn('id', $ids)->count()) {
+                            $fail('One of the selected categories is invalid.');
+                        }
+                    };
+                }),
+            Select::make('tags')
+                ->relationship('tags', 'name')
+                ->multiple()
+                ->searchable()
+                ->native(false)
+                ->rule(function (): Closure {
+                    return function (string $attribute, mixed $value, Closure $fail): void {
+                        $ids = array_map('intval', (array) $value);
+
+                        if (count($ids) !== Tag::whereIn('id', $ids)->count()) {
+                            $fail('One of the selected tags is invalid.');
+                        }
+                    };
+                }),
         ]);
     }
 

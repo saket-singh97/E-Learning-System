@@ -14,19 +14,19 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 12 (S1–S12) |
-| **Designed, not built** | 1 (S13) |
-| **Proposed, not yet scoped** | 13 (S14–S26) |
+| **Shipped** | 13 (S1–S13) |
+| **Designed, not built** | 1 (S14) |
+| **Proposed, not yet scoped** | 12 (S15–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **27 shipped** (S10, S11, S12), 8 more designed (S13, not built).
+- **P2 — Depth & extras** (~75 features): **35 shipped** (S10, S11, S12, S13).
 - **P3 — Scale & enterprise** (~55 features): not started — by design, this comes after paying customers exist.
 
 ---
 
-## Shipped + designed — S1 to S13
+## Shipped + designed — S1 to S14
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -42,21 +42,21 @@ regenerate it from this file.
 | S10 | Assignments, Gradebook, Certificates — submissions, rubric grading, weighted gradebook, auto-issued certificates | 16 blocks | Aug 16 | ✅ Done |
 | S11 | Plan Tiers + Billing — seat/storage/bandwidth caps, Razorpay subscriptions, grace period, proration | 17 blocks | Aug 17 | ✅ Done |
 | S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks | Aug 17–18 | ✅ Done |
-| S13 | Discovery & Content Engagement — categories/tags/catalog filtering, prerequisites + sequential unlocking, course bundles (Programs), catalog search/wishlist/recommendations, lesson Q&A, video notes/bookmarks, direct messaging, ratings/reviews | 18 blocks planned | Aug 19 | 🟡 Designed, build pending |
+| S13 | Discovery & Content Engagement — categories/tags/catalog filtering, prerequisites + sequential unlocking, course bundles (Programs), catalog search/wishlist/recommendations, lesson Q&A, video notes/bookmarks, direct messaging, ratings/reviews | 18 blocks | Aug 19 | ✅ Done |
+| S14 | Video & Live-Class Depth — concurrent-playback limiting, auto-subtitles, print/save protection, live recording → AI ingestion, real per-institute Zoom OAuth, Google Meet, live polls. (D10-D12 multi-DRM/watermark/offline-DRM cut — P3, needs paying customers) | 19 blocks planned | Aug 19 | 🟡 Designed, build pending |
 
 ---
 
-## Full roadmap — S14 onward (proposed)
+## Full roadmap — S15 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S13 were each shaped only once they
+slice's turn comes, the same way S10-S14 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S14 | Video & Live-Class Depth — concurrent-play limits, multi-DRM, auto-subtitles, doc print-block, live recording → AI ingestion, Zoom OAuth, live polls | 12 | D9-D13, E4, G5-G10 |
 | S15 | Batch & Institute Operations — discussion forums, timetable conflict detection, bulk CSV import, per-instructor permissions, admissions CRM, ID cards | 11 | F6-F10, S2-S7 |
 | S16 | Assessment & Attendance Depth — extended question types, proctoring, All-India rank test series, OMR scanning, low-attendance alerts, geofencing | 9 | I6-I11, H10-H13 |
 | S17 | AI Layer, Round 2 — course outline generator, semantic search, weak-topic detection, revision notes, photo-based doubt solving | 7 | L9-L15 |

@@ -1297,3 +1297,124 @@ pages, not a dedicated Filament resource — V1 needed breaker state
 visible, not a new CRUD surface.
 
 **All 15 S12 blocks are now built, tested, and reviewed.**
+
+## S13 — Discovery & Content Engagement: COMPLETE (all 18 blocks, 2026-08-19)
+
+Fifth P2-backlog slice (after S9 hardening, S10 assignments/gradebook/
+certificates, S11 billing, S12 security/resilience). `docs/FEATURES.md`
+C7-C10 (catalog/discovery) + N7-N10 (engagement) — 8 roadmap items, 18
+finer-grained build blocks. `docs/superpowers/specs/2026-08-19-s13-discovery-engagement-design.md`
+and `...-plan.md` cover B0-B17. Extends the existing `Content` domain (7
+of 8 items — discovery/engagement is Content's own business logic, not a
+cross-cutting layer the way `Billing`/`Security` were) plus `Comms`
+(direct messaging + moderation); no new domain. 12 new `BelongsToTenant`
+models — the widest single-slice model count so far (S12 had 5), all
+registered in `TenantModelRegistry`.
+
+- **B0-B4** built C7/C10 (catalog + discovery): `Category` (self-referential
+  `parent_id`) + `Tag`, `course_category`/`course_tag` pivots, Admin-panel
+  CRUD; public `CourseCatalog` Livewire page (category/tag filters,
+  Eloquent `LIKE` search, no raw SQL); `Wishlist` toggle + "My wishlist"
+  view; `RecommendationService` (same-category/tag heuristic, explicitly
+  not a real behavioural recommender — zero production traffic to train
+  one on yet).
+- **B5-B6** built C8 (prerequisites + sequential unlocking):
+  `lesson_prerequisites` self-referential pivot + `PrerequisiteGraph`
+  (bounded-DFS circular-dependency check, write-time not read-time);
+  `LessonCompletion` (per-lesson-type binary heuristic — video watched
+  past a config'd threshold, quiz attempted, assignment submitted,
+  everything else presence-based) wired into `LessonAccess::canStream()`,
+  staff bypass unchanged.
+- **B7-B8** built C9 (Programs — course bundles): `Program`/`program_batch`
+  schema (bundles `Batch` rows, this app's real sellable unit, not raw
+  `Course` rows) + Admin-panel CRUD; `fee_invoices.program_id` nullable FK
+  (`batch_id`/`enrolment_id` relaxed to nullable alongside it — a bundle
+  invoice has neither); `ProgramEnrolmentService` creates one `Enrolment`
+  per bundled batch on payment capture, wired through the existing
+  Razorpay webhook path via a new `ProgramInvoicePaid` event (not a direct
+  cross-domain call — see B17 below).
+- **B9-B11** built N7/N8 (lesson Q&A + notes/bookmarks): `LessonQuestion`/
+  `LessonQuestionReply`/`LessonQuestionVote` — post/reply/upvote gated by
+  `LessonAccess::canStream()`'s own verdict, resolved-marking
+  instructor/admin-only; `LessonNote` (nullable `body` doubles as a
+  bookmark marker), timeline markers on the video player reusing
+  `DoubtChat`'s own Alpine.js seek-to dispatch pattern.
+- **B12-B13** built N9 (direct messaging): new Comms-domain
+  `DirectMessage`/`BlockedUser`/`MessageReport` — 1:1, tenant-scoped,
+  symmetric block enforcement at send time (one directed row, checked
+  both directions); Admin-panel moderation queue (`actioned` hides a
+  message from its thread — display-time only, row untouched;
+  `dismissed` clears the flag — flag-don't-auto-act, same posture
+  `AccountSharingFlag` already established in S12).
+- **B14-B15** built N10 (course ratings + reviews): `CourseReview`
+  (unique per learner per course, DB `CHECK` on rating 1-5),
+  `CourseReviewPolicy` gates submission on genuine (active/expired)
+  enrolment in any batch of the course, not scoped to the current one;
+  instructor-response write path; Admin-panel hide/show moderation —
+  genuinely reversible both directions (design decision 11), unlike
+  message reports' one-way status transitions.
+- **B16** — `TenantModelRegistry` sweep, confirmed exact-complete (all 12
+  new models registered as each block built them, not deferred).
+- **B17's own dedicated review pass** — 8 parallel finder agents (line-by-line
+  diff, removed-behavior audit, cross-file tracer, reuse, simplification,
+  efficiency, altitude, CLAUDE.md conventions), same discipline S9 B14/
+  S10 B15/S11 B16/S12 B14 each already established. **Found and fixed 7
+  real bugs:** (1) `PaymentReconciler` called `ProgramEnrolmentService`
+  directly from Fees into Content — a hard CLAUDE.md "Events only"
+  violation, independently flagged by 3 of the 8 agents — fixed with a
+  new `ProgramInvoicePaid` event + Content-side listener, mirroring
+  `PaymentCaptured`'s own shape. (2) `TeachPanelProvider`'s directory-wide
+  resource discovery silently exposed Category/Tag/Program/CourseReview
+  management (taxonomy governance, bundle pricing, review moderation) to
+  every instructor — `AdminPanelProvider`'s own explicit `->resources()`
+  array only ever *added* those to Admin, never removed them from Teach's
+  scan; fixed by switching Teach to the same explicit-array pattern.
+  (3) `LessonResource`'s prerequisite field's same-course scoping was
+  UI-only — confirmed against Filament's own vendor source that
+  `modifyRelationshipQueryUsing` never constrains what `sync()` actually
+  writes — and the one real server-side gate silently skipped validation
+  on an unresolvable id instead of failing; fixed to fail loudly on both
+  a cross-course and a bogus id. (4) `CourseResource`'s categories/tags
+  fields had zero server-side validation at all, same gap one step
+  further; fixed with a tenant-scoped existence check. (5)
+  `CourseReviewPolicy::canReview()` counted *any* enrolment status,
+  letting a rejected or never-paid applicant post a public review; fixed
+  to require genuine (active/expired) participation.
+  (6) `CourseCatalog::courses()` reimplemented course visibility with a
+  bare status check instead of reusing `LessonAccess`, silently dropping
+  the staff-preview bypass — the exact "one place answers this" gap
+  `LessonAccess`'s own docblock already warns about once before (S5 B8);
+  fixed by widening `LessonAccess::isStaff()` to `public` and reusing it.
+  (7) `ProgramEnrolmentService::enrolFromInvoice()` had a TOCTOU race on
+  concurrent webhook deliveries, unlike `BatchEnrolmentService::createEnrolment()`'s
+  own established try/catch pattern for the identical unique index; fixed
+  the same way. All 7 ship with regression tests, plus one new full
+  lifecycle E2E test (`DiscoveryEngagementLifecycleE2ETest`, chains
+  catalog search → wishlist → real enrolment → prerequisite-denied →
+  completion-unlocked in one run).
+
+**Test suite: 1206/1207 passing.** Same 1 pre-existing, unrelated
+`CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+scope — 113 new tests across all 18 blocks.
+
+**What's not real yet, on purpose**: program checkout has no UI/controller
+yet — B8 built only the payment-capture half (`FeeInvoiceService::invoiceForProgram()`
+→ webhook → `ProgramEnrolmentService`), so a program purchase is fully
+wired and idempotency-correct but currently unreachable by a real user;
+`ExportRevenueRegister`/`FeeInvoiceResource` both still assume every
+invoice has a `batch`, so a program invoice would show blank/"Untitled"
+in the finance export and admin list once checkout exists — revisit
+together. `syllabus-tree.blade.php` shows "Enrol to access" for a lesson
+actually blocked by an unmet prerequisite (not enrolment) — `canStream()`
+returns a bare bool with no reason code to render a more accurate message
+from; needs a reason-aware return shape threaded through every call site,
+a bigger change than the review pass should make unilaterally. Several
+N+1 query patterns flagged by the efficiency review
+(`LessonAccess::canStream()`'s prerequisite walk, `RecommendationService::forViewer()`'s
+per-course taxonomy pluck, `SyllabusTree`'s per-lesson quiz/assignment
+lookups) are real but left alone — zero production traffic yet to
+justify the added complexity. Recommendations remain an MVP
+same-category/tag heuristic, not a real behavioural recommender, by
+design (no enrolment-pattern volume exists yet to train one on).
+
+**All 18 S13 blocks are now built, tested, and reviewed.****

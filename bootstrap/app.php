@@ -7,6 +7,7 @@ use App\Domains\Batches\Jobs\RecordVideoCoverageAttendance;
 use App\Domains\Billing\Jobs\SendGraceSuspensionReminders;
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
+use App\Domains\Content\Jobs\CloseStaleLessonStreamSessions;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
 use App\Domains\Fees\Jobs\SendFeeReminders;
 use App\Domains\Security\Jobs\DetectAccountSharing;
@@ -17,6 +18,8 @@ use App\Exceptions\BandwidthQuotaExceededException;
 use App\Exceptions\BatchFullException;
 use App\Exceptions\CannotImpersonateException;
 use App\Exceptions\CircuitOpenException;
+use App\Exceptions\CircularPrerequisiteException;
+use App\Exceptions\ConcurrentStreamLimitExceededException;
 use App\Exceptions\CouponNotRedeemableException;
 use App\Exceptions\DeviceLimitExceededException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
@@ -124,6 +127,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // tolerates a once-a-day check with no practical delay concern.
         $schedule->job(new ProcessGdprDeletions, 'scheduled')->daily();
 
+        // S14 B1 — design doc decision 7: same unscoped-sweep shape as the
+        // jobs above; a stale row already stops counting as active for
+        // ConcurrentStreamGuard's own read-time check, so daily is purely
+        // for reporting/cleanliness, not enforcement.
+        $schedule->job(new CloseStaleLessonStreamSessions, 'scheduled')->daily();
+
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
         // instant. backup:clean runs first so a stale/oversized prior
@@ -146,6 +155,19 @@ return Application::configure(basePath: dirname(__DIR__))
             'resolve.tenant' => ResolveTenant::class,
             'role' => EnsureRole::class,
         ]);
+
+        // Global, not `web`-group: Filament always slots its own
+        // Authenticate middleware at a fixed early position in a panel's
+        // pipeline, ahead of anything a panel provider's own ->middleware()
+        // declares — including ResolveTenant. An unauthenticated visit to
+        // /admin or /teach hit that Authenticate first, which builds the
+        // login redirect URL (a Route::domain('{subdomain}...') route)
+        // before URL::defaults(['subdomain']) had ever been set, throwing
+        // UrlGenerationException instead of showing the login page. Global
+        // middleware runs before every route group's own stack, panels
+        // included, so this prepend sets the URL default in time. See
+        // ResolveTenant's own docblock for the full trace.
+        $middleware->prepend(ResolveTenant::class.':optional');
 
         // Livewire registers /livewire/update with no domain constraint and
         // only the `web` group, so tenant-scoped routes lose CurrentTenant on
@@ -175,6 +197,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (InvalidWebhookSignatureException $e) => abort(400, $e->getMessage()));
         $exceptions->render(fn (CouponNotRedeemableException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (BandwidthQuotaExceededException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (ConcurrentStreamLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (AiSpendCapExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (DeviceLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (SeatLimitExceededException $e) => abort(409, $e->getMessage()));
@@ -202,4 +225,6 @@ return Application::configure(basePath: dirname(__DIR__))
         // provider state (design doc §4 decision 10), not a programmer
         // error; the standard "service temporarily unavailable" code.
         $exceptions->render(fn (CircuitOpenException $e) => abort(503, $e->getMessage()));
+
+        $exceptions->render(fn (CircularPrerequisiteException $e) => abort(409, $e->getMessage()));
     })->create();
