@@ -16,6 +16,7 @@ use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Models\InstituteZoomConnection;
+use App\Domains\Batches\Models\LiveRecording;
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\SubscriptionInvoice;
 use App\Domains\Billing\Models\TenantStorageUsage;
@@ -109,6 +110,7 @@ class TenantModelRegistry
         CourseReview::class,
         LessonStreamSession::class,
         InstituteZoomConnection::class,
+        LiveRecording::class,
     ];
 
     /**
@@ -592,6 +594,34 @@ class TenantModelRegistry
                 'token_expires_at' => now()->addHour(),
                 'connected_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
             ],
+            LiveRecording::class => [
+                'batch_session_id' => BatchSession::create([
+                    'batch_id' => Batch::create([
+                        'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                        'title' => 'Parent',
+                        'slug' => 'parent-'.uniqid(),
+                        'starts_on' => now()->toDateString(),
+                        'ends_on' => now()->addMonth()->toDateString(),
+                        'self_enrol_mode' => 'manual_only',
+                        'status' => 'draft',
+                    ])->id,
+                    'lesson_id' => Lesson::create([
+                        'course_section_id' => CourseSection::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                            'title' => 'Parent',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Row',
+                        'type' => 'live_session',
+                        'position' => 0,
+                    ])->id,
+                    'starts_at' => now()->addWeek(),
+                    'duration_minutes' => 60,
+                    'position' => 0,
+                    'live_provider' => 'zoom_meetings_oauth',
+                ])->id,
+                'status' => 'pending',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -652,6 +682,7 @@ class TenantModelRegistry
             CourseReview::class => ['rating' => 1],
             LessonStreamSession::class => ['ended_at' => now()],
             InstituteZoomConnection::class => ['account_id' => 'tampered'],
+            LiveRecording::class => ['status' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

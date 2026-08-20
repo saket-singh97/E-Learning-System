@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Batches\ZoomRecordingWebhookController;
 use App\Http\Controllers\Billing\RazorpaySubscriptionWebhookController;
 use App\Http\Controllers\Fees\RazorpayWebhookController;
 use Illuminate\Http\Request;
@@ -22,3 +23,9 @@ Route::post('/webhooks/razorpay', RazorpayWebhookController::class)
 // handles.
 Route::post('/webhooks/razorpay-subscriptions', RazorpaySubscriptionWebhookController::class)
     ->name('webhooks.razorpay-subscriptions');
+
+// S14 B8 — same "one fixed URL, no tenant subdomain" reasoning as the
+// Razorpay webhooks above; the tenant is resolved from the matching
+// BatchSession inside the handler, not the route.
+Route::post('/webhooks/zoom-recording', ZoomRecordingWebhookController::class)
+    ->name('webhooks.zoom-recording');

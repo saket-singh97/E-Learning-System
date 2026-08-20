@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B5 | Print/save protection — text lessons (`@media print` block + context-menu guard) + `lessons.print_disabled` per-lesson toggle (E4 pt.2) | ✅ done |
 | B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ✅ done |
 | B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ✅ done |
-| B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ⬜ not started |
+| B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ✅ done |
 | B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ⬜ not started |
 | B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ⬜ not started |
 | B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ⬜ not started |
@@ -261,16 +261,47 @@ S1/S2, unrelated.
 after the first run) — sole failure is the pre-existing
 `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B8 — Zoom recording-completed webhook — not started
+### B8 — Zoom recording-completed webhook — done
 
-- `RazorpayWebhookController`-shaped controller: verifies Zoom's own
-  HMAC-SHA256 webhook signature (G10 pt.1, mirrors
-  `PaymentProvider::verifyWebhookSignature()`'s established shape), does
-  no business logic itself.
-- `live_recordings` migration (`batch_session_id`,
-  `provider_recording_id` nullable, `disk_path` nullable,
-  `status` pending|downloading|ready|failed).
-- `LiveRecording` model, registered in `TenantModelRegistry`.
+- [x] `live_recordings` migration (`tenant_id`, `batch_session_id`,
+  `provider_recording_id` nullable, `disk_path` nullable, `status`
+  pending|downloading|ready|failed). `LiveRecording` model
+  (`App\Domains\Batches\Models`), registered in `TenantModelRegistry`.
+- [x] `ZoomRecordingWebhookController` — `RazorpayWebhookController`-shaped,
+  no business logic itself; hands off to `ZoomRecordingWebhookHandler`
+  (`app/Domains/Batches/Services/`). Handler verifies Zoom's real
+  HMAC-SHA256 scheme (`v0=` + hmac over `v0:{timestamp}:{body}`, mirrors
+  `PaymentProvider::verifyWebhookSignature()`'s established shape) and
+  also answers Zoom's own unsigned `endpoint.url_validation` handshake
+  (required once, at webhook-registration time) — both real per Zoom's
+  own docs, not stubbed.
+- [x] `handleRecordingCompleted()` resolves the `BatchSession` by
+  `provider_meeting_ref` with no `CurrentTenant` pre-bound (the tenant
+  global scope skips filtering while unbound, so this genuinely searches
+  every tenant), binds `CurrentTenant` to the match's own tenant, then
+  creates a `pending` `LiveRecording` row. An unmatched meeting id is a
+  silent no-op (a session outside this app, or a stale event). Does not
+  dispatch a download job yet — that's B9's own `DownloadLiveRecording`,
+  same "this block ships it, the next completes it" order B4/B5/B7
+  already established.
+- [x] Route: `POST /api/webhooks/zoom-recording` (`routes/api.php`, no
+  `Route::domain(...)` constraint, same "one fixed URL, no tenant
+  subdomain" reasoning the Razorpay webhooks above it already use).
+  `config/services.php`/`.env.example` gain `zoom.webhook_secret`
+  (`ZOOM_WEBHOOK_SECRET`).
+- [x] `ZoomRecordingWebhookTest`: handshake response, bad-signature 401,
+  matching-session row creation bound to the right tenant, unknown-meeting
+  no-op.
+
+`composer test`: 1246/1247 pass (4 new tests, plus 1 new `CrossTenantTest`
+dataset case for the newly-registered `LiveRecording`) — sole failure is
+the pre-existing `CourseSlugUniquenessTest`, carried since S1/S2,
+unrelated. (Caught one real bug during this block's own testing:
+`ZoomRecordingWebhookController::__invoke()` was type-hinted to
+`Illuminate\Http\Response`, which the `endpoint.url_validation` handshake's
+`response()->json()` call can't satisfy — `JsonResponse` doesn't extend
+it. Widened to `Symfony\Component\HttpFoundation\Response`, matching
+`DownloadLessonPdfController`'s own precedent.)
 
 ### B9 — `DownloadLiveRecording` job — not started
 

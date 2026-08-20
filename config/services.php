@@ -44,6 +44,7 @@ return [
         // connect each institute's own Zoom account (design doc decision 1).
         'oauth_client_id' => env('ZOOM_OAUTH_CLIENT_ID'),
         'oauth_client_secret' => env('ZOOM_OAUTH_CLIENT_SECRET'),
+        'webhook_secret' => env('ZOOM_WEBHOOK_SECRET'),
     ],
 
     'razorpay' => [
