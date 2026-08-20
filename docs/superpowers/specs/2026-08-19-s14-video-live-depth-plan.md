@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B1 | Concurrent-playback enforcement — `ConcurrentStreamGuard` wired into `StreamLessonController`/`WatchHeartbeatController`, daily stale-session sweep (D9 pt.2) | ✅ done |
 | B2 | Auto-subtitle generation — `SubtitleGenerator` (transcript chunks → SRT/VTT), `lessons.subtitle_disk_path`/`subtitle_status` (D13 pt.1) | ✅ done |
 | B3 | Instructor-editable subtitles — Filament textarea on `LessonResource`, `<track>` wiring on the player (D13 pt.2) | ✅ done |
-| B4 | Print/save protection — PDF lessons (toolbar-suppressed iframe + context-menu guard) (E4 pt.1) | ⬜ not started |
+| B4 | Print/save protection — PDF lessons (toolbar-suppressed iframe + context-menu guard) (E4 pt.1) | ✅ done |
 | B5 | Print/save protection — text lessons (`@media print` block + context-menu guard) + `lessons.print_disabled` per-lesson toggle (E4 pt.2) | ⬜ not started |
 | B6 | Zoom OAuth connect flow — `institute_zoom_connections` schema + Admin-panel connect/disconnect page (G7 pt.1) | ⬜ not started |
 | B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ⬜ not started |
@@ -144,12 +144,27 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1221/1222 pass (7 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B4 — Print/save protection — PDF lessons — not started
+### B4 — Print/save protection — PDF lessons — done
 
-- Swap the bare `<iframe src="{{ $pdfUrl }}">` in `content/watch.blade.php`
-  for one appending `#toolbar=0` (browser-dependent, documented as a
-  deterrent not a guarantee) plus `oncontextmenu="return false"` on the
-  wrapping element (decision 9).
+- [x] Swapped the bare `<iframe src="{{ $pdfUrl }}">` in
+  `content/watch.blade.php` for one appending `#toolbar=0` (a URL
+  fragment, so it rides alongside the signed route's own query-string
+  params unchanged) — browser-dependent, documented as a deterrent not a
+  guarantee, same honest framing S9 B6's own video protection already
+  uses — wrapped in a `<div oncontextmenu="return false">` for the
+  right-click "Save As" guard (decision 9).
+- [x] Not yet gated behind `print_disabled` — that column doesn't exist
+  until B5, which will retroactively wire both B4's and B5's own
+  protection behind it (per B5's own checklist note); this block's
+  protection is unconditional for now, same "protection ships, gating
+  arrives next block" order the plan lays out.
+- [x] `LessonContentTypesTest`: new "marks the pdf viewer with
+  print/save-protection attributes" case asserting both `#toolbar=0` and
+  `oncontextmenu="return false"` render on the watch page for a playable
+  pdf lesson.
+
+`composer test`: 1222/1223 pass (1 new test) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B5 — Print/save protection — text lessons — not started
 

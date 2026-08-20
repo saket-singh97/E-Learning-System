@@ -279,3 +279,15 @@ it('marks the video player with download-protection attributes', function () {
         ->assertSee('controlsList="nodownload"', false)
         ->assertSee('oncontextmenu="return false"', false);
 });
+
+it('marks the pdf viewer with print/save-protection attributes (S14 B4)', function () {
+    [$tenant, $lesson, $student] = contentTypeFixture(['type' => 'pdf']);
+    $lesson->update(['pdf_disk_path' => "pdfs/{$tenant->id}/{$lesson->id}.pdf"]);
+    Storage::disk('local')->put($lesson->pdf_disk_path, 'fake pdf bytes');
+
+    $this->actingAs($student)
+        ->get("http://physics.lms.test/lessons/{$lesson->id}")
+        ->assertOk()
+        ->assertSee('#toolbar=0', false)
+        ->assertSee('oncontextmenu="return false"', false);
+});

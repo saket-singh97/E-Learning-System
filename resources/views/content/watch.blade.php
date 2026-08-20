@@ -15,7 +15,18 @@
              no timestamp_s to attach a marker to. --}}
         <livewire:content.lesson-notes :lesson="$lesson" />
     @elseif ($lesson->type === 'pdf')
-        <iframe src="{{ $pdfUrl }}" style="width: 100%; height: 90vh; border: 0;"></iframe>
+        {{--
+            Content protection (S14 B4, design doc decision 9): #toolbar=0
+            suppresses the browser's own PDF-viewer toolbar where the given
+            browser honors it (Chrome/Firefox only) — a deterrent, not real
+            DRM, same honest framing S9 B6's own video protection already
+            uses. oncontextmenu on the wrapping element stops the easiest
+            right-click "Save As" path (fragment, not query string, so it
+            works unchanged alongside the pdfUrl's own signed-route params).
+        --}}
+        <div oncontextmenu="return false">
+            <iframe src="{{ $pdfUrl }}#toolbar=0" style="width: 100%; height: 90vh; border: 0;"></iframe>
+        </div>
     @elseif ($lesson->type === 'text')
         {{-- Sanitized on save via Lesson's own SanitizesHtml trait — not
              re-sanitized here, the same trust boundary every other
