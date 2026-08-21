@@ -89,3 +89,28 @@ it('generates and stores a VTT file once ingestion produces a ready artifact', f
     Storage::disk('local')->assertExists($lesson->subtitle_disk_path);
     expect(Storage::disk('local')->get($lesson->subtitle_disk_path))->toStartWith('WEBVTT');
 });
+
+it('marks the lesson failed instead of fatally erroring when generation throws (S14 B18 review)', function () {
+    Storage::fake('local');
+
+    // GenerateLessonSubtitles is a ShouldQueue listener that calls
+    // $this->fail($e) on a throw — that method lives on InteractsWithQueue,
+    // which the class was missing (same bug DownloadLiveRecording's own
+    // docblock, B9, flagged without fixing). QUEUE_CONNECTION=sync in
+    // phpunit.xml means firing the event here really does route through
+    // the queued-listener wrapper, so this would have fatally errored
+    // with "Call to undefined method fail()" before the B18 fix.
+    app()->bind(SubtitleGenerator::class, fn () => new class extends SubtitleGenerator
+    {
+        public function toVtt($artifact): string
+        {
+            throw new RuntimeException('forced failure');
+        }
+    });
+
+    $lesson = subtitleLesson($this->tenant);
+
+    event(new LessonVideoReady($lesson->id, $this->tenant->id));
+
+    expect($lesson->fresh()->subtitle_status)->toBe('failed');
+});

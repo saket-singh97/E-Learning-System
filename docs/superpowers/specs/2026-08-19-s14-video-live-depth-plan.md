@@ -46,7 +46,7 @@ stop and report before starting the next block.
 | B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ✅ done |
 | B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ✅ done |
 | B17 | `TenantModelRegistry` sweep — all 6 new `BelongsToTenant` models confirmed registered | ✅ done |
-| B18 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B18 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite:** 1206/1207 at slice start (1 pre-existing, unrelated
 `CourseSlugUniquenessTest` failure carried since S1/S2, out of scope here
@@ -554,16 +554,63 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 failure is the pre-existing `CourseSlugUniquenessTest`, carried since
 S1/S2, unrelated.
 
-### B18 — Full test coverage, review pass — not started
+### B18 — Full test coverage, review pass — done. S14 is now COMPLETE (all 19 blocks).
 
-- Lifecycle E2E test(s) mirroring S11 B16/S12 B14/S13 B17's own posture
-  — at minimum: Zoom OAuth connect → schedule a session on the new
-  provider → recording-completed webhook → downloaded → ingested →
-  playable, chained in one run; plus a live-poll instructor-launches →
-  students-respond → aggregation round trip.
-- Explicit review pass across every B0-B17 file for real bugs, not just
-  a green suite — same discipline S9 B14/S10 B15/S11 B16/S12 B14/S13
-  B17 each already established (each found real bugs this way).
-- Update `HANDOVER.md` (S14 complete entry + any new `## Avoid` entries),
-  `docs/PROJECT-STATUS.md` (new S14 section), `docs/ROADMAP.md` (S14 row
-  → Done).
+- [x] Explicit review pass across every B0-B17 file for real bugs — same
+  discipline S9 B14/S10 B15/S11 B16/S12 B14/S13 B17 each already
+  established, re-reading source rather than trusting a green suite
+  alone: every service/job/controller/driver/Livewire component in the
+  slice (`LessonStreamSession`, `ConcurrentStreamGuard`,
+  `CloseStaleLessonStreamSessions`, `SubtitleGenerator`,
+  `GenerateLessonSubtitles`, `ZoomRecordingWebhookHandler`/`Controller`,
+  `StreamLessonController`/`WatchHeartbeatController`'s B1 wiring,
+  `ZoomConnection` Filament page, `BatchSessionsRelationManager`'s
+  `createLiveRoom()` wiring, `DownloadLiveRecording`, `ZoomMeetingsProvider`,
+  `GoogleMeetProvider`, `LivePollService`, `LivePollResponse`,
+  `LivePollBoard`) plus the scheduler/event/exception registrations in
+  `bootstrap/app.php`/`AppServiceProvider`. **Found and fixed 1 real
+  bug:** `GenerateLessonSubtitles` (B2) is a `ShouldQueue` listener
+  calling `$this->fail($e)` on a throw but only used the `Queueable`
+  trait — `fail()` lives on `InteractsWithQueue`, which
+  `CallQueuedListener` only wires up when the class actually uses it, so
+  a real generation failure would have fatally errored ("Call to
+  undefined method") instead of marking `subtitle_status: failed`.
+  `DownloadLiveRecording`'s own docblock (B9) had already found and
+  fixed this exact bug class in itself but explicitly left this sibling
+  unfixed ("flagged here rather than fixed, out of scope for this
+  block") — closed now, plus a new regression test
+  (`SubtitleGeneratorTest`) that forces the throw and confirms no fatal
+  error; previously untested since the happy-path test alone never
+  exercised the catch branch (`QUEUE_CONNECTION=sync` in `phpunit.xml`
+  means firing the event really does route through the queued-listener
+  wrapper, so this was live, not theoretical). No other real bugs found
+  — `joinUrl()`'s `?? $this->createRoom($session)` fallback in both Zoom
+  and Google Meet drivers looked like a double-room risk at first read,
+  but `BatchSessionsRelationManager::scheduleLiveRoom()` already calls
+  `createLiveRoom()` at scheduling time for every provider, so the
+  fallback is genuinely defensive, not the primary path.
+- [x] `S14VideoLiveDepthE2ETest` — 2 lifecycle E2E tests, same posture
+  S11 B16/S12 B14/S13 B17 each established: (1) Zoom OAuth connect
+  (real controller flow, tokens faked) → schedule a `zoom_meetings_oauth`
+  session (`createLiveRoom()` mints a real meeting) → a real signed
+  recording-completed webhook post → `DownloadLiveRecording` runs inline
+  (`QUEUE_CONNECTION=sync`) → the *existing* ingestion pipeline picks up
+  the unchanged `LessonVideoReady` event and produces a `ready`
+  `LessonArtifact` → an enrolled student streams the lesson through the
+  unchanged signed-URL path, chained in one run, no step mocked past its
+  own external HTTP boundary. (2) A live poll: instructor creates +
+  opens via `LivePollService` → 2 enrolled students respond via
+  `LivePollResponse` → a 3rd, non-enrolled student's submit is silently
+  refused (`canJoinLive()` denies, no row written) → instructor closes →
+  `LivePollBoard`'s own aggregation shows the exact count.
+- [x] `HANDOVER.md` (S14 moved from "design done" to a full COMPLETE
+  entry, same per-block-group format S9-S13 each used) + one new
+  `## Avoid` entry (the `$this->fail()`/`InteractsWithQueue` gotcha) +
+  `docs/PROJECT-STATUS.md` (new S14 section, same format) +
+  `docs/ROADMAP.md` (S14 row → ✅ Done, counts table updated: 14/26
+  slices shipped, 0 designed-not-built, P2 44/75 features shipped).
+
+`composer test`: 1283/1284 pass (3 new tests this block — the
+regression test plus both E2E tests — 78 new across the whole slice
+since S14's 1206/1207 starting baseline) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.

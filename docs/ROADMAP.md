@@ -14,19 +14,19 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 13 (S1–S13) |
-| **Designed, not built** | 1 (S14) |
+| **Shipped** | 14 (S1–S14) |
+| **Designed, not built** | 0 |
 | **Proposed, not yet scoped** | 12 (S15–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **35 shipped** (S10, S11, S12, S13).
+- **P2 — Depth & extras** (~75 features): **44 shipped** (S10, S11, S12, S13, S14).
 - **P3 — Scale & enterprise** (~55 features): not started — by design, this comes after paying customers exist.
 
 ---
 
-## Shipped + designed — S1 to S14
+## Shipped — S1 to S14
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ regenerate it from this file.
 | S11 | Plan Tiers + Billing — seat/storage/bandwidth caps, Razorpay subscriptions, grace period, proration | 17 blocks | Aug 17 | ✅ Done |
 | S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks | Aug 17–18 | ✅ Done |
 | S13 | Discovery & Content Engagement — categories/tags/catalog filtering, prerequisites + sequential unlocking, course bundles (Programs), catalog search/wishlist/recommendations, lesson Q&A, video notes/bookmarks, direct messaging, ratings/reviews | 18 blocks | Aug 19 | ✅ Done |
-| S14 | Video & Live-Class Depth — concurrent-playback limiting, auto-subtitles, print/save protection, live recording → AI ingestion, real per-institute Zoom OAuth, Google Meet, live polls. (D10-D12 multi-DRM/watermark/offline-DRM cut — P3, needs paying customers) | 19 blocks planned | Aug 19 | 🟡 Designed, build pending |
+| S14 | Video & Live-Class Depth — concurrent-playback limiting, auto-subtitles, print/save protection, live recording → AI ingestion, real per-institute Zoom OAuth, Google Meet, live polls. (D10-D12 multi-DRM/watermark/offline-DRM cut — P3, needs paying customers) | 19 blocks | Aug 19–22 | ✅ Done |
 
 ---
 

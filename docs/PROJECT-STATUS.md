@@ -1418,3 +1418,114 @@ same-category/tag heuristic, not a real behavioural recommender, by
 design (no enrolment-pattern volume exists yet to train one on).
 
 **All 18 S13 blocks are now built, tested, and reviewed.****
+
+## S14 — Video & Live-Class Depth: COMPLETE (all 19 blocks, 2026-08-22)
+
+Sixth P2-backlog slice (after S9 hardening, S10 assignments/gradebook/
+certificates, S11 billing, S12 security/resilience, S13 discovery/
+engagement). `docs/ROADMAP.md`'s own S14 row lists D9-D13/E4/G5-G10 (12
+items), but D10/D11/D12 (multi-DRM, forensic watermark, offline DRM) are
+P3-tier, cut from this slice's real build scope (9 items) — each needs a
+real paid vendor relationship this platform has no reason to have yet.
+`docs/superpowers/specs/2026-08-19-s14-video-live-depth-design.md` and
+`...-plan.md` cover B0-B18. Extends `Content` (concurrent-playback,
+subtitles, print/save protection) and `Batches` (Zoom OAuth, recording
+capture, Google Meet, live polls); no new domain. 6 new `BelongsToTenant`
+models (`LessonStreamSession`, `InstituteZoomConnection`, `LiveRecording`,
+`LivePoll`, `LivePollOption`, `LivePollResponse`), all registered in
+`TenantModelRegistry`, confirmed exact-complete in B17.
+
+- **B0-B1** built D9 (concurrent-playback limiting): `lesson_stream_sessions`
+  + `ConcurrentStreamGuard` — one *active* stream per user across different
+  lessons (a heartbeat within `config('content.stream_session_timeout_seconds')`),
+  wired into `StreamLessonController`/`WatchHeartbeatController` (the one
+  place session rows get written), daily stale-row sweep for
+  reporting/cleanliness (enforcement is read-time, not the sweep).
+- **B2-B3** built D13 (auto-subtitles + instructor editing): `SubtitleGenerator`
+  renders SRT/VTT straight from the existing ingestion transcript chunks
+  (no new AI call) via a queued listener firing on the same
+  `LessonArtifactReady` event `StartIngestion`'s own chain already
+  produces; a `LessonResource` textarea lets an instructor overwrite the
+  same VTT file; `<track>` wired onto the player from a temporary signed
+  route, same shape the PDF download route already uses.
+- **B4-B5** built E4 (print/save protection): browser-dependent deterrents
+  (`#toolbar=0` + right-click guard for PDF, `@media print` + guard for
+  text — honestly framed as a deterrent, not real DRM, same posture the
+  existing video watermark feature already takes), gated behind a new
+  per-lesson `print_disabled` toggle (default off, opt-in).
+- **B6-B7** built G7 (Zoom OAuth per institute): `institute_zoom_connections`
+  (one row per tenant) + a direct-to-Zoom-REST-API OAuth flow (no
+  Socialite driver exists for Zoom) + `ZoomMeetingsProvider` (real meeting
+  creation, `start_url` for staff vs `join_url` for students) — a new
+  `zoom_meetings_oauth` `live_provider` option alongside the pre-existing,
+  still-unbound `zoom_video_sdk` (a different mechanism: client-side JWT
+  Video SDK, not a real per-institute OAuth-connected Meetings API).
+- **B8-B9** built G5/G6 (recording capture → storage → playback):
+  `live_recordings` + a real Zoom webhook (`ZoomRecordingWebhookHandler`,
+  genuine HMAC-SHA256 signature verification + the unsigned
+  `endpoint.url_validation` handshake) + `DownloadLiveRecording` (downloads
+  onto the lesson's existing `video_disk_path` — no new playback column —
+  and fires the *unchanged* `LessonVideoReady` into S3's ingestion
+  pipeline). G6's "signed URL + enrolment check" needed zero new code
+  (`StreamLessonController` already treats `video`/`live_session`
+  identically) — confirmed by a dedicated B10 verification test rather
+  than assumed.
+- **B11-B12** built G10 pt.2/G8 (token-expiry handling + Google Meet):
+  `ZoomMeetingsProvider` now refreshes an expired OAuth `access_token` via
+  the stored `refresh_token` before every call, storing Zoom's rotated
+  refresh token (not reusing the old one); `ZoomVideoSdkProvider`'s own
+  2-hour join-JWT confirmed already correct. New `GoogleMeetProvider`
+  (Calendar API `conferenceData`/`hangoutsMeet` event creation) — no
+  per-institute connection table exists for Google, so it uses one
+  platform-wide `GOOGLE_CALENDAR_REFRESH_TOKEN`; Meet has no host/
+  participant URL split, so every viewer gets the same link (Google's own
+  meeting lobby is the real access control, a documented limitation).
+- **B13-B16** built G9 (live polls): `live_polls`/`live_poll_options`/
+  `live_poll_responses` (unique per student per poll, DB-level, same
+  `lesson_question_votes` defense-in-depth precedent from S13);
+  `LivePollService` (create/open/close, reuses
+  `EnrolmentApprovalPolicy::canDecide()` rather than a new role constant,
+  `open()` gated to the session actually being live); `LivePollResponse`
+  (student vote, gated by `LessonAccess::canJoinLive()`'s own verdict,
+  app-check-plus-unique-constraint one-vote enforcement); `LivePollBoard`
+  (instructor launch controls + the shared instructor/student results
+  view, `wire:poll.2s` while open — B14 shipped the service with no UI to
+  reach it, B16 is what closes that gap). Both Livewire components sit on
+  the syllabus tree's own live_session row, next to the Join link, since
+  students leave the app once they click it.
+- **B18's own dedicated review pass** — same discipline S9 B14/S10 B15/
+  S11 B16/S12 B14/S13 B17 each already established, re-reading every
+  B0-B17 file for real bugs rather than trusting a green suite alone.
+  **Found and fixed 1 real bug:** `GenerateLessonSubtitles` (B2) is a
+  `ShouldQueue` listener calling `$this->fail($e)` on a throw, but only
+  used the `Queueable` trait — `fail()` lives on `InteractsWithQueue`,
+  which `CallQueuedListener` only wires up when the class actually uses
+  it, so a real generation failure would have fatally errored instead of
+  marking `subtitle_status: failed`. `DownloadLiveRecording`'s own
+  docblock (B9) had already flagged this exact bug class in itself and
+  fixed it there, but explicitly left this sibling instance unfixed —
+  B18 closed it, with a new regression test forcing the throw
+  (previously untested, since the happy-path test alone never exercised
+  the catch branch). Two new lifecycle E2E tests
+  (`S14VideoLiveDepthE2ETest`): Zoom OAuth connect → schedule on the new
+  provider → recording-completed webhook → downloaded → ingested →
+  playable, chained in one run; and a live poll instructor-launches → 2
+  students respond → a 3rd non-enrolled student is refused → instructor
+  closes → aggregation numbers match exactly.
+
+**Test suite: 1283/1284 passing.** Same 1 pre-existing, unrelated
+`CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+scope — 78 new tests across all 19 blocks.
+
+**What's not real yet, on purpose**: `GoogleMeetProvider` and
+`ZoomMeetingsProvider` are both real, `Http::fake()`-tested drivers with
+no live vendor account exercised against them (same "flag, don't fake"
+posture `ZoomVideoSdkProvider`/`RealGeoIpResolver` already established).
+Live polls are `wire:poll.2s`, not real WebSockets (`BROADCAST_CONNECTION`
+is still `log` — no real-time infra exists yet, same boundary S9 B8's
+`FeeCheckout` and S13's direct messaging both already accepted). Google
+Meet's per-viewer access control is Google's own meeting lobby, not this
+app's role check. Print/save protection is a browser-dependent deterrent,
+not real DRM.
+
+**All 19 S14 blocks are now built, tested, and reviewed.****

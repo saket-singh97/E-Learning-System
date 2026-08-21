@@ -5,24 +5,102 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-19)
+## Right now (2026-08-22)
 
-- **S14 — Video & Live-Class Depth: DESIGN + PLAN DONE, build not
-  started.** `docs/superpowers/specs/2026-08-19-s14-video-live-depth-design.md`,
-  `...-plan.md`. `docs/ROADMAP.md`'s own S14 row lists D9-D13/E4/G5-G10
-  (12 items), but D10/D11/D12 (multi-DRM, forensic watermark, offline
-  DRM) are **P3-tier**, not P2 — cut from this slice's real build scope
-  (9 items) since all three need a real paid vendor relationship (DRM
-  key-server, watermarking service) this platform has no reason to have
-  yet (zero paying institutes). Verified before writing the design: no
-  concurrent-playback tracking, no subtitle/SRT/VTT anything, no
-  live-poll concept anywhere exist (grepped, not assumed); the existing
-  `ZoomVideoSdkProvider` (S5, unbound) is a different mechanism entirely
-  from G7's own "Zoom OAuth per institute" ask (client-side JWT Video
-  SDK vs. a real per-institute OAuth-connected Meetings REST API) — G7
-  is new work, not "flip on the existing driver." 19 blocks (B0-B18).
-  Next step: run the per-block build command in the plan doc starting
-  at B0.
+- **S14 — Video & Live-Class Depth: COMPLETE, all 19 blocks
+  (2026-08-22).** `docs/superpowers/specs/2026-08-19-s14-video-live-depth-design.md`,
+  `...-plan.md` (full per-block build log + B18's own review-pass notes
+  live there, not repeated here). `docs/ROADMAP.md`'s own S14 row lists
+  D9-D13/E4/G5-G10 (12 items), but D10/D11/D12 (multi-DRM, forensic
+  watermark, offline DRM) are **P3-tier**, cut from this slice's real
+  build scope (9 items). Extends `Content` (concurrent-playback,
+  subtitles, print/save protection) and `Batches` (Zoom OAuth, recording
+  capture, Google Meet, live polls); no new domain. 6 new
+  `BelongsToTenant` models (`LessonStreamSession`,
+  `InstituteZoomConnection`, `LiveRecording`, `LivePoll`,
+  `LivePollOption`, `LivePollResponse`), all registered in
+  `TenantModelRegistry`, confirmed exact-complete in B17.
+  - **B0-B1** built D9: `lesson_stream_sessions` +
+    `ConcurrentStreamGuard` (one active stream per user across
+    *different* lessons, heartbeat-timeout-based), wired into
+    `StreamLessonController`/`WatchHeartbeatController`, daily stale-row
+    sweep.
+  - **B2-B3** built D13: `SubtitleGenerator` (SRT/VTT straight from the
+    existing ingestion transcript chunks, no new AI call) auto-fires off
+    the same `LessonArtifactReady` event `StartIngestion`'s own chain
+    already produces; instructor-editable via a `LessonResource`
+    textarea overwriting the same VTT file; `<track>` wired onto the
+    player.
+  - **B4-B5** built E4: print/save deterrents (`#toolbar=0` + right-click
+    guard for PDF, `@media print` + guard for text), gated behind a new
+    per-lesson `print_disabled` toggle (default off).
+  - **B6-B7** built G7: `institute_zoom_connections` (per-tenant OAuth,
+    Zoom's REST API called directly, no Socialite driver exists for
+    Zoom) + `ZoomMeetingsProvider` (real meeting creation, `start_url`
+    for staff vs `join_url` for students), a new `zoom_meetings_oauth`
+    `live_provider` option alongside the pre-existing, still-unbound
+    `zoom_video_sdk`.
+  - **B8-B9** built G5/G6: `live_recordings` + a real Zoom webhook
+    (`ZoomRecordingWebhookHandler`, real HMAC-SHA256 verification +
+    the `endpoint.url_validation` handshake) + `DownloadLiveRecording`
+    (downloads onto the lesson's existing `video_disk_path`, fires the
+    *unchanged* `LessonVideoReady` into S3's ingestion pipeline — G6's
+    "signed URL + enrolment check" needed zero new code, confirmed by a
+    dedicated B10 test, since `StreamLessonController` already treats
+    `video`/`live_session` identically).
+  - **B11-B12** built G10 pt.2/G8: `ZoomMeetingsProvider` now refreshes
+    an expired OAuth `access_token` via the stored `refresh_token`
+    before every call (Zoom rotates the refresh token on every use, the
+    new one is stored); `ZoomVideoSdkProvider`'s own 2-hour join-JWT
+    confirmed already correct, no change. New `GoogleMeetProvider`
+    (Calendar API `conferenceData`/`hangoutsMeet` event creation) — no
+    per-institute connection table exists for Google (unlike Zoom), so
+    it uses one platform-wide `GOOGLE_CALENDAR_REFRESH_TOKEN`; Meet has
+    no host/participant URL split, so `joinUrl()` returns the same link
+    to everyone (Google's own meeting lobby is the real access control,
+    documented as a limitation).
+  - **B13-B16** built G9: `live_polls`/`live_poll_options`/
+    `live_poll_responses` (unique per student per poll, DB-level, same
+    `lesson_question_votes` defense-in-depth precedent); `LivePollService`
+    (create/open/close, reuses `EnrolmentApprovalPolicy::canDecide()`
+    rather than a new role constant, `open()` gated to
+    `BatchSession::liveState() === STATE_LIVE`); `App\Livewire\
+    LivePollResponse` (student vote, gated by `LessonAccess::
+    canJoinLive()`'s own verdict, app-check-plus-unique-constraint
+    one-vote enforcement); `App\Livewire\LivePollBoard` (instructor
+    launch controls + the shared instructor/student results view,
+    `wire:poll.2s` while open — B14 shipped the service with no UI to
+    reach it, B16 is what actually closes that gap). Both components
+    sit on the syllabus tree's own live_session row, next to the Join
+    link, since students leave the app once they click it.
+  - **B18's own dedicated review pass** — same discipline S9 B14/S10
+    B15/S11 B16/S12 B14/S13 B17 each already established, re-reading
+    every B0-B17 file for real bugs rather than trusting a green suite
+    alone. **Found and fixed 1 real bug**: `GenerateLessonSubtitles`
+    (B2) is a `ShouldQueue` listener that calls `$this->fail($e)` on a
+    throw, but only used the `Queueable` trait — `fail()` lives on
+    `InteractsWithQueue`, which `CallQueuedListener` only wires up when
+    the class actually uses that trait, so a real generation failure
+    would have fatally errored with "Call to undefined method" instead
+    of marking `subtitle_status: failed`. `DownloadLiveRecording`'s own
+    docblock (B9) had already flagged this exact bug class in itself and
+    fixed it there, but explicitly left this sibling instance
+    unfixed/unverified ("flagged here rather than fixed, out of scope
+    for this block") — B18 closed it, with a new regression test that
+    forces the throw and confirms no fatal error (previously untested,
+    since `QUEUE_CONNECTION=sync` in `phpunit.xml` means the happy-path
+    test alone was never enough to catch it). Two new lifecycle E2E
+    tests (`S14VideoLiveDepthE2ETest`): Zoom OAuth connect → schedule on
+    the new provider → recording-completed webhook → downloaded →
+    ingested → playable, chained in one run; and a live poll
+    instructor-launches → 2 students respond → a 3rd non-enrolled
+    student is refused → instructor closes → aggregation numbers match
+    exactly.
+  - Tests green: **1283/1284** (same 1 pre-existing, unrelated
+    `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+    scope) — 78 new tests across all 19 blocks.
+  - `docs/PROJECT-STATUS.md` updated to COMPLETE, matching S1-S13's own
+    post-completion format.
 
 - **S13 — Discovery & Content Engagement: COMPLETE, all 18 blocks
   (2026-08-19).** `docs/superpowers/specs/2026-08-19-s13-discovery-engagement-design.md`,
@@ -1047,6 +1125,18 @@ at the source.
   (found in S5 B6: `live_session` lessons couldn't attach a recording at
   all because the field's `visible()` still checked `type === 'video'`,
   even though `attachUploadedVideo()` itself never cared about type)
+- Don't add a `ShouldQueue` job/listener that calls `$this->fail($e)`
+  with only the `Queueable` trait — `fail()` lives on
+  `InteractsWithQueue`, which `CallQueuedListener`/`CallQueuedHandler`
+  only wire up when the class actually uses that trait; without it, a
+  real failure fatally errors with "Call to undefined method" instead of
+  hitting your catch block's own cleanup. Bitten twice: `DownloadLiveRecording`
+  (S14 B9) found and fixed it in itself but explicitly left a sibling,
+  `GenerateLessonSubtitles` (S14 B2), unfixed — B18's review pass closed
+  it. Both traits together (`Dispatchable, InteractsWithQueue, Queueable`)
+  is the safe default for any `ShouldQueue` class that calls `fail()`. A
+  happy-path test alone won't catch this — you need one that forces the
+  throw
 - Don't call `Model::create()` on a `BelongsToTenant` model from a
   scheduled job that runs with no `CurrentTenant` bound (the
   `ExpirePendingEnrolments`/`RecordVideoCoverageAttendance` pattern) —

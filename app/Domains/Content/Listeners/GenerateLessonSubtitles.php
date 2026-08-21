@@ -10,6 +10,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -18,10 +19,15 @@ use Throwable;
  * touching any tenant-scoped model — fires on the same LessonArtifactReady
  * event StartIngestion's own chain already produces (design doc decision 8:
  * no separate manual trigger, reuses the artifact the pipeline just built).
+ *
+ * S14 B18 review: also needs InteractsWithQueue — fail() lives there, and
+ * CallQueuedListener only wires it up when the listener actually uses the
+ * trait. Same bug DownloadLiveRecording's own docblock (B9) flagged here
+ * without fixing; fixed now.
  */
 class GenerateLessonSubtitles implements ShouldQueue
 {
-    use Queueable;
+    use InteractsWithQueue, Queueable;
 
     public function handle(LessonArtifactReady $event): void
     {
