@@ -20,6 +20,7 @@
                             <strong>Live now</strong>
                             @if ($row['canJoin'])
                                 <a href="{{ route('live.join', ['subdomain' => $subdomain, 'session' => $row['session']->id]) }}">Join</a>
+                                <livewire:live-poll-response :session="$row['session']" :key="'live-poll-'.$row['session']->id" />
                             @endif
                         @elseif ($row['liveState'] === 'recorded')
                             <a href="{{ route('lessons.watch', ['subdomain' => $subdomain, 'lesson' => $lesson->id]) }}">Watch recording</a>

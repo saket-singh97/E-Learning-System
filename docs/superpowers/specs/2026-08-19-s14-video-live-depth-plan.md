@@ -43,7 +43,7 @@ stop and report before starting the next block.
 | B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ✅ done |
 | B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ✅ done |
 | B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ✅ done |
-| B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ⬜ not started |
+| B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ✅ done |
 | B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ⬜ not started |
 | B17 | `TenantModelRegistry` sweep — all 6 new `BelongsToTenant` models confirmed registered | ⬜ not started |
 | B18 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -474,11 +474,35 @@ S1/S2, unrelated.
 `composer test`: 1271/1272 pass (9 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B15 — Student poll response — not started
+### B15 — Student poll response — done
 
-- Livewire component, gated by `LessonAccess::canJoinLive()`'s own
-  verdict (decision 12 — reused, not re-derived), one response per
-  student per poll (DB unique constraint, not app-level check alone).
+- [x] `App\Livewire\LivePollResponse` — mounts a `BatchSession`, `render()`
+  resolves that session's own currently-`open` `LivePoll` (if any) and
+  whether this viewer already responded; `submit(int $optionId)` records a
+  `LivePollResponse` row. Gated by `LessonAccess::canJoinLive()`'s own
+  verdict (decision 12 — reused, not re-derived, the exact gate the join
+  button itself already uses), early-returning on a failed check rather
+  than `abort()` — same posture `LessonQuestions::toggleUpvote()` already
+  takes for a Livewire action, not an HTTP endpoint.
+- [x] One response per student per poll: an app-level existence check
+  first (so a normal click never surfaces a DB error), the
+  `live_poll_responses` unique constraint (B13) as defense-in-depth
+  against a genuine race between two near-simultaneous submits, caught
+  and silently dropped — same "app check plus unique constraint" shape
+  `LessonQuestionVote`'s own toggle already established.
+- [x] Embedded on the syllabus tree's own live_session row
+  (`resources/views/livewire/syllabus-tree.blade.php`), next to the Join
+  link, gated behind the same `canJoin` the link itself already checks —
+  students leave the app once they click Join (design doc §3.3), so the
+  poll UI lives here rather than on a page reachable only mid-meeting.
+- [x] `LivePollResponseTest`: enrolled live-window student submits and is
+  recorded against the right option, a second submit from the same
+  student is dropped (still 1 row), a non-enrolled student's submit
+  records nothing, a submit against a closed/no poll records nothing, and
+  the confirmation message renders once responded.
+
+`composer test`: 1276/1277 pass (5 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B16 — Live aggregation display — not started
 
