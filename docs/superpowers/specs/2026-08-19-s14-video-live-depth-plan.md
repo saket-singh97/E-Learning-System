@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B7 | `ZoomMeetingsProvider` driver — real meeting creation via Zoom REST API, wired as a new `live_provider` option (G7 pt.2) | ✅ done |
 | B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ✅ done |
 | B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ✅ done |
-| B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ⬜ not started |
+| B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ✅ done |
 | B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ⬜ not started |
 | B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ⬜ not started |
 | B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ⬜ not started |
@@ -342,12 +342,24 @@ job needed `Dispatchable`/`InteractsWithQueue` alongside `Queueable` for
 `::dispatch()`/`fail()` to resolve at all) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B10 — Recording playback verification — not started
+### B10 — Recording playback verification — done
 
-- No new code expected (decision 5) — a dedicated test proves a captured
-  recording plays back through the *existing*
-  `StreamLessonController`/`LessonAccess::canStream()`/signed-URL path
-  unchanged, closing G6 by verification rather than new plumbing.
+- [x] No new production code (decision 5, confirmed) — `LessonAccess::isPlayable()`
+  already treats `video`/`live_session` identically
+  (`video_status === 'ready' && filled(video_disk_path)`), and
+  `StreamLessonController` never branches on lesson type, so the recording
+  `DownloadLiveRecording` (B9) lands on `video_disk_path` needs zero new
+  plumbing to stream.
+- [x] `RecordedLiveSessionPlaybackTest` (new file) — a `live_session`
+  lesson with a recording on `video_disk_path` (same convention B9's job
+  writes to) streams `assertOk()` through the real signed
+  `watch.stream` route for an enrolled-role student; a `live_session`
+  lesson with no recording yet (`video_disk_path` null) 404s the same
+  route, proving `isPlayable()`'s gate — not just `canStream()` — covers
+  the pre-recording state too.
+
+`composer test`: 1252/1253 pass (2 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B11 — Join/API token-expiry handling — not started
 
