@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ✅ done |
 | B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ✅ done |
 | B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ✅ done |
-| B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ⬜ not started |
+| B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ✅ done |
 | B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ⬜ not started |
 | B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ⬜ not started |
 | B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ⬜ not started |
@@ -384,11 +384,44 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1254/1255 pass (2 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B12 — `GoogleMeetProvider` driver — not started
+### B12 — `GoogleMeetProvider` driver — done
 
-- New driver implementing `LiveClassProvider`, Google Calendar API
-  `conferenceData` meet-link creation (`Http::fake()`-tested).
-- `BatchSession::resolveLiveClassProvider()` gains a `'google_meet'` arm.
+- [x] New driver (`app/Integrations/Drivers/GoogleMeetProvider.php`)
+  implementing `LiveClassProvider`. Meet has no standalone room-creation
+  API — `createRoom()` POSTs a Calendar API `events.insert` with
+  `conferenceData.createRequest.conferenceSolutionKey.type=hangoutsMeet`
+  (`?conferenceDataVersion=1`, required by Google for conferenceData to
+  actually get created) and returns the response's `hangoutLink`, stored
+  as `provider_meeting_ref` same as every other driver. No
+  `institute_google_connections` table (none designed for G8, unlike G7's
+  per-tenant Zoom OAuth) — a single platform-wide `refresh_token`
+  (`GOOGLE_CALENDAR_REFRESH_TOKEN`, reusing the existing
+  `services.google.client_id`/`client_secret` Socialite-login credential
+  pair) is exchanged for a fresh access_token on every call, never cached
+  — a rare admin-scheduling action, not a hot path.
+- [x] Meet has no host/participant URL split the way Zoom's
+  start_url/join_url does — `joinUrl()` returns the same `hangoutLink` to
+  everyone (`ExternalLinkProvider`'s own posture), access control is
+  Google's own meeting lobby, documented as a limitation not a gap.
+  `markEnded()` no-ops — Calendar API has no "end this meeting now" call
+  (`ZoomVideoSdkProvider`'s own no-op precedent).
+- [x] `BatchSession::LIVE_PROVIDERS` gains `'google_meet'`;
+  `resolveLiveClassProvider()` gains a `'google_meet'` arm resolving
+  directly to `GoogleMeetProvider` (no Fake-degrade precedent to preserve,
+  same posture B7's `zoom_meetings_oauth` arm already took — a missing
+  credential throws a clear `RuntimeException`, not a silent fake room);
+  `BatchSessionsRelationManager`'s `live_provider` Select gains the new
+  option. `config/services.php`/`.env.example` gain
+  `google.calendar_refresh_token`/`calendar_id`
+  (`GOOGLE_CALENDAR_REFRESH_TOKEN`/`GOOGLE_CALENDAR_ID`).
+- [x] `GoogleMeetProviderTest`: missing-credential throws, real event
+  creation asserting the token exchange + `conferenceDataVersion=1` +
+  `hangoutsMeet` request shape and the returned link, same link for host
+  vs student, `markEnded()` sends nothing, and the
+  `resolveLiveClassProvider()` dispatch.
+
+`composer test`: 1259/1260 pass (5 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B13 — Live polls schema — not started
 

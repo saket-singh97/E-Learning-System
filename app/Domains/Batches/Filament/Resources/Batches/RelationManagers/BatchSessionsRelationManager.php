@@ -57,6 +57,7 @@ class BatchSessionsRelationManager extends RelationManager
                     'external_link' => 'External link (Zoom/Meet/etc. — paste a URL)',
                     'zoom_video_sdk' => 'Zoom Video SDK (room created automatically)',
                     'zoom_meetings_oauth' => 'Zoom (real meeting via connected institute account)',
+                    'google_meet' => 'Google Meet (room created automatically)',
                 ])
                 ->default('external_link')
                 ->live()

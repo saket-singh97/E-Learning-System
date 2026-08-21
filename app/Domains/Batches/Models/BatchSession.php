@@ -5,6 +5,7 @@ namespace App\Domains\Batches\Models;
 use App\Domains\Batches\Events\LiveSessionRoomCreated;
 use App\Domains\Content\Models\Lesson;
 use App\Integrations\Drivers\ExternalLinkProvider;
+use App\Integrations\Drivers\GoogleMeetProvider;
 use App\Integrations\Drivers\ZoomMeetingsProvider;
 use App\Integrations\LiveClassProvider;
 use App\Support\Tenancy\BelongsToTenant;
@@ -21,7 +22,7 @@ class BatchSession extends Model
      *
      * @var array<int, string>
      */
-    public const LIVE_PROVIDERS = ['external_link', 'zoom_video_sdk', 'zoom_meetings_oauth'];
+    public const LIVE_PROVIDERS = ['external_link', 'zoom_video_sdk', 'zoom_meetings_oauth', 'google_meet'];
 
     public const STATE_SCHEDULED = 'scheduled';
 
@@ -113,15 +114,18 @@ class BatchSession extends Model
 
     /**
      * Per-session provider choice, not a single app-wide default — a
-     * teacher picks external_link/zoom_video_sdk per BatchSession, so the
-     * driver is resolved from that column. external_link needs no account
-     * and always resolves to the real class. zoom_video_sdk resolves
-     * through the app-wide LiveClassProvider container binding instead of
-     * ZoomVideoSdkProvider directly — that binding stays FakeLiveClassDriver
-     * until real ZOOM_SDK_KEY/SECRET exist (AppServiceProvider, same
-     * posture as AiProvider/VideoProvider), so choosing Zoom today safely
-     * degrades to the Fake driver rather than throwing on missing
-     * credentials.
+     * teacher picks a provider per BatchSession, so the driver is resolved
+     * from that column. external_link needs no account and always resolves
+     * to the real class. zoom_video_sdk resolves through the app-wide
+     * LiveClassProvider container binding instead of ZoomVideoSdkProvider
+     * directly — that binding stays FakeLiveClassDriver until real
+     * ZOOM_SDK_KEY/SECRET exist (AppServiceProvider, same posture as
+     * AiProvider/VideoProvider), so choosing Zoom today safely degrades to
+     * the Fake driver rather than throwing on missing credentials.
+     * zoom_meetings_oauth and google_meet (G8) both resolve to their real
+     * driver directly instead — no Fake-degrade precedent to preserve for
+     * either, so a missing connection/credential throws a clear
+     * RuntimeException instead of silently faking a room.
      */
     public function resolveLiveClassProvider(): LiveClassProvider
     {
@@ -129,6 +133,7 @@ class BatchSession extends Model
             'external_link' => app(ExternalLinkProvider::class),
             'zoom_video_sdk' => app(LiveClassProvider::class),
             'zoom_meetings_oauth' => app(ZoomMeetingsProvider::class),
+            'google_meet' => app(GoogleMeetProvider::class),
             default => throw new InvalidArgumentException("Unknown live_provider [{$this->live_provider}]."),
         };
     }
