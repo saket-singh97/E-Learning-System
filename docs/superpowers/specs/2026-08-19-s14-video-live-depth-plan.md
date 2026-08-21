@@ -44,7 +44,7 @@ stop and report before starting the next block.
 | B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ✅ done |
 | B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ✅ done |
 | B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ✅ done |
-| B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ⬜ not started |
+| B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ✅ done |
 | B17 | `TenantModelRegistry` sweep — all 6 new `BelongsToTenant` models confirmed registered | ⬜ not started |
 | B18 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -504,11 +504,37 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1276/1277 pass (5 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B16 — Live aggregation display — not started
+### B16 — Live aggregation display — done
 
-- Instructor + student result view, `wire:poll.2s` while a poll is
-  `open` (decision 11, matches `FeeCheckout`'s own established
-  polling-refresh precedent).
+- [x] `App\Livewire\LivePollBoard` — the UI on top of `LivePollService`
+  (B14 shipped service-only, no way to reach it from a page) and the
+  aggregation display neither B14 nor B15 built: instructor launch
+  controls (create with filtered-blank options, min 2 enforced same as
+  the service; open a draft; close an open poll) plus a shared
+  instructor/student results view (per-option response count + %,
+  `wire:poll.2s` — decision 11, same `FeeCheckout` polling-refresh
+  precedent, S9 B8 — only while `status === 'open'`; a closed poll's
+  numbers are final, no more polling needed).
+- [x] Manage-controls visibility uses `LessonAccess::isStaff()` (same
+  reuse posture every other staff-gated view already takes); actual
+  authorization is still `LivePollService`'s own
+  `EnrolmentApprovalPolicy::canDecide()`, re-checked server-side when an
+  action fires — same UI-visibility-vs-server-authorization split
+  `canJoinLive()`'s own Join link already has. A refused/invalid
+  transition (wrong role, wrong state) is swallowed rather than surfaced
+  — same "let the next render show the real state" posture
+  `LivePollResponse::submit()` already established.
+- [x] Nests `LivePollResponse` (B15) for the open-and-not-yet-responded
+  student case rather than duplicating its submit logic; embedded on the
+  syllabus tree's live_session row in place of the bare B15 embed
+  (`resources/views/livewire/syllabus-tree.blade.php`).
+- [x] `LivePollBoardTest`: instructor creates with blank options filtered
+  out, student refused creating, full open -> student responds -> board
+  shows the live count -> instructor closes round trip, student refused
+  closing.
+
+`composer test`: 1280/1281 pass (4 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B17 — TenantModelRegistry sweep — not started
 
