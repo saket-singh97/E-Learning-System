@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B8 | Zoom recording-completed webhook — signature verification + `live_recordings` schema (G5 pt.1 / G10 pt.1) | ✅ done |
 | B9 | `DownloadLiveRecording` job — downloads to `video_disk_path`, fires existing `LessonVideoReady` into S3's ingestion pipeline unchanged (G5 pt.2) | ✅ done |
 | B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ✅ done |
-| B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ⬜ not started |
+| B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ✅ done |
 | B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ⬜ not started |
 | B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ⬜ not started |
 | B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ⬜ not started |
@@ -361,13 +361,28 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1252/1253 pass (2 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B11 — Join/API token-expiry handling — not started
+### B11 — Join/API token-expiry handling — done
 
-- `ZoomVideoSdkProvider`'s existing 2-hour join-JWT expiry: confirmed/
-  documented, no change needed (already correct per S5).
-- `ZoomMeetingsProvider`'s own OAuth access-token refresh-on-expiry path
-  (B7's own driver reads `token_expires_at`, refreshes via the stored
-  `refresh_token` before an expired-token call would otherwise fail).
+- [x] `ZoomVideoSdkProvider`'s existing 2-hour join-JWT expiry confirmed —
+  `signSessionToken()` mints `exp: iat + 7200` fresh per call and never
+  stores/reuses a token, so there is nothing to refresh; no change needed
+  (already correct per S5).
+- [x] `ZoomMeetingsProvider::connectionFor()` now routes through a new
+  `refreshIfExpired()`: if `token_expires_at` is past, POSTs
+  `grant_type=refresh_token` to `zoom.us/oauth/token` with
+  `withBasicAuth(oauth_client_id, oauth_client_secret)` — same shape
+  `ZoomOAuthController::callback()`'s own initial exchange already uses —
+  and persists the new `access_token`/`refresh_token`/`token_expires_at`
+  (Zoom rotates `refresh_token` on every use, so the new one is stored,
+  not the old one reused). Every public method (`createRoom()`/
+  `joinUrl()`/`markEnded()`) already routes through `connectionFor()`, so
+  no call site can slip through with a stale token.
+- [x] `ZoomMeetingsProviderTest`: 2 new cases — an expired connection
+  refreshes before the API call and persists the new tokens; a still-valid
+  connection makes no call to `oauth/token` at all.
+
+`composer test`: 1254/1255 pass (2 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B12 — `GoogleMeetProvider` driver — not started
 

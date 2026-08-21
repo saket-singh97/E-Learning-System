@@ -122,3 +122,58 @@ it('no-ops markEnded when no meeting was ever created', function () {
 it('resolves zoom_meetings_oauth through BatchSession::resolveLiveClassProvider()', function () {
     expect($this->session->resolveLiveClassProvider())->toBeInstanceOf(ZoomMeetingsProvider::class);
 });
+
+it('refreshes an expired access_token before calling the Zoom API', function () {
+    config([
+        'services.zoom.oauth_client_id' => 'test-client-id',
+        'services.zoom.oauth_client_secret' => 'test-client-secret',
+    ]);
+
+    $connection = InstituteZoomConnection::create([
+        'account_id' => 'acct-1',
+        'access_token' => 'stale-access-token',
+        'refresh_token' => 'stale-refresh-token',
+        'token_expires_at' => now()->subMinute(),
+        'connected_by_user_id' => User::factory()->create(['tenant_id' => $this->tenant->id])->id,
+    ]);
+
+    Http::fake([
+        'zoom.us/oauth/token' => Http::response([
+            'access_token' => 'fresh-access-token',
+            'refresh_token' => 'fresh-refresh-token',
+            'expires_in' => 3600,
+        ], 200),
+        'api.zoom.us/v2/users/me/meetings' => Http::response(['id' => 987654321], 201),
+    ]);
+
+    $this->driver->createRoom($this->session);
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://zoom.us/oauth/token'
+        && $request['grant_type'] === 'refresh_token'
+        && $request['refresh_token'] === 'stale-refresh-token');
+    Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer fresh-access-token'));
+
+    $connection->refresh();
+    expect($connection->access_token)->toBe('fresh-access-token')
+        ->and($connection->refresh_token)->toBe('fresh-refresh-token')
+        ->and($connection->token_expires_at->isFuture())->toBeTrue();
+});
+
+it('does not refresh a still-valid access_token', function () {
+    InstituteZoomConnection::create([
+        'account_id' => 'acct-1',
+        'access_token' => 'zoom-access-token',
+        'refresh_token' => 'zoom-refresh-token',
+        'token_expires_at' => now()->addHour(),
+        'connected_by_user_id' => User::factory()->create(['tenant_id' => $this->tenant->id])->id,
+    ]);
+
+    Http::fake([
+        'zoom.us/oauth/token' => Http::response(['error' => 'should not be called'], 500),
+        'api.zoom.us/v2/users/me/meetings' => Http::response(['id' => 987654321], 201),
+    ]);
+
+    $this->driver->createRoom($this->session);
+
+    Http::assertNotSent(fn ($request) => $request->url() === 'https://zoom.us/oauth/token');
+});

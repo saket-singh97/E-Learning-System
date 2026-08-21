@@ -17,10 +17,12 @@ use RuntimeException;
  * calls Zoom's real Meetings API. Http::fake()-tested, no real account,
  * same precedent RazorpayProviderTest already uses.
  *
- * Reads the stored access_token as-is — refresh-before-an-expired-call
- * (token_expires_at vs now, via refresh_token) is B11's own scope, not
- * built here yet, same "this block ships it, the next completes it" order
- * B4/B5 already established for this slice.
+ * B11 (G10 pt.2): connectionFor() refreshes an expired access_token via the
+ * stored refresh_token before handing the connection back, same
+ * grant_type=refresh_token/withBasicAuth(client_id, client_secret) shape
+ * ZoomOAuthController::callback() already uses for the initial exchange.
+ * Every public method routes through connectionFor(), so no call site can
+ * accidentally use a stale token.
  */
 class ZoomMeetingsProvider implements LiveClassProvider
 {
@@ -80,6 +82,36 @@ class ZoomMeetingsProvider implements LiveClassProvider
             throw new RuntimeException("Tenant [{$session->tenant_id}] has no connected Zoom account — connect one in the Admin panel first.");
         }
 
-        return $connection;
+        return $this->refreshIfExpired($connection);
+    }
+
+    /**
+     * Zoom access tokens are short-lived (1 hour); refresh_token is
+     * long-lived and rotates on every use, so the new one is stored right
+     * alongside the new access_token — reusing an already-rotated
+     * refresh_token would otherwise fail the next refresh.
+     */
+    protected function refreshIfExpired(InstituteZoomConnection $connection): InstituteZoomConnection
+    {
+        if (! $connection->token_expires_at?->isPast()) {
+            return $connection;
+        }
+
+        $tokenResponse = Http::asForm()
+            ->withBasicAuth(config('services.zoom.oauth_client_id'), config('services.zoom.oauth_client_secret'))
+            ->post('https://zoom.us/oauth/token', [
+                'grant_type' => 'refresh_token',
+                'refresh_token' => $connection->refresh_token,
+            ])
+            ->throw()
+            ->json();
+
+        $connection->update([
+            'access_token' => $tokenResponse['access_token'],
+            'refresh_token' => $tokenResponse['refresh_token'],
+            'token_expires_at' => now()->addSeconds((int) $tokenResponse['expires_in']),
+        ]);
+
+        return $connection->fresh();
     }
 }
