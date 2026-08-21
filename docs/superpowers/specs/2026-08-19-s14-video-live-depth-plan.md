@@ -45,7 +45,7 @@ stop and report before starting the next block.
 | B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ✅ done |
 | B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ✅ done |
 | B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ✅ done |
-| B17 | `TenantModelRegistry` sweep — all 6 new `BelongsToTenant` models confirmed registered | ⬜ not started |
+| B17 | `TenantModelRegistry` sweep — all 6 new `BelongsToTenant` models confirmed registered | ✅ done |
 | B18 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 **Test suite:** 1206/1207 at slice start (1 pre-existing, unrelated
@@ -536,13 +536,23 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1280/1281 pass (4 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B17 — TenantModelRegistry sweep — not started
+### B17 — TenantModelRegistry sweep — done
 
-- Confirm all 6 new `BelongsToTenant` models
-  (`LessonStreamSession`, `InstituteZoomConnection`, `LiveRecording`,
-  `LivePoll`, `LivePollOption`, `LivePollResponse`) registered with
-  `seedAttributes()`/`updateAttributes()` entries; `CrossTenantTest`
-  generates coverage for each with no hand-written per-model test.
+- [x] Verification pass, no new code — all 6 new `BelongsToTenant` models
+  (`LessonStreamSession` B0, `InstituteZoomConnection` B6, `LiveRecording`
+  B8, `LivePoll`/`LivePollOption`/`LivePollResponse` B13) were already
+  registered in `TenantModelRegistry::MODELS` with
+  `seedAttributes()`/`updateAttributes()` entries at the point each was
+  introduced, per this slice's own "register it in the same block that
+  adds the model" discipline (CLAUDE.md) — confirmed by grep, not
+  re-added.
+- [x] `CrossTenantTest`: 52/52 pass, generated coverage (cross-tenant
+  read, update, no-tenant-context guard) for all 6 with no hand-written
+  per-model isolation test.
+
+`composer test`: 1280/1281 pass (0 new tests — already covered) — sole
+failure is the pre-existing `CourseSlugUniquenessTest`, carried since
+S1/S2, unrelated.
 
 ### B18 — Full test coverage, review pass — not started
 
