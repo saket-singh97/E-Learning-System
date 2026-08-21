@@ -16,6 +16,9 @@ use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Models\InstituteZoomConnection;
+use App\Domains\Batches\Models\LivePoll;
+use App\Domains\Batches\Models\LivePollOption;
+use App\Domains\Batches\Models\LivePollResponse;
 use App\Domains\Batches\Models\LiveRecording;
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\SubscriptionInvoice;
@@ -111,6 +114,9 @@ class TenantModelRegistry
         LessonStreamSession::class,
         InstituteZoomConnection::class,
         LiveRecording::class,
+        LivePoll::class,
+        LivePollOption::class,
+        LivePollResponse::class,
     ];
 
     /**
@@ -622,6 +628,111 @@ class TenantModelRegistry
                 ])->id,
                 'status' => 'pending',
             ],
+            LivePoll::class => [
+                'batch_session_id' => BatchSession::create([
+                    'batch_id' => Batch::create([
+                        'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                        'title' => 'Parent',
+                        'slug' => 'parent-'.uniqid(),
+                        'starts_on' => now()->toDateString(),
+                        'ends_on' => now()->addMonth()->toDateString(),
+                        'self_enrol_mode' => 'manual_only',
+                        'status' => 'draft',
+                    ])->id,
+                    'lesson_id' => Lesson::create([
+                        'course_section_id' => CourseSection::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                            'title' => 'Parent',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Row',
+                        'type' => 'live_session',
+                        'position' => 0,
+                    ])->id,
+                    'starts_at' => now()->addWeek(),
+                    'duration_minutes' => 60,
+                    'position' => 0,
+                    'live_provider' => 'zoom_meetings_oauth',
+                ])->id,
+                'question' => 'Row poll question?',
+                'status' => 'draft',
+            ],
+            LivePollOption::class => [
+                'live_poll_id' => LivePoll::create([
+                    'batch_session_id' => BatchSession::create([
+                        'batch_id' => Batch::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                            'title' => 'Parent',
+                            'slug' => 'parent-'.uniqid(),
+                            'starts_on' => now()->toDateString(),
+                            'ends_on' => now()->addMonth()->toDateString(),
+                            'self_enrol_mode' => 'manual_only',
+                            'status' => 'draft',
+                        ])->id,
+                        'lesson_id' => Lesson::create([
+                            'course_section_id' => CourseSection::create([
+                                'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                                'title' => 'Parent',
+                                'position' => 0,
+                            ])->id,
+                            'title' => 'Row',
+                            'type' => 'live_session',
+                            'position' => 0,
+                        ])->id,
+                        'starts_at' => now()->addWeek(),
+                        'duration_minutes' => 60,
+                        'position' => 0,
+                        'live_provider' => 'zoom_meetings_oauth',
+                    ])->id,
+                    'question' => 'Parent poll question?',
+                    'status' => 'draft',
+                ])->id,
+                'label' => 'Option A',
+                'position' => 0,
+            ],
+            LivePollResponse::class => (function () {
+                $poll = LivePoll::create([
+                    'batch_session_id' => BatchSession::create([
+                        'batch_id' => Batch::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                            'title' => 'Parent',
+                            'slug' => 'parent-'.uniqid(),
+                            'starts_on' => now()->toDateString(),
+                            'ends_on' => now()->addMonth()->toDateString(),
+                            'self_enrol_mode' => 'manual_only',
+                            'status' => 'draft',
+                        ])->id,
+                        'lesson_id' => Lesson::create([
+                            'course_section_id' => CourseSection::create([
+                                'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                                'title' => 'Parent',
+                                'position' => 0,
+                            ])->id,
+                            'title' => 'Row',
+                            'type' => 'live_session',
+                            'position' => 0,
+                        ])->id,
+                        'starts_at' => now()->addWeek(),
+                        'duration_minutes' => 60,
+                        'position' => 0,
+                        'live_provider' => 'zoom_meetings_oauth',
+                    ])->id,
+                    'question' => 'Parent poll question?',
+                    'status' => 'open',
+                ]);
+
+                $option = LivePollOption::create([
+                    'live_poll_id' => $poll->id,
+                    'label' => 'Option A',
+                    'position' => 0,
+                ]);
+
+                return [
+                    'live_poll_id' => $poll->id,
+                    'live_poll_option_id' => $option->id,
+                    'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                ];
+            })(),
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -683,6 +794,9 @@ class TenantModelRegistry
             LessonStreamSession::class => ['ended_at' => now()],
             InstituteZoomConnection::class => ['account_id' => 'tampered'],
             LiveRecording::class => ['status' => 'tampered'],
+            LivePoll::class => ['question' => 'tampered'],
+            LivePollOption::class => ['label' => 'tampered'],
+            LivePollResponse::class => ['created_at' => now()->subDay()],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

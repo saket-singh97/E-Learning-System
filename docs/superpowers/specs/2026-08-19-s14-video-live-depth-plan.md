@@ -41,7 +41,7 @@ stop and report before starting the next block.
 | B10 | Recording playback verification — confirm `StreamLessonController`'s existing signed-URL + `canStream()` gate already covers a captured recording end to end (G6) | ✅ done |
 | B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ✅ done |
 | B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ✅ done |
-| B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ⬜ not started |
+| B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ✅ done |
 | B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ⬜ not started |
 | B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ⬜ not started |
 | B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ⬜ not started |
@@ -423,12 +423,28 @@ pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 `composer test`: 1259/1260 pass (5 new tests) — sole failure is the
 pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
-### B13 — Live polls schema — not started
+### B13 — Live polls schema — done
 
-- `live_polls`/`live_poll_options`/`live_poll_responses` migrations —
-  unique on `(live_poll_id, user_id)` for responses (decision 11's own
-  defense-in-depth precedent, matching S13's `lesson_question_votes`).
-- Models, all registered in `TenantModelRegistry`.
+- [x] `live_polls` (`tenant_id`, `batch_session_id`, `question`, `status`
+  draft|open|closed default draft, `opened_at`/`closed_at` nullable),
+  `live_poll_options` (`tenant_id`, `live_poll_id`, `label`, `position`),
+  `live_poll_responses` (`tenant_id`, `live_poll_id`,
+  `live_poll_option_id`, `user_id`) migrations — `live_poll_responses`
+  unique on `(live_poll_id, user_id)` (decision 11's own defense-in-depth
+  precedent, matching S13's `lesson_question_votes`).
+- [x] `LivePoll`/`LivePollOption`/`LivePollResponse` models
+  (`App\Domains\Batches\Models`), all `BelongsToTenant`, all registered in
+  `TenantModelRegistry` (seed/update attributes included) — schema and
+  relations only, no launch/respond/aggregate logic yet (B14-B16's own
+  scope, same "this block ships the shape, later blocks complete it"
+  order every prior slice has used).
+- [x] No hand-written per-model isolation test — `CrossTenantTest`
+  auto-generated 3 more model cases from the registry (52/52 pass).
+
+`composer test`: 1262/1263 pass (0 new dedicated tests — `CrossTenantTest`
+gained 3 auto-generated cases, counted within its own suite) — sole
+failure is the pre-existing `CourseSlugUniquenessTest`, carried since
+S1/S2, unrelated.
 
 ### B14 — Instructor "launch poll" — not started
 
