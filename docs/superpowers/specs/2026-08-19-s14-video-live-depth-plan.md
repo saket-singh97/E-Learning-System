@@ -42,7 +42,7 @@ stop and report before starting the next block.
 | B11 | Join/API token-expiry handling across both Zoom drivers (G10 pt.2) | ✅ done |
 | B12 | `GoogleMeetProvider` driver — Calendar API meet-link creation, wired as a new `live_provider` option (G8) | ✅ done |
 | B13 | Live polls schema — `live_polls`/`live_poll_options`/`live_poll_responses` (G9 pt.1) | ✅ done |
-| B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ⬜ not started |
+| B14 | Instructor "launch poll" — create/open/close a poll during a live session (G9 pt.2) | ✅ done |
 | B15 | Student poll response — Livewire UI, gated by `LessonAccess::canJoinLive()`'s own verdict, one vote per student (G9 pt.3) | ⬜ not started |
 | B16 | Live aggregation display — instructor + student result view, `wire:poll.2s` (G9 pt.4) | ⬜ not started |
 | B17 | `TenantModelRegistry` sweep — all 6 new `BelongsToTenant` models confirmed registered | ⬜ not started |
@@ -446,11 +446,33 @@ gained 3 auto-generated cases, counted within its own suite) — sole
 failure is the pre-existing `CourseSlugUniquenessTest`, carried since
 S1/S2, unrelated.
 
-### B14 — Instructor "launch poll" — not started
+### B14 — Instructor "launch poll" — done
 
-- Create a poll (question + options) for a live `BatchSession`, open it
-  (`status: open`), close it (`status: closed`) — instructor/admin only,
-  same role gate `EnrolmentApprovalPolicy::DECIDER_ROLES` already uses.
+- [x] `LivePollService` (`app/Domains/Batches/Services/`) — `create()`
+  (question + `array<string>` option labels, min 2, `status: draft`),
+  `open()` (`draft` -> `open`, stamps `opened_at`, only while
+  `BatchSession::liveState() === STATE_LIVE` — same window
+  `LessonAccess::canJoinLive()` already requires for a student to reach
+  the join button, so a poll opened outside it would have no one able to
+  respond anyway), `close()` (`open` -> `closed`, stamps `closed_at`).
+  Service-only in this block — no Livewire/controller wiring yet, that's
+  B15/B16's own scope.
+- [x] Authorization reuses `EnrolmentApprovalPolicy::canDecide()` against
+  the session's own batch rather than a new instructor/institute_admin
+  constant (same `DECIDER_ROLES` gate `EnrolmentsRelationManager` already
+  uses) — checked inside the service itself, not deferred to a UI
+  boundary, since no UI exists yet in this block to check it upstream.
+- [x] Two new exceptions: `LivePollAuthorizationException` (403, wrong
+  actor) and `LivePollStateException` (409, invalid transition or session
+  not live), both registered in `bootstrap/app.php` same one-line-per-class
+  shape every prior exception already uses.
+- [x] `LivePollServiceTest`: instructor creates with options, student
+  refused, <2-options refused, open only while live (refused when
+  scheduled), re-open refused, close from open, close-when-not-open
+  refused, student refused on open/close.
+
+`composer test`: 1271/1272 pass (9 new tests) — sole failure is the
+pre-existing `CourseSlugUniquenessTest`, carried since S1/S2, unrelated.
 
 ### B15 — Student poll response — not started
 

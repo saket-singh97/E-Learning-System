@@ -26,6 +26,8 @@ use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Exceptions\GdprDeletionRequestNotPendingException;
 use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\InvalidWebhookSignatureException;
+use App\Exceptions\LivePollAuthorizationException;
+use App\Exceptions\LivePollStateException;
 use App\Exceptions\MissingTenantContextException;
 use App\Exceptions\PlanDowngradeBlockedException;
 use App\Exceptions\PrivilegeEscalationException;
@@ -190,6 +192,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TenantSuspendedException $e) => abort(403));
         $exceptions->render(fn (PrivilegeEscalationException $e) => abort(403));
         $exceptions->render(fn (EnrolmentApprovalDeniedException $e) => abort(403));
+        $exceptions->render(fn (LivePollAuthorizationException $e) => abort(403, $e->getMessage()));
+        $exceptions->render(fn (LivePollStateException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (BatchFullException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (QuizAttemptLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (QuizNotAvailableException $e) => abort(404));
