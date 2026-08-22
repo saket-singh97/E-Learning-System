@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B5 | Discussion forum schema — `forum_threads`/`forum_posts`, depth-capped at 3 (F6 pt.1) | ✅ done |
 | B6 | Discussion forum UI — batch-scoped Livewire component, enrolment-gated (F6 pt.2) | ✅ done |
 | B7 | Batch feedback schema + student submission — `batch_feedback` (F8 pt.1) | ✅ done |
-| B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ⬜ not started |
+| B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ✅ done |
 | B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ⬜ not started |
 | B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ⬜ not started |
 | B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ⬜ not started |
@@ -288,9 +288,21 @@ undershot its actual by a wide margin.
 - `composer test`: 1331 tests, 1330 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B8 — Batch feedback aggregation view — not started
+### B8 — Batch feedback aggregation view — done
 
-- Instructor/admin-facing average rating + comment list per batch.
+- `Batch::feedback()` relation + `FeedbackRelationManager` (read-only —
+  no create/edit/delete, feedback is student-submitted only per B7),
+  registered on `BatchResource` alongside the sessions/enrolments
+  relation managers. Reuses B2's own panel scoping for free: same
+  `getRelations()` list is reachable from both Admin (every batch) and
+  Teach (the assigned instructor's own batch only), no new scoping code.
+- Filament's `Average` column summarizer on the `rating` column — the
+  aggregation itself, not a hand-rolled query.
+- New `tests/Feature/Batches/FeedbackRelationManagerTest.php` (2 tests):
+  admin sees the list, the batch's own assigned instructor sees it via
+  the Teach panel.
+- `composer test`: 1333 tests, 1332 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B9 — Bulk student CSV import — schema + parser — not started
 

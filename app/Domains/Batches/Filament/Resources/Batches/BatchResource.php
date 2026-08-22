@@ -7,6 +7,7 @@ use App\Domains\Batches\Filament\Resources\Batches\Pages\EditBatch;
 use App\Domains\Batches\Filament\Resources\Batches\Pages\ListBatches;
 use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\BatchSessionsRelationManager;
 use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\EnrolmentsRelationManager;
+use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\FeedbackRelationManager;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Content\Models\Course;
 use App\Support\Tenancy\CurrentTenant;
@@ -220,6 +221,7 @@ class BatchResource extends Resource
         return [
             BatchSessionsRelationManager::class,
             EnrolmentsRelationManager::class,
+            FeedbackRelationManager::class,
         ];
     }
 

@@ -71,4 +71,9 @@ class Batch extends Model
     {
         return $this->hasMany(Enrolment::class);
     }
+
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(BatchFeedback::class);
+    }
 }
