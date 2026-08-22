@@ -3,6 +3,7 @@
 namespace App\Domains\Batches\Models;
 
 use App\Domains\Content\Models\Course;
+use App\Models\User;
 use App\Support\Security\SanitizesHtml;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,7 @@ class Batch extends Model
     protected $fillable = [
         'tenant_id',
         'course_id',
+        'instructor_id',
         'title',
         'slug',
         'description',
@@ -53,6 +55,11 @@ class Batch extends Model
     public function course(): BelongsTo
     {
         return $this->belongsTo(Course::class);
+    }
+
+    public function instructor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'instructor_id');
     }
 
     public function sessions(): HasMany
