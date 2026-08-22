@@ -26,8 +26,12 @@ beforeEach(function () {
     $course = Course::create(['title' => 'Physics', 'slug' => 'physics-'.uniqid(), 'status' => 'published']);
     $section = CourseSection::create(['course_id' => $course->id, 'title' => 'Mechanics', 'position' => 0]);
     $lesson = Lesson::create(['course_section_id' => $section->id, 'title' => 'Live class', 'type' => 'live_session', 'position' => 0]);
+    $this->instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $this->instructor->assignRole('instructor');
+
     $this->batch = Batch::create([
         'course_id' => $course->id,
+        'instructor_id' => $this->instructor->id,
         'title' => 'Morning Batch',
         'slug' => 'morning-'.uniqid(),
         'starts_on' => '2026-09-01',
@@ -44,9 +48,6 @@ beforeEach(function () {
         'live_provider' => 'external_link',
         'provider_meeting_ref' => 'https://example.test/meet',
     ]);
-
-    $this->instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
-    $this->instructor->assignRole('instructor');
 
     $this->student = User::factory()->create(['tenant_id' => $this->tenant->id]);
     $this->student->assignRole('student');

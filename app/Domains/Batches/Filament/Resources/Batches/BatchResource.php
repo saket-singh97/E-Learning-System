@@ -15,6 +15,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -41,6 +42,37 @@ class BatchResource extends Resource
     protected static string | BackedEnum | null $navigationIcon = Heroicon::OutlinedUserGroup;
 
     protected static ?string $recordTitleAttribute = 'title';
+
+    /**
+     * Shared between the Admin and Teach panels (S15 B2) — an
+     * institute_admin still sees every tenant batch; an instructor sees
+     * only batches assigned to them (`instructor_id`), same idiom
+     * `ParentGuardianResource::getEloquentQuery()` already established for
+     * a different "narrow this shared resource's own query" case. Scoping
+     * unconditionally here (no panel check) would have hidden every batch
+     * from institute_admin, since admins are essentially never a batch's
+     * own `instructor_id`.
+     */
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->when(
+                Filament::getCurrentPanel()?->getId() === 'teach',
+                fn (Builder $query) => $query->where('instructor_id', auth()->id()),
+            );
+    }
+
+    /**
+     * Instructors reach their own assigned batches to schedule sessions
+     * and decide enrolments (via the two relation managers below), not to
+     * create new batches or delete/restore existing ones — those stay
+     * institute_admin actions, same "instructor sits below institute_admin"
+     * posture RoleHierarchy already establishes.
+     */
+    public static function canCreate(): bool
+    {
+        return Filament::getCurrentPanel()?->getId() !== 'teach';
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -172,9 +204,11 @@ class BatchResource extends Resource
             ])
             ->recordActions([
                 EditAction::make(),
-                DeleteAction::make(),
-                ForceDeleteAction::make(),
-                RestoreAction::make(),
+                ...(Filament::getCurrentPanel()?->getId() === 'teach' ? [] : [
+                    DeleteAction::make(),
+                    ForceDeleteAction::make(),
+                    RestoreAction::make(),
+                ]),
             ])
             ->modifyQueryUsing(fn (Builder $query) => $query->withoutGlobalScopes([
                 SoftDeletingScope::class,

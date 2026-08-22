@@ -28,11 +28,12 @@ beforeEach(function () {
         ->assertOk();
 });
 
-function enrolStudent(Tenant $tenant, string $status = 'active'): User
+function enrolStudent(Tenant $tenant, ?User $instructor, string $status = 'active'): User
 {
     $course = Course::create(['title' => 'Physics 101', 'slug' => 'physics-'.uniqid(), 'status' => 'published']);
     $batch = Batch::create([
         'course_id' => $course->id,
+        'instructor_id' => $instructor?->id,
         'title' => 'Batch',
         'slug' => 'batch-'.uniqid(),
         'starts_on' => now()->toDateString(),
@@ -56,15 +57,15 @@ function enrolStudent(Tenant $tenant, string $status = 'active'): User
 }
 
 it('lists actively enrolled students in the current tenant', function () {
-    $active = enrolStudent($this->tenant, 'active');
+    $active = enrolStudent($this->tenant, $this->instructor, 'active');
 
     Livewire::test(StudentProgress::class)
         ->assertCanSeeTableRecords([$active]);
 });
 
 it('excludes a student with no active enrolment', function () {
-    $active = enrolStudent($this->tenant, 'active');
-    $waitlisted = enrolStudent($this->tenant, 'waitlisted');
+    $active = enrolStudent($this->tenant, $this->instructor, 'active');
+    $waitlisted = enrolStudent($this->tenant, $this->instructor, 'waitlisted');
 
     Livewire::test(StudentProgress::class)
         ->assertCanSeeTableRecords([$active])
@@ -72,11 +73,11 @@ it('excludes a student with no active enrolment', function () {
 });
 
 it('excludes a student actively enrolled in a different tenant', function () {
-    $active = enrolStudent($this->tenant, 'active');
+    $active = enrolStudent($this->tenant, $this->instructor, 'active');
 
     $otherTenant = Tenant::factory()->create();
     app(CurrentTenant::class)->set($otherTenant);
-    $otherStudent = enrolStudent($otherTenant, 'active');
+    $otherStudent = enrolStudent($otherTenant, null, 'active');
     app(CurrentTenant::class)->set($this->tenant);
 
     Livewire::test(StudentProgress::class)
@@ -85,7 +86,7 @@ it('excludes a student actively enrolled in a different tenant', function () {
 });
 
 it('shows a placeholder rather than crashing for a student with no metrics data yet', function () {
-    $student = enrolStudent($this->tenant, 'active');
+    $student = enrolStudent($this->tenant, $this->instructor, 'active');
 
     Livewire::test(StudentProgress::class)
         ->assertSee($student->name)
@@ -93,11 +94,12 @@ it('shows a placeholder rather than crashing for a student with no metrics data 
 });
 
 it('shows the fee status for a student with an overdue invoice', function () {
-    $student = enrolStudent($this->tenant, 'active');
+    $student = enrolStudent($this->tenant, $this->instructor, 'active');
 
     $course = Course::create(['title' => 'Fees Course', 'slug' => 'fees-course-'.uniqid(), 'status' => 'published']);
     $batch = Batch::create([
         'course_id' => $course->id,
+        'instructor_id' => $this->instructor->id,
         'title' => 'Fees Batch',
         'slug' => 'fees-batch-'.uniqid(),
         'starts_on' => now()->toDateString(),

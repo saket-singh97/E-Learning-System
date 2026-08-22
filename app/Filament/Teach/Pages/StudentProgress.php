@@ -2,10 +2,10 @@
 
 namespace App\Filament\Teach\Pages;
 
+use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Comms\Services\StudentMetrics;
 use App\Models\User;
-use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -25,14 +25,12 @@ use Illuminate\Database\Eloquent\Builder;
  * "a Livewire component implementing HasTable can embed its table via a
  * schema component" mechanism.
  *
- * "Own batches" has no backing schema to enforce — no instructor-batch/
- * course pivot exists anywhere in this codebase, confirmed by reading
- * every Batch/Course-related model and policy. EnrolmentApprovalPolicy's
- * own docblock already documents this exact gap and reads "assigned" as
- * "same tenant as the batch" instead of a real per-instructor link (S4).
- * Followed here for consistency — the roster below is every actively
- * enrolled student in the instructor's own tenant, not a stricter scope
- * this app has no data to support yet.
+ * S15 B2 closed the gap this docblock used to describe (no instructor-
+ * batch pivot existed) — `batches.instructor_id` now backs a real
+ * "own batches" scope, so the roster below is every actively enrolled
+ * student in the instructor's own assigned batches, not every student in
+ * the tenant (the same tightening `EnrolmentApprovalPolicy::canDecide()`
+ * got in the same block).
  *
  * Metrics are read per row via StudentMetrics (S8 B2), built explicitly
  * for this reuse. No caching layer added — Filament's own table
@@ -93,12 +91,10 @@ class StudentProgress extends Page implements HasTable
 
     protected function studentsQuery(): Builder
     {
+        $batchIds = Batch::where('instructor_id', auth()->id())->pluck('id');
+
         return User::role('student')
-            ->whereIn('id', Enrolment::where('status', 'active')->pluck('user_id'))
-            ->when(
-                app(CurrentTenant::class)->isBound(),
-                fn (Builder $query) => $query->where('tenant_id', app(CurrentTenant::class)->id()),
-            );
+            ->whereIn('id', Enrolment::where('status', 'active')->whereIn('batch_id', $batchIds)->pluck('user_id'));
     }
 
     /**

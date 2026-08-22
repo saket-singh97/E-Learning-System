@@ -10,13 +10,11 @@ use App\Models\User;
  * separate from BatchEnrolmentService per the design doc's split between an
  * authorization question and a state-transition question.
  *
- * "An instructor assigned to the batch's course" (design doc §3.4) has no
- * backing schema yet: no course/batch-instructor pivot exists anywhere in
- * this codebase, and roles are global to a user, not per-tenant or
- * per-course (see RoleAssignmentPolicy). Until a real per-course assignment
- * model lands, "assigned" is read as "same tenant as the batch" — the same
- * same-tenant guard RoleAssignmentPolicy already uses for its own actor/
- * target check.
+ * S15 B0 added `batches.instructor_id`, closing the gap this docblock used
+ * to describe ("no course/batch-instructor pivot exists anywhere") — an
+ * instructor now must be *that batch's own* assigned instructor, not just
+ * any same-tenant instructor. institute_admin keeps the same-tenant check
+ * RoleAssignmentPolicy already uses for its own actor/target check.
  */
 class EnrolmentApprovalPolicy
 {
@@ -24,7 +22,14 @@ class EnrolmentApprovalPolicy
 
     public function canDecide(User $actor, Batch $batch): bool
     {
-        return $actor->tenant_id === $batch->tenant_id
-            && $actor->hasAnyRole(self::DECIDER_ROLES);
+        if (! $actor->hasAnyRole(self::DECIDER_ROLES)) {
+            return false;
+        }
+
+        if ($actor->hasRole('institute_admin')) {
+            return $actor->tenant_id === $batch->tenant_id;
+        }
+
+        return $actor->id === $batch->instructor_id;
     }
 }

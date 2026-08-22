@@ -179,6 +179,7 @@ it('runs a live poll instructor-launch through student-response to aggregation (
 
     $instructor = User::factory()->create(['tenant_id' => $tenant->id]);
     $instructor->assignRole('instructor');
+    $batch->update(['instructor_id' => $instructor->id]);
 
     [$studentA, $studentB, $studentC] = User::factory()->count(3)->create(['tenant_id' => $tenant->id]);
     foreach ([$studentA, $studentB, $studentC] as $student) {

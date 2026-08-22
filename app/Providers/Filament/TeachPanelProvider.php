@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Domains\Batches\Filament\Resources\Batches\BatchResource;
 use App\Domains\Content\Filament\Resources\CourseSections\CourseSectionResource;
 use App\Domains\Content\Filament\Resources\Courses\CourseResource;
 use App\Domains\Content\Filament\Resources\Lessons\LessonResource;
@@ -57,10 +58,19 @@ class TeachPanelProvider extends PanelProvider
             // hidden from nav (CLAUDE.md) but still needs its own routes
             // for SectionsRelationManager's edit deep-link, so it's listed
             // explicitly here too, not dropped.
+            // BatchResource added S15 B2 — closes §S.S1/§S.S2's own real gap
+            // (design doc §2.3): instructors had no Teach-panel route to
+            // Batch/BatchSession/Enrolment at all before this, which is
+            // also why EnrolmentApprovalPolicy::DECIDER_ROLES already
+            // listing 'instructor' was dead code — nothing could reach
+            // EnrolmentsRelationManager's approve/reject actions as an
+            // instructor. BatchResource::getEloquentQuery() scopes it to
+            // the current instructor's own assigned batches only.
             ->resources([
                 CourseResource::class,
                 CourseSectionResource::class,
                 LessonResource::class,
+                BatchResource::class,
             ])
             ->discoverResources(in: app_path('Domains/Assessments/Filament/Resources'), for: 'App\Domains\Assessments\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Assignments/Filament/Resources'), for: 'App\Domains\Assignments\Filament\Resources')

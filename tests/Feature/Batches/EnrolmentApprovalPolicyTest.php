@@ -39,11 +39,19 @@ it('allows an institute_admin in the batch tenant to decide', function () {
     expect($this->policy->canDecide($admin, $this->batch))->toBeTrue();
 });
 
-it('allows an instructor in the batch tenant to decide', function () {
+it('allows the batch own assigned instructor to decide', function () {
+    $instructor = User::factory()->create(['tenant_id' => $this->tenantA->id]);
+    $instructor->assignRole('instructor');
+    $this->batch->update(['instructor_id' => $instructor->id]);
+
+    expect($this->policy->canDecide($instructor, $this->batch))->toBeTrue();
+});
+
+it('denies a same-tenant instructor who is not assigned to this batch', function () {
     $instructor = User::factory()->create(['tenant_id' => $this->tenantA->id]);
     $instructor->assignRole('instructor');
 
-    expect($this->policy->canDecide($instructor, $this->batch))->toBeTrue();
+    expect($this->policy->canDecide($instructor, $this->batch))->toBeFalse();
 });
 
 it('denies an instructor from a different tenant', function () {
