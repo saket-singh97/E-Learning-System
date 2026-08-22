@@ -20,7 +20,7 @@ use Filament\Panel;
 use SensitiveParameter;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['tenant_id', 'name', 'email', 'phone', 'password', 'google_id', 'avatar_path', 'timezone', 'locale'])]
+#[Fillable(['tenant_id', 'name', 'email', 'phone', 'password', 'google_id', 'avatar_path', 'timezone', 'locale', 'is_active'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail
 {
@@ -39,6 +39,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'password' => 'hashed',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -94,8 +95,14 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return $this->belongsTo(Tenant::class);
     }
 
+    /**
+     * S15 B1 — a deactivated instructor (the only role this can currently
+     * happen to) must lose every panel, not just the Teach one, since a
+     * deactivated user could otherwise still be an institute_admin/
+     * super_admin on a different role grant elsewhere.
+     */
     public function canAccessPanel(Panel $panel): bool
     {
-        return true;
+        return $this->is_active;
     }
 }

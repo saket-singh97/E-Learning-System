@@ -64,6 +64,12 @@ class TenantAuthenticator
         /** @var User $user */
         $user = Auth::getProvider()->retrieveByCredentials($credentials);
 
+        if (! $user->is_active) {
+            throw ValidationException::withMessages([
+                $emailFieldKey => 'This account has been deactivated.',
+            ]);
+        }
+
         return $user;
     }
 

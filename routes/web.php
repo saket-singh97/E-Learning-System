@@ -43,6 +43,13 @@ Route::get('/invite', function () {
 Route::get('/certificates/verify/{verificationId}', VerifyCertificateController::class)
     ->name('certificates.verify');
 
+// Host-agnostic, same reasoning as /invite above — an instructor
+// invitation's own token carries the tenant (S15 B1, see
+// InstructorInvitationService::accept()'s own docblock).
+Route::get('/instructor-invitations/{token}/accept', function (string $token) {
+    return view('auth.instructor-invitation-accept', ['token' => $token]);
+})->name('instructor-invitation.accept');
+
 Route::domain('{subdomain}.lms.test')
     ->middleware(['web', 'resolve.tenant'])
     ->group(base_path('routes/auth.php'));
