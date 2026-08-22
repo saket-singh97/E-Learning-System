@@ -13,6 +13,7 @@ use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\BatchFeedback;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Models\InstituteZoomConnection;
@@ -125,6 +126,7 @@ class TenantModelRegistry
         TimetableTemplate::class,
         ForumThread::class,
         ForumPost::class,
+        BatchFeedback::class,
     ];
 
     /**
@@ -785,6 +787,19 @@ class TenantModelRegistry
                 'author_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'body' => 'Row',
             ],
+            BatchFeedback::class => [
+                'batch_id' => Batch::create([
+                    'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                    'title' => 'Parent',
+                    'slug' => 'parent-'.uniqid(),
+                    'starts_on' => now()->toDateString(),
+                    'ends_on' => now()->addMonth()->toDateString(),
+                    'self_enrol_mode' => 'manual_only',
+                    'status' => 'draft',
+                ])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'rating' => 5,
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -853,6 +868,7 @@ class TenantModelRegistry
             TimetableTemplate::class => ['title' => 'tampered'],
             ForumThread::class => ['title' => 'tampered'],
             ForumPost::class => ['body' => 'tampered'],
+            BatchFeedback::class => ['rating' => 1],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

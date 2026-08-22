@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B4 | Teacher conflict detection — write-time overlap check on `BatchSession` create/edit against the assigned instructor's other sessions (F7 pt.2) | ✅ done |
 | B5 | Discussion forum schema — `forum_threads`/`forum_posts`, depth-capped at 3 (F6 pt.1) | ✅ done |
 | B6 | Discussion forum UI — batch-scoped Livewire component, enrolment-gated (F6 pt.2) | ✅ done |
-| B7 | Batch feedback schema + student submission — `batch_feedback` (F8 pt.1) | ⬜ not started |
+| B7 | Batch feedback schema + student submission — `batch_feedback` (F8 pt.1) | ✅ done |
 | B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ⬜ not started |
 | B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ⬜ not started |
 | B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ⬜ not started |
@@ -268,14 +268,25 @@ undershot its actual by a wide margin.
 - `composer test`: 1322 tests, 1321 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B7 — Batch feedback schema + student submission — not started
+### B7 — Batch feedback schema + student submission — done
 
 - `batch_feedback` migration (unique on `batch_id`+`user_id`, `rating`
   1-5 DB `CHECK`, same `CourseReview` precedent from S13).
-- `BatchFeedback` model, registered in `TenantModelRegistry`.
-- Student submission form, gated by enrolment (active or expired, same
-  "genuine participation" posture `CourseReviewPolicy::canReview()`
-  enforces after its own S13 B17 fix).
+- `BatchFeedback` model (Batches domain), registered in
+  `TenantModelRegistry`.
+- `BatchFeedbackPolicy::canSubmit()` — same active-or-expired "genuine
+  participation" gate `CourseReviewPolicy::canReview()` already
+  establishes, scoped directly by `batch_id` (no `whereHas` needed,
+  unlike the course-level version).
+- `BatchFeedbackForm` Livewire component, same `CourseReviews` shape —
+  `updateOrCreate` so a resubmission updates the existing row instead of
+  erroring on the unique constraint. No student-facing batch page
+  existed yet (same gap B6 hit) — bare host route
+  `/batches/{batch}/feedback` in `routes/batches.php`, same shape as
+  B6's own `/batches/{batch}/forum`.
+- New tests: `BatchFeedbackPolicyTest` (4) + `BatchFeedbackFormTest` (4).
+- `composer test`: 1331 tests, 1330 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B8 — Batch feedback aggregation view — not started
 
