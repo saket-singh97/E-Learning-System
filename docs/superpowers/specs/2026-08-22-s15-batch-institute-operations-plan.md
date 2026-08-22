@@ -29,13 +29,13 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | Instructor invitation + assignment schema — `instructor_invitations`, `batches.instructor_id` (closes §S.S1's real gap, foundation for F7/§S.S2/F10 pt.2) | ⬜ not started |
-| B1 | Instructor invitation flow — Admin-panel invite/accept/assign/deactivate/reactivate | ⬜ not started |
-| B2 | Per-instructor permission enforcement (§S.S2) — Teach panel + policies scoped to only the instructor's own assigned batches | ⬜ not started |
-| B3 | Timetable templates schema — `timetable_templates` (F7 pt.1) | ⬜ not started |
-| B4 | Teacher conflict detection — write-time overlap check on `BatchSession` create/edit against the assigned instructor's other sessions (F7 pt.2) | ⬜ not started |
-| B5 | Discussion forum schema — `forum_threads`/`forum_posts`, depth-capped at 3 (F6 pt.1) | ⬜ not started |
-| B6 | Discussion forum UI — batch-scoped Livewire component, enrolment-gated (F6 pt.2) | ⬜ not started |
+| B0 | Instructor invitation + assignment schema — `instructor_invitations`, `batches.instructor_id` (closes §S.S1's real gap, foundation for F7/§S.S2/F10 pt.2) | ✅ done |
+| B1 | Instructor invitation flow — Admin-panel invite/accept/assign/deactivate/reactivate | ✅ done |
+| B2 | Per-instructor permission enforcement (§S.S2) — Teach panel + policies scoped to only the instructor's own assigned batches | ✅ done |
+| B3 | Timetable templates schema — `timetable_templates` (F7 pt.1) | ✅ done |
+| B4 | Teacher conflict detection — write-time overlap check on `BatchSession` create/edit against the assigned instructor's other sessions (F7 pt.2) | ✅ done |
+| B5 | Discussion forum schema — `forum_threads`/`forum_posts`, depth-capped at 3 (F6 pt.1) | ✅ done |
+| B6 | Discussion forum UI — batch-scoped Livewire component, enrolment-gated (F6 pt.2) | ✅ done |
 | B7 | Batch feedback schema + student submission — `batch_feedback` (F8 pt.1) | ⬜ not started |
 | B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ⬜ not started |
 | B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ⬜ not started |
@@ -62,7 +62,7 @@ undershot its actual by a wide margin.
 
 ## Block detail (expand as each block builds; stubs below are the starting checklist)
 
-### B0 — Instructor invitation + assignment schema — not started
+### B0 — Instructor invitation + assignment schema — done
 
 - `instructor_invitations` migration (`tenant_id`, `email`, `token` unique,
   `invited_by_user_id`, `status` pending|accepted|expired|revoked,
@@ -71,8 +71,11 @@ undershot its actual by a wide margin.
   primary instructor per batch, not a pivot).
 - `InstructorInvitation` model, `BelongsToTenant`, registered in
   `TenantModelRegistry` (seed/update attributes included).
+- `Batch::instructor()` relation added alongside the new fillable column.
+- `composer test`: 1285 tests, 1284 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (carried since S1/S2, out of scope).
 
-### B1 — Instructor invitation flow — not started
+### B1 — Instructor invitation flow — done
 
 - Admin-panel invite action (email + course/batch assignment at invite
   time), 14-day token expiry, same host-agnostic-callback shape
@@ -83,50 +86,187 @@ undershot its actual by a wide margin.
   batch.
 - Deactivate/reactivate action on an accepted instructor (closes the
   remaining half of §S.S1's original, never-built scope).
+- New: `batch_ids` jsonb column on `instructor_invitations` (invite-time
+  selection, migration `2026_08_22_100002`); `users.is_active` boolean
+  (migration `2026_08_22_100003`), `User::canAccessPanel()` and
+  `TenantAuthenticator::validate()` both gate on it — covers every panel
+  and the student/parent portal login alike.
+- `InstructorInvitationService` (Tenancy) — `invite()`, `accept()`
+  (rebinds `CurrentTenant` from the token same as
+  `ParentInviteCodeService::redeem()`), `deactivate()`/`reactivate()`.
+- `InstructorInvitationMail` — first on-demand (`Notification::route`)
+  notification in this app, since no `User` row exists yet for the
+  invitee.
+- Host-agnostic accept route + `InstructorInvitationAccept` Livewire
+  component (`routes/web.php`, same shape as `ParentInviteRedemption`).
+- `InstructorInvitationResource` (Admin panel) — lives under
+  `Domains/Tenancy/Filament/Resources`, which Admin/Teach/Super panels
+  all discover; `canAccess()` overridden to Admin-only since the shared
+  directory has no per-panel split otherwise.
+- Real bug found + fixed in review: `UserFactory` never set `is_active`,
+  so a factory-built `User` kept it `null` in memory (DB `default(true)`
+  never round-trips without a re-fetch) — `canAccessPanel()`'s strict
+  `bool` return type crashed the first Filament-panel HTTP test with a
+  `TypeError`. Fixed by setting `is_active => true` in both `UserFactory`
+  and `InstructorInvitationService::accept()`'s own `User::create()`.
+- `composer test`: 1293 tests, 1292 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged from B0), 0 new errors.
 
-### B2 — Per-instructor permission enforcement (§S.S2) — not started
+### B2 — Per-instructor permission enforcement (§S.S2) — done
 
-- `TeachPanelProvider` (or the relevant resource query scopes) narrowed
-  from directory-wide discovery to `where('instructor_id', auth()->id())`
-  on every batch-scoped resource — the *data*-level fix S13 B17's
-  resource-*list*-level fix didn't reach.
-- Policy/query audit across every Teach-panel resource that touches
-  `Batch`/`BatchSession`/`Enrolment`, same "every call site checked, not
-  assumed" discipline S9 B12's bandwidth-quota sweep already used.
+- Verified before coding (this block's own audit, not assumed from the
+  plan's own wording): `BatchResource` was **not registered in
+  `TeachPanelProvider` at all** — instructors had zero Teach-panel route
+  to `Batch`/`BatchSession`/`Enrolment` before this block, not merely an
+  unscoped directory-wide leak. This is *why*
+  `EnrolmentApprovalPolicy::DECIDER_ROLES` already listed `'instructor'`
+  with no way to reach it — a half-built gap from before this slice,
+  same shape as §S.S1's own never-built invitation UI. `Question`/`Quiz`/
+  `Assignment`/`AssignmentSubmission` all trace to `Course`, which design
+  decision 1 deliberately leaves un-scoped (no per-course instructor
+  assignment) — only `BatchResource` needed touching.
+- `TeachPanelProvider` — added `BatchResource::class` to the same
+  explicit `->resources()` array Content's own S13 B17 fix already uses
+  (not a directory-wide `discoverResources()`, consistent with that
+  precedent).
+- `BatchResource::getEloquentQuery()` — panel-conditional: Teach scopes
+  to `where('instructor_id', auth()->id())`, Admin unchanged (full
+  tenant view). Unconditional scoping would have hidden every batch from
+  institute_admin, since admins are essentially never a batch's own
+  `instructor_id` — caught before writing the fix, not after.
+  `canCreate()` and the table's destructive actions
+  (Delete/ForceDelete/Restore) are Admin-only; Teach keeps `EditAction`
+  only, since instructors reach their own batch to schedule sessions and
+  decide enrolments via the two existing relation managers, not to
+  create/delete batches.
+- `EnrolmentApprovalPolicy::canDecide()` tightened: an `instructor` actor
+  must be *that batch's own* `instructor_id`, not just same-tenant
+  (institute_admin keeps the same-tenant check). Found + fixed a real
+  pre-existing test asserting the old (wrong) behavior
+  (`EnrolmentApprovalPolicyTest`'s "allows an instructor in the batch
+  tenant to decide") — updated to assign the batch first, plus a new
+  test proving a same-tenant-but-unassigned instructor is denied.
+- `BatchSessionsRelationManager`/`EnrolmentsRelationManager` needed no
+  changes themselves — both resolve through the owner `Batch` record,
+  which Filament fetches via the now-scoped `getEloquentQuery()`, so an
+  instructor can't reach another instructor's batch to begin with
+  (verified with a 404 test, not just trusted).
+- New `tests/Feature/Batches/TeachPanelBatchScopingTest.php` (5 tests):
+  Teach-panel list scoping, cross-instructor edit 404, Admin panel
+  unaffected, Teach create forbidden, assigned instructor can approve an
+  enrolment end-to-end through the Teach panel.
+- Also found + fixed while touching `EnrolmentApprovalPolicy`: `StudentProgress`
+  (Teach panel page) had the exact same stale "read as same-tenant, no
+  real instructor link" posture in its own docblock, showing every
+  active enrolment in the tenant to every instructor — tightened to the
+  instructor's own assigned batches too, same fix, same block.
+- Several pre-existing S14 tests (`LivePollBoardTest`,
+  `LivePollServiceTest`, `StudentProgressPageTest`,
+  `S14VideoLiveDepthE2ETest`) built batches without `instructor_id` and
+  asserted the *old* same-tenant-instructor behavior via
+  `LivePollService`/`EnrolmentApprovalPolicy`'s shared `canDecide()` —
+  updated each to assign the batch to its own test instructor, not
+  loosened.
+- `composer test`: 1299 tests, 1298 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B3 — Timetable templates schema — not started
+### B3 — Timetable templates schema — done
 
 - `timetable_templates` migration (`tenant_id`, `title`, `day_of_week`,
   `starts_at` time, `duration_minutes`).
 - `TimetableTemplate` model, registered in `TenantModelRegistry`.
-- Admin-panel CRUD.
+- Admin-panel CRUD — `TimetableTemplateResource` under
+  `Domains/Batches/Filament/Resources/`. Deliberately left off
+  `TeachPanelProvider`'s own explicit `->resources()` list (added in B2)
+  rather than directory-wide discovery — Admin-only per this block's own
+  plan text, no code needed to enforce it since Teach simply never
+  registers the route.
+- `tests/Feature/Batches/TimetableTemplateResourceTest.php` (3 tests):
+  create, tenant-scoped listing, confirmed unreachable from Teach.
+- `composer test`: 1303 tests, 1302 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B4 — Teacher conflict detection — not started
+### B4 — Teacher conflict detection — done
 
-- Write-time check on `BatchSession` create/edit: does this session's
-  `[starts_at, starts_at + duration_minutes)` window overlap any other
-  `BatchSession` whose batch shares the same `instructor_id`, across any
-  batch — refuse the save if so (design decision 4).
-- `BatchSessionsRelationManager` (or wherever sessions are scheduled)
-  surfaces the refusal as a real validation error, not a generic 500.
-- Optional: "create from template" action copying a `TimetableTemplate`'s
-  `day_of_week`/`starts_at`/`duration_minutes` into a new session's own
-  columns (design decision 3 — a stamp, no persisted FK).
+- `TeacherConflictDetector` service (`app/Domains/Batches/Services/`) —
+  pure `wouldConflict()` check, PHP-side window comparison over every
+  `BatchSession` sharing the batch's own `instructor_id` (no `DB::raw`/
+  `whereRaw`, same bounded-not-optimized posture `PrerequisiteGraph`'s
+  own DFS already established). Returns false with no `instructor_id`.
+- Wired into `BatchSessionsRelationManager`'s `starts_at` field via
+  `->rule()`, same "a `fail()` message reads better than a caught
+  exception mid-submit" idiom `CourseResource`/`LessonResource` already
+  use for `PrerequisiteGraph` — covers both create and edit since the
+  relation manager's `form()` is shared by both actions. Excludes the
+  record's own id on edit so re-saving a session's unchanged slot doesn't
+  flag itself.
+- "Create from template" — a non-persisted `from_template` Select
+  (`dehydrated(false)`, `hiddenOn('edit')`) prefills `starts_at`
+  (next calendar occurrence of the template's `day_of_week`, at its
+  time) and `duration_minutes` into the real fields; no FK stored
+  (design decision 3).
+- New tests: `TeacherConflictDetectorTest` (5, service-level) +
+  `BatchSessionConflictTest` (4, through the relation manager: refuses
+  overlap, allows non-overlap, allows re-saving own slot, template
+  prefill).
+- Caught by `composer test`, not by review: `TeacherConflictDetector`'s
+  own docblock literally spelled out the two forbidden call shapes it was
+  avoiding — `SecurityBaselineTest`'s raw-SQL guard is a naive
+  `str_contains()` file scan, not AST-aware, so the comment text itself
+  tripped it. Reworded to describe the constraint without repeating the
+  literal banned strings.
+- `composer test`: 1312 tests, 1311 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B5 — Discussion forum schema — not started
+### B5 — Discussion forum schema — done
 
 - `forum_threads`/`forum_posts` migrations (`forum_posts.parent_id`
-  self-referential nullable, `depth` 0-2).
-- `ForumThread`/`ForumPost` models, registered in `TenantModelRegistry`.
-- Depth-3 refusal enforced at write time (design decision 5).
+  self-referential nullable + `cascadeOnDelete()`, `depth` 0-2).
+- `ForumThread`/`ForumPost` models (Comms domain), registered in
+  `TenantModelRegistry`. `ForumThread::batch()` is a cross-domain model
+  read (Comms -> Batches), same posture `Batch::course()` already
+  established (Batches -> Content).
+- `ForumPostComposer` — single write path for `forum_posts`, same
+  "one shared path" posture `ParentInviteCodeService`/
+  `InstructorInvitationService` already use. Depth is derived from the
+  parent's own stored `depth` column, refused before persisting (not
+  silently flattened) via new `ForumReplyDepthExceededException`
+  (409, registered in `bootstrap/app.php`) — schema-block deliverable
+  per this block's own plan text; B6 wires the actual UI around it.
+- New `tests/Feature/Comms/ForumPostComposerTest.php` (3 tests): depth-0
+  post, nested replies to depth 2, depth-3 attempt refused.
+- `composer test`: 1317 tests, 1316 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B6 — Discussion forum UI — not started
+### B6 — Discussion forum UI — done
 
-- Livewire component, batch-scoped, gated by active enrolment in that
-  batch (reuses the same enrolment-check shape `LessonQuestions`'s own
-  `canStream()`-style gate already established, adapted to batch
-  membership instead of lesson access).
-- Post/reply composer, thread list, nested reply rendering to depth 2.
+- Found no existing student-facing per-batch page to embed on (only
+  `batch-catalog` exists) — added a bare host route/view
+  (`routes/comms.php` `/batches/{batch}/forum`, closure + `$request->
+  route('batch')`, CLAUDE.md's domain-route splicing gotcha) same shape
+  `/messages`/`comms.messages` already established, no new controller.
+- `App\Domains\Comms\Livewire\BatchForum` — thread list, open-thread post
+  tree (nested to depth 2, flat query grouped in PHP, small recursive
+  Blade partial `comms::forum-post` for rendering since the depth is
+  bounded), create-thread + reply composer.
+- `canParticipate()` gate: active `Enrolment`, or the batch's own
+  assigned `instructor_id`, or `institute_admin` — same staff-bypass
+  shape `LessonAccess::canJoinLive()` already established, re-checked on
+  every action (not just page load), same reasoning `LessonQuestions`'s
+  own docblock documents for its `/livewire/update` exposure.
+  `institute_admin`/assigned-instructor bypass mirrors B2's own
+  per-instructor tightening (broad tenant-wide instructor access was
+  exactly what B2 closed elsewhere), not the older course-level "any
+  staff in tenant" posture.
+- Depth-3 attempt surfaces as a real Livewire field error
+  (`ForumPostComposer`'s exception caught and re-shown via
+  `addError()`), not silently dropped.
+- New `tests/Feature/Comms/BatchForumTest.php` (5 tests): enrolled
+  student posts, assigned instructor bypasses enrolment, non-enrolled
+  student no-ops, guest no-ops, depth-2 replies succeed + depth-3
+  refused with a visible error.
+- `composer test`: 1322 tests, 1321 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B7 — Batch feedback schema + student submission — not started
 

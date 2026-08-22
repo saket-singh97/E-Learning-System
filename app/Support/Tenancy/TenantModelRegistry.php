@@ -20,12 +20,15 @@ use App\Domains\Batches\Models\LivePoll;
 use App\Domains\Batches\Models\LivePollOption;
 use App\Domains\Batches\Models\LivePollResponse;
 use App\Domains\Batches\Models\LiveRecording;
+use App\Domains\Batches\Models\TimetableTemplate;
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\SubscriptionInvoice;
 use App\Domains\Billing\Models\TenantStorageUsage;
 use App\Domains\Billing\Models\TenantSubscription;
 use App\Domains\Comms\Models\BlockedUser;
 use App\Domains\Comms\Models\DirectMessage;
+use App\Domains\Comms\Models\ForumPost;
+use App\Domains\Comms\Models\ForumThread;
 use App\Domains\Comms\Models\MessageReport;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
@@ -53,6 +56,7 @@ use App\Domains\Security\Models\DeviceSession;
 use App\Domains\Security\Models\GdprDeletionRequest;
 use App\Domains\Security\Models\GdprExportRequest;
 use App\Domains\Security\Models\LoginHistory;
+use App\Domains\Tenancy\Models\InstructorInvitation;
 use App\Domains\Tenancy\Models\RoleAssignmentAudit;
 use App\Models\User;
 use RuntimeException;
@@ -117,6 +121,10 @@ class TenantModelRegistry
         LivePoll::class,
         LivePollOption::class,
         LivePollResponse::class,
+        InstructorInvitation::class,
+        TimetableTemplate::class,
+        ForumThread::class,
+        ForumPost::class,
     ];
 
     /**
@@ -733,6 +741,50 @@ class TenantModelRegistry
                     'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 ];
             })(),
+            InstructorInvitation::class => [
+                'email' => 'row-'.uniqid().'@example.com',
+                'token' => 'tok_'.uniqid(),
+                'invited_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'pending',
+                'expires_at' => now()->addDays(14),
+            ],
+            TimetableTemplate::class => [
+                'title' => 'Row',
+                'day_of_week' => 1,
+                'starts_at' => '09:00:00',
+                'duration_minutes' => 60,
+            ],
+            ForumThread::class => [
+                'batch_id' => Batch::create([
+                    'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                    'title' => 'Parent',
+                    'slug' => 'parent-'.uniqid(),
+                    'starts_on' => now()->toDateString(),
+                    'ends_on' => now()->addMonth()->toDateString(),
+                    'self_enrol_mode' => 'manual_only',
+                    'status' => 'draft',
+                ])->id,
+                'title' => 'Row',
+                'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
+            ForumPost::class => [
+                'forum_thread_id' => ForumThread::create([
+                    'batch_id' => Batch::create([
+                        'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                        'title' => 'Parent',
+                        'slug' => 'parent-'.uniqid(),
+                        'starts_on' => now()->toDateString(),
+                        'ends_on' => now()->addMonth()->toDateString(),
+                        'self_enrol_mode' => 'manual_only',
+                        'status' => 'draft',
+                    ])->id,
+                    'title' => 'Parent',
+                    'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                ])->id,
+                'depth' => 0,
+                'author_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'body' => 'Row',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -797,6 +849,10 @@ class TenantModelRegistry
             LivePoll::class => ['question' => 'tampered'],
             LivePollOption::class => ['label' => 'tampered'],
             LivePollResponse::class => ['created_at' => now()->subDay()],
+            InstructorInvitation::class => ['status' => 'tampered'],
+            TimetableTemplate::class => ['title' => 'tampered'],
+            ForumThread::class => ['title' => 'tampered'],
+            ForumPost::class => ['body' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
