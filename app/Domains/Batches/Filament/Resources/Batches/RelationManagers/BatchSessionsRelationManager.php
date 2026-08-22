@@ -3,11 +3,15 @@
 namespace App\Domains\Batches\Filament\Resources\Batches\RelationManagers;
 
 use App\Domains\Batches\Events\AttendanceRecorded;
+use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Batches\Models\TimetableTemplate;
+use App\Domains\Batches\Services\TeacherConflictDetector;
 use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\Lesson;
 use App\Models\User;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -21,6 +25,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class BatchSessionsRelationManager extends RelationManager
@@ -32,9 +37,51 @@ class BatchSessionsRelationManager extends RelationManager
         return $schema->components([
             TextInput::make('title')
                 ->maxLength(255),
+            // Design decision 3 — a stamp, not a live link: prefills
+            // starts_at/duration_minutes from the template's own columns
+            // (next calendar occurrence of its day_of_week), no FK stored
+            // anywhere. Create-only — an edit's existing values shouldn't
+            // silently get overwritten by picking this.
+            Select::make('from_template')
+                ->label('Prefill from template')
+                ->options(fn (): array => TimetableTemplate::pluck('title', 'id')->all())
+                ->live()
+                ->dehydrated(false)
+                ->hiddenOn('edit')
+                ->afterStateUpdated(function (?string $state, callable $set): void {
+                    $template = $state === null ? null : TimetableTemplate::find($state);
+
+                    if ($template === null) {
+                        return;
+                    }
+
+                    $time = Carbon::parse($template->starts_at);
+                    $nextDate = Carbon::now()->next($template->day_of_week)->setTimeFrom($time);
+
+                    $set('starts_at', $nextDate->format('Y-m-d H:i:s'));
+                    $set('duration_minutes', $template->duration_minutes);
+                }),
             DateTimePicker::make('starts_at')
                 ->required()
-                ->native(false),
+                ->native(false)
+                // Write-time refusal (design decision 4), same "a fail()
+                // message reads better than a caught exception mid-submit"
+                // idiom PrerequisiteGraph's own cycle check already
+                // established for CourseResource/LessonResource's rules.
+                ->rule(fn (Get $get, ?BatchSession $record): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get, $record): void {
+                    $durationMinutes = (int) ($get('duration_minutes') ?? 0);
+
+                    if ($value === null || $durationMinutes <= 0) {
+                        return;
+                    }
+
+                    /** @var Batch $batch */
+                    $batch = $this->getOwnerRecord();
+
+                    if (app(TeacherConflictDetector::class)->wouldConflict($batch, $value, $durationMinutes, $record?->id)) {
+                        $fail('This overlaps another session already scheduled for this batch\'s instructor.');
+                    }
+                }),
             TextInput::make('duration_minutes')
                 ->label('Duration (minutes)')
                 ->numeric()
