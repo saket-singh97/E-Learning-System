@@ -15,8 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 14 (S1–S14) |
-| **Designed, not built** | 0 |
-| **Proposed, not yet scoped** | 12 (S15–S26) |
+| **Designed, not built** | 1 (S15) |
+| **Proposed, not yet scoped** | 11 (S16–S26) |
 
 **Phase completion:**
 
@@ -26,7 +26,7 @@ regenerate it from this file.
 
 ---
 
-## Shipped — S1 to S14
+## Shipped + designed — S1 to S15
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -44,20 +44,20 @@ regenerate it from this file.
 | S12 | Security & Resilience Hardening — device/session limits, login history, audit log, GDPR/DPDP, circuit breakers, cache invalidation, soft-delete gaps | 15 blocks | Aug 17–18 | ✅ Done |
 | S13 | Discovery & Content Engagement — categories/tags/catalog filtering, prerequisites + sequential unlocking, course bundles (Programs), catalog search/wishlist/recommendations, lesson Q&A, video notes/bookmarks, direct messaging, ratings/reviews | 18 blocks | Aug 19 | ✅ Done |
 | S14 | Video & Live-Class Depth — concurrent-playback limiting, auto-subtitles, print/save protection, live recording → AI ingestion, real per-institute Zoom OAuth, Google Meet, live polls. (D10-D12 multi-DRM/watermark/offline-DRM cut — P3, needs paying customers) | 19 blocks | Aug 19–22 | ✅ Done |
+| S15 | Batch & Institute Operations — instructor invitations/assignment + per-instructor permissions (closes a real never-built gap), timetable templates + teacher conflict detection, discussion forums, batch feedback, bulk student CSV import, bulk enrolment/invitations, admissions CRM, ID cards, enrolment/completion reports. (§S.S7 job board cut — P3, not in the roadmap's own headline) | 22 blocks planned | Aug 22 | 🟡 Designed, build pending |
 
 ---
 
-## Full roadmap — S15 onward (proposed)
+## Full roadmap — S16 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S14 were each shaped only once they
+slice's turn comes, the same way S10-S15 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S15 | Batch & Institute Operations — discussion forums, timetable conflict detection, bulk CSV import, per-instructor permissions, admissions CRM, ID cards | 11 | F6-F10, S2-S7 |
 | S16 | Assessment & Attendance Depth — extended question types, proctoring, All-India rank test series, OMR scanning, low-attendance alerts, geofencing | 9 | I6-I11, H10-H13 |
 | S17 | AI Layer, Round 2 — course outline generator, semantic search, weak-topic detection, revision notes, photo-based doubt solving | 7 | L9-L15 |
 | S18 | Analytics & Parent Engagement — engagement ratio, rewatch heatmap, drop-off tracking, inactivity nudges, monthly report card, parent-teacher messaging | 8 | M5-M8, M14-M15, O5-O6 |

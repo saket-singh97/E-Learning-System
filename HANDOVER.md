@@ -7,6 +7,29 @@ at the source.
 
 ## Right now (2026-08-22)
 
+- **S15 — Batch & Institute Operations: DESIGN + PLAN DONE, build not
+  started.** `docs/superpowers/specs/2026-08-22-s15-batch-institute-operations-design.md`,
+  `...-plan.md`. `docs/ROADMAP.md`'s own S15 row lists F6-F10/§S.S2-S7 (11
+  items), but §S.S7 (job board/placement module) is P3 and not named in
+  the roadmap's own one-line S15 scope description — cut, same "P3 item
+  absent from the headline gets cut" precedent S14 established for
+  D10-D12. Real build scope is 10 items. **Verified before writing the
+  design, one real load-bearing gap found**: no instructor↔course/batch
+  assignment exists anywhere in the codebase — every `instructor`-role
+  user has blanket tenant-wide access today (Spatie roles are global,
+  not resource-scoped), and `docs/FEATURES.md`'s own §S.S1 row
+  ("instructor invitations, 14-day link, assignment, deactivate/
+  reactivate") was never actually built despite being P1-tier and S1
+  "Foundation" marked done — F7 (conflict detection) and §S.S2
+  (per-instructor permissions) both need this closed first, so B0-B2 of
+  the plan build it as this slice's own foundation before touching
+  either named item. New `Operations` domain for the admission CRM
+  (§S.S4) — doesn't fit `Batches` (nothing to enrol into yet) or
+  `Tenancy` (not a role/branding concern); everything else extends
+  `Tenancy`/`Batches`/`Comms`. 11 new `BelongsToTenant` models. 22 blocks
+  (B0-B21). Next step: run the per-block build command in the plan doc
+  starting at B0.
+
 - **S14 — Video & Live-Class Depth: COMPLETE, all 19 blocks
   (2026-08-22).** `docs/superpowers/specs/2026-08-19-s14-video-live-depth-design.md`,
   `...-plan.md` (full per-block build log + B18's own review-pass notes
