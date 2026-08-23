@@ -47,7 +47,7 @@ stop and report before starting the next block.
 | B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ✅ done |
 | B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ✅ done |
 | B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ✅ done |
-| B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ⬜ not started |
+| B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ✅ done |
 | B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ⬜ not started |
 | B20 | `TenantModelRegistry` sweep — all 11 new `BelongsToTenant` models confirmed registered | ⬜ not started |
 | B21 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -564,11 +564,22 @@ undershot its actual by a wide margin.
 - `composer test`: 1381 tests, 1380 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B18 — Enrolment report export — not started
+### B18 — Enrolment report export — done
 
-- `ExportEnrolmentRegister` `ShouldQueue` job, `ExportAttendanceRegister`-shaped
-  (design decision 12): `RebindsTenant`, `Storage::disk('local')`,
-  `EscapesCsvFormulas`, a bare Filament `Page` + gated download controller.
+- `ExportEnrolmentRegister` `ShouldQueue` job — copied
+  `ExportAttendanceRegister`'s own shape exactly: bare `tenant_id`
+  constructor property, `RebindsTenant` middleware, deterministic
+  `Storage::disk('local')` path, `EscapesCsvFormulas` on the user-
+  supplied name/email/batch-title fields only. No new schema — readiness
+  is `Storage::exists()`, same as every prior export.
+- `EnrolmentExport` Admin page (generate + conditional download header
+  actions, `AttendanceExport`'s own exact shape) and
+  `DownloadEnrolmentExportController` (`DownloadRevenueExportController`'s
+  own exact shape — role + tenant check inside the controller).
+- New tests: `ExportEnrolmentRegisterTest` (1) +
+  `DownloadEnrolmentExportControllerTest` (3).
+- `composer test`: 1385 tests, 1384 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B19 — Completion report export — not started
 
