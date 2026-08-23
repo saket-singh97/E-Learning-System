@@ -44,7 +44,7 @@ stop and report before starting the next block.
 | B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ✅ done |
 | B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ✅ done |
 | B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ✅ done |
-| B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ⬜ not started |
+| B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ✅ done |
 | B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ⬜ not started |
 | B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ⬜ not started |
 | B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ⬜ not started |
@@ -477,15 +477,35 @@ undershot its actual by a wide margin.
 - `composer test`: 1364 tests, 1363 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B15 — ID card generation — not started
+### B15 — ID card generation — done
 
+- Verified before coding: `CertificateService` (S10's own precedent)
+  uses dompdf but never `endroid/qr-code` — its QR only ever renders as
+  inline SVG on the public verify *web page*
+  (`VerifyCertificateController`), a different context. Embedding a QR
+  *inside* a dompdf template is new to this codebase; used
+  `Endroid\QrCode\Writer\PngWriter` + a base64 data URI (dompdf reads
+  `<img>` sources off disk/inline, not remote URLs — same reason
+  `CertificateService` passes absolute local paths for its own images).
 - `id_cards` migration (`enrolment_id`, `card_number` unique per tenant,
-  `disk_path`, `issued_at`).
-- `IdCard` model, registered in `TenantModelRegistry`.
-- `IdCardGenerator` service — dompdf template + `endroid/qr-code`, same
-  precedent `Certificate`'s own S10 generator already established.
-- Manual per-enrolment "Issue ID card" action (design decision 10 — not
-  auto-issued), download route.
+  `disk_path`, `issued_at`). `IdCard` model + `Enrolment::idCard()`
+  relation, registered in `TenantModelRegistry`.
+- `IdCardGenerator` — `Pdf::loadView('batches.id-card-pdf', ...)->save($path,
+  'local')`, same shape `CertificateService` already uses; disk path
+  `id-cards/{tenant_id}/{enrolment_id}.pdf`.
+- "Issue ID card" (on demand only, design decision 10) +
+  "Download ID card" row actions on `EnrolmentsRelationManager`, gated
+  by the same `authorizedActor()` policy check every other action there
+  already uses.
+- `DownloadIdCardController` — same bare-route, controller-only
+  role+tenant-scoped-lookup shape `DownloadStudentImportErrorReportController`
+  (B10) already established; `{enrolment}` resolved via `$request->route()`.
+- New tests: `IdCardGeneratorTest` (1, service-level — PDF written,
+  row created), `EnrolmentsRelationManagerTest` (1 more — issue then
+  download visibility flips), `DownloadIdCardControllerTest` (3 — 404
+  before issuance, downloads after, forbidden for a student).
+- `composer test`: 1370 tests, 1369 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B16 — Noticeboard schema + authoring — not started
 

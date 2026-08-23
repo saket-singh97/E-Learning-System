@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Batches\Models\Batch;
+use App\Http\Controllers\Batches\DownloadIdCardController;
 use App\Http\Controllers\Batches\DownloadStudentImportErrorReportController;
 use App\Http\Controllers\Batches\ZoomOAuthController;
 use Illuminate\Http\Request;
@@ -30,3 +31,12 @@ Route::get('/batches/{batch}/feedback', function (Request $request) {
 Route::get('/student-imports/{importBatch}/error-report', DownloadStudentImportErrorReportController::class)
     ->middleware(['auth', 'role:institute_admin'])
     ->name('student-import.error-report.download');
+
+// No route-level role middleware — same bare shape
+// DownloadGradebookPdfExportController/DownloadRevenueExportController
+// already use, the role+tenant check lives entirely inside the
+// controller (instructor as well as institute_admin, since either may
+// issue/download an ID card via EnrolmentsRelationManager in either panel).
+Route::get('/id-cards/{enrolment}/download', DownloadIdCardController::class)
+    ->middleware(['auth'])
+    ->name('id-card.download');

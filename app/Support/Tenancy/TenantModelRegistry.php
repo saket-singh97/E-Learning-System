@@ -17,6 +17,7 @@ use App\Domains\Batches\Models\BatchFeedback;
 use App\Domains\Batches\Models\StudentImportBatch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Batches\Models\IdCard;
 use App\Domains\Batches\Models\InstituteZoomConnection;
 use App\Domains\Batches\Models\LivePoll;
 use App\Domains\Batches\Models\LivePollOption;
@@ -133,6 +134,7 @@ class TenantModelRegistry
         StudentImportBatch::class,
         Enquiry::class,
         EnquiryFollowUp::class,
+        IdCard::class,
     ];
 
     /**
@@ -820,6 +822,26 @@ class TenantModelRegistry
                 'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'note' => 'Row',
             ],
+            IdCard::class => [
+                'enrolment_id' => Enrolment::create([
+                    'batch_id' => Batch::create([
+                        'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                        'title' => 'Parent',
+                        'slug' => 'parent-'.uniqid(),
+                        'starts_on' => now()->toDateString(),
+                        'ends_on' => now()->addMonth()->toDateString(),
+                        'self_enrol_mode' => 'manual_only',
+                        'status' => 'published',
+                    ])->id,
+                    'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'status' => 'active',
+                    'source' => 'manual_add',
+                    'requested_at' => now(),
+                ])->id,
+                'card_number' => 'ID-'.strtoupper(uniqid()),
+                'disk_path' => 'id-cards/row.pdf',
+                'issued_at' => now(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -892,6 +914,7 @@ class TenantModelRegistry
             StudentImportBatch::class => ['status' => 'tampered'],
             Enquiry::class => ['status' => 'tampered'],
             EnquiryFollowUp::class => ['note' => 'tampered'],
+            IdCard::class => ['disk_path' => 'tampered.pdf'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

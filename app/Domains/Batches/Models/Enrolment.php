@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Enrolment extends Model
@@ -50,5 +51,10 @@ class Enrolment extends Model
     public function decidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    public function idCard(): HasOne
+    {
+        return $this->hasOne(IdCard::class);
     }
 }

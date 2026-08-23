@@ -166,6 +166,31 @@ it('queues a bulk enrolment job for a list of existing student emails', function
     expect(Enrolment::where('batch_id', $this->batch->id)->where('user_id', $studentB->id)->exists())->toBeTrue();
 });
 
+it('issues an id card for an active enrolment, then hides issue and shows download', function () {
+    $student = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $student->assignRole('student');
+    $enrolment = Enrolment::create([
+        'batch_id' => $this->batch->id,
+        'user_id' => $student->id,
+        'status' => 'active',
+        'source' => 'manual_add',
+        'requested_at' => now(),
+    ]);
+
+    $component = Livewire::test(EnrolmentsRelationManager::class, [
+        'ownerRecord' => $this->batch,
+        'pageClass' => EditBatch::class,
+    ]);
+
+    $component->assertTableActionVisible('issueIdCard', $enrolment)
+        ->assertTableActionHidden('downloadIdCard', $enrolment)
+        ->callTableAction('issueIdCard', $enrolment)
+        ->assertTableActionHidden('issueIdCard', $enrolment->fresh())
+        ->assertTableActionVisible('downloadIdCard', $enrolment->fresh());
+
+    expect($enrolment->fresh()->idCard)->not->toBeNull();
+});
+
 it('denies approval from an instructor in a different tenant', function () {
     $otherTenant = Tenant::factory()->create(['subdomain' => 'chemistry']);
     $outsider = User::factory()->create(['tenant_id' => $otherTenant->id]);

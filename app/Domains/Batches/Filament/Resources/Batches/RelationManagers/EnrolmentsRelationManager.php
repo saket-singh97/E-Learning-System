@@ -7,8 +7,10 @@ use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Policies\EnrolmentApprovalPolicy;
 use App\Domains\Batches\Services\BatchEnrolmentService;
+use App\Domains\Batches\Services\IdCardGenerator;
 use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Models\User;
+use App\Support\Tenancy\CurrentTenant;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
@@ -135,6 +137,29 @@ class EnrolmentsRelationManager extends RelationManager
 
                         app(BatchEnrolmentService::class)->cancel($record);
                     }),
+                // S5 — on demand only (design decision 10), never
+                // auto-issued: a physical/printable artifact an institute
+                // deliberately triggers, not something every Enrolment
+                // edit should keep regenerating.
+                Action::make('issueIdCard')
+                    ->label('Issue ID card')
+                    ->requiresConfirmation()
+                    ->visible(fn (Enrolment $record): bool => $record->status === 'active' && ! $record->idCard()->exists())
+                    ->action(function (Enrolment $record): void {
+                        $this->authorizedActor();
+
+                        app(IdCardGenerator::class)->generate($record);
+
+                        Notification::make()->title('ID card issued')->success()->send();
+                    }),
+                Action::make('downloadIdCard')
+                    ->label('Download ID card')
+                    ->visible(fn (Enrolment $record): bool => $record->idCard()->exists())
+                    ->url(fn (Enrolment $record): string => route('id-card.download', [
+                        'enrolment' => $record->id,
+                        'subdomain' => app(CurrentTenant::class)->get()->subdomain,
+                    ]))
+                    ->openUrlInNewTab(),
             ]);
     }
 
