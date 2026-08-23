@@ -50,6 +50,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Domains/Batches/Filament/Resources'), for: 'App\Domains\Batches\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Fees/Filament/Resources'), for: 'App\Domains\Fees\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Comms/Filament/Resources'), for: 'App\Domains\Comms\Filament\Resources')
+            ->discoverResources(in: app_path('Domains/Operations/Filament/Resources'), for: 'App\Domains\Operations\Filament\Resources')
             // Explicit, not discoverResources — Content's own resource dir
             // also holds CourseResource et al., deliberately kept off this
             // panel (instructor-only, Teach panel). Category/Tag taxonomy

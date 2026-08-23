@@ -42,7 +42,7 @@ stop and report before starting the next block.
 | B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ✅ done |
 | B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ✅ done |
 | B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ✅ done |
-| B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ⬜ not started |
+| B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ✅ done |
 | B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ⬜ not started |
 | B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ⬜ not started |
 | B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ⬜ not started |
@@ -430,16 +430,30 @@ undershot its actual by a wide margin.
 - `composer test`: 1353 tests, 1352 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B13 — Admission CRM schema — not started
+### B13 — Admission CRM schema — done
 
-- New `app/Domains/Operations/` domain scaffold (`Models/`, `Services/`,
-  `Filament/`, `Livewire/`, `Views/`, `Jobs/`, `Policies/`, `Events/` —
-  same subfolder shape every domain already carries per `CLAUDE.md`).
-- `enquiries` migration (`status` new|contacted|follow_up|converted|lost,
-  `course_id` nullable interest, `assigned_to_user_id` nullable,
-  `converted_enrolment_id` nullable).
+- `Operations` domain's `Jobs/` folder already existed (B12); this block
+  adds `Models/` and `Filament/` — no manual scaffold/namespace step
+  needed, `AppServiceProvider`'s own `glob(Domains/*)` view-namespace
+  registration and Filament's `discoverResources()` both just work once
+  the directories exist.
+- `enquiries` migration — full design doc §3.2 schema (`name`, `email`,
+  `phone` nullable, `course_id` nullable, `status`
+  new|contacted|follow_up|converted|lost, `source` nullable,
+  `assigned_to_user_id` nullable, `converted_enrolment_id` nullable —
+  the plan bullet's own list was a subset, design doc's is authoritative).
 - `Enquiry` model, registered in `TenantModelRegistry`.
-- Admin/Teach-panel enquiry intake form + list.
+- `EnquiryResource` (Admin + Teach panels, directory-wide discovery on
+  both) — enquiries are tenant-wide CRM data, not per-instructor-scoped
+  like `Batch`, so B2's own reason for switching Content/Batches to an
+  explicit resource list doesn't apply here; no `canAccess()` override
+  needed either (unlike `InstructorInvitationResource`, B1, which shares
+  the same `Domains/Tenancy/Filament/Resources` directory but is
+  deliberately Admin-only).
+- New `tests/Feature/Operations/EnquiryResourceTest.php` (3 tests):
+  create from Admin, reachable from Teach, tenant-scoped listing.
+- `composer test`: 1357 tests, 1356 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B14 — Admission CRM follow-up + convert-to-enrolment — not started
 

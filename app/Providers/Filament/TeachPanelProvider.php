@@ -45,6 +45,12 @@ class TeachPanelProvider extends PanelProvider
             ->favicon(fn () => app(BrandingService::class)->faviconUrl())
             ->brandLogo(fn () => app(BrandingService::class)->logoUrl())
             ->discoverResources(in: app_path('Domains/Tenancy/Filament/Resources'), for: 'App\Domains\Tenancy\Filament\Resources')
+            // Directory-wide is safe here — Operations only ever holds
+            // enquiry-related resources this slice, and enquiries are
+            // tenant-wide CRM data, not per-instructor-scoped like Batch
+            // (B2's own reason for switching Content/Batches to an
+            // explicit list doesn't apply to this domain).
+            ->discoverResources(in: app_path('Domains/Operations/Filament/Resources'), for: 'App\Domains\Operations\Filament\Resources')
             // Explicit, not discoverResources (S13 B17 fix) — Content's own
             // resource directory also holds CategoryResource/TagResource/
             // ProgramResource/CourseReviewResource, all deliberately
