@@ -48,7 +48,7 @@ stop and report before starting the next block.
 | B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ✅ done |
 | B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ✅ done |
 | B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ✅ done |
-| B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ⬜ not started |
+| B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ✅ done |
 | B20 | `TenantModelRegistry` sweep — all 11 new `BelongsToTenant` models confirmed registered | ⬜ not started |
 | B21 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -581,11 +581,27 @@ undershot its actual by a wide margin.
 - `composer test`: 1385 tests, 1384 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B19 — Completion report export — not started
+### B19 — Completion report export — done
 
-- `ExportCompletionRegister`, same shape as B18, reusing the
-  gradebook-based completion definition `CheckCourseCompletionAndIssueCertificates`
-  (S10) already established rather than re-deriving it.
+- `ExportCompletionRegister` `ShouldQueue` job — copied
+  `ExportEnrolmentRegister`'s (B18) own shape exactly: bare `tenant_id`
+  constructor property, `RebindsTenant` middleware, deterministic
+  `Storage::disk('local')` path, `EscapesCsvFormulas` on user-supplied
+  name/email/batch/course fields. Completion itself reuses
+  `GradebookService::isComplete()`/`scoreFor()` — the exact definition
+  `CheckCourseCompletionAndIssueCertificates` (S10) already established,
+  not re-derived — including that job's own soft-deleted-batch/course
+  guard (`whereHas('batch', fn ($q) => $q->whereHas('course'))`).
+- `CompletionExport` Admin page (generate + conditional download header
+  actions, `EnrolmentExport`'s own exact shape) and
+  `DownloadCompletionExportController` (`DownloadEnrolmentExportController`'s
+  own exact shape — role + tenant check inside the controller).
+- New tests: `ExportCompletionRegisterTest` (1) +
+  `DownloadCompletionExportControllerTest` (3).
+- `composer test`: 1389 tests, 1388 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors. First
+  run hit composer's own 300s process-timeout wrapper (not a test
+  failure) — reran with `COMPOSER_PROCESS_TIMEOUT=900`.
 
 ### B20 — TenantModelRegistry sweep — not started
 

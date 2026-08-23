@@ -2,6 +2,7 @@
 
 use App\Domains\Batches\Models\Batch;
 use App\Http\Controllers\Comms\DownloadAttendanceExportController;
+use App\Http\Controllers\Comms\DownloadCompletionExportController;
 use App\Http\Controllers\Comms\DownloadEngagementExportController;
 use App\Http\Controllers\Comms\DownloadEnrolmentExportController;
 use App\Http\Controllers\Comms\DownloadRevenueExportController;
@@ -38,3 +39,6 @@ Route::get('/exports/engagement-register', DownloadEngagementExportController::c
 
 Route::get('/exports/enrolment-register', DownloadEnrolmentExportController::class)
     ->name('comms.enrolment-export.download');
+
+Route::get('/exports/completion-register', DownloadCompletionExportController::class)
+    ->name('comms.completion-export.download');
