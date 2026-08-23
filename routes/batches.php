@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Batches\Models\Batch;
+use App\Http\Controllers\Batches\DownloadStudentImportErrorReportController;
 use App\Http\Controllers\Batches\ZoomOAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -23,3 +24,9 @@ Route::get('/batches/{batch}/feedback', function (Request $request) {
 
     return view('batches.batch-feedback', ['batch' => $batch]);
 })->name('batch-feedback.show');
+
+// Same double-check posture as /zoom/connect above — role:institute_admin
+// middleware plus the controller's own tenant-scoped lookup.
+Route::get('/student-imports/{importBatch}/error-report', DownloadStudentImportErrorReportController::class)
+    ->middleware(['auth', 'role:institute_admin'])
+    ->name('student-import.error-report.download');

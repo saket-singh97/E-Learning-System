@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B7 | Batch feedback schema + student submission — `batch_feedback` (F8 pt.1) | ✅ done |
 | B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ✅ done |
 | B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ✅ done |
-| B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ⬜ not started |
+| B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ✅ done |
 | B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ⬜ not started |
 | B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ⬜ not started |
 | B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ⬜ not started |
@@ -334,13 +334,53 @@ undershot its actual by a wide margin.
   run failed with connection-refused errors — Docker Desktop wasn't
   running (unrelated to this block's own code); started it and reran.
 
-### B10 — Bulk student CSV import — queued job + error report — not started
+### B10 — Bulk student CSV import — queued job + error report — done
 
-- Phase-2 `ShouldQueue` job: creates a `User` + `Enrolment` per valid row
-  (reuses `BatchEnrolmentService::addManually()`, design decision 7-adjacent
-  for the user-creation half), updates `student_import_batches` counts.
-- Downloadable per-row error report CSV, `EscapesCsvFormulas`-guarded.
-- Admin-panel upload page + status/download page.
+- `ImportStudentsFromCsv` (`ShouldQueue`) — same tenant-rebind/disk-write
+  shape `ExportAttendanceRegister` already established (bare `tenant_id`
+  constructor property + `RebindsTenant` middleware). Unlike that job,
+  not blind-retry-safe (a re-run would duplicate Users/Enrolments), so
+  each row gets its own try/catch instead of leaning on queue retry.
+  `findOrCreateStudent()`: existing same-tenant email reused as-is (no
+  role re-assignment, doesn't demote an existing instructor/admin);
+  existing email under a *different* tenant errors (email is globally
+  unique, same finding B1 already made); a genuinely new `User` gets the
+  `student` role via `RoleAssignmentPolicy::assign()`, the one
+  chokepoint every real role grant already passes through.
+  `BatchEnrolmentService::addManually()` needed no duplicate pre-check —
+  confirmed by reading it: it already absorbs a duplicate Enrolment
+  internally, no exception to catch there.
+- Error report combines phase-1 (`StudentCsvImporter`'s own validation
+  errors, carried through the job's constructor) with phase-2 failures
+  into one sorted CSV, `EscapesCsvFormulas`-guarded, written to
+  `Storage::disk('local')`. `student_import_batches.status`/
+  `success_count`/`error_count`/`error_report_disk_path` all set once,
+  at the end of `handle()`.
+- `DownloadStudentImportErrorReportController` — same gated shape
+  `DownloadRevenueExportController` already established (institute_admin
+  role check + `role:institute_admin` route middleware, CLAUDE.md's
+  double-check posture); `{importBatch}` resolved via `$request->route()`
+  per the domain-route splicing gotcha, not a type-hinted parameter.
+- `StudentImportBatchResource` (Admin panel) — upload (`FileUpload` ->
+  synchronous phase 1 in `handleRecordCreation()`, always dispatches
+  phase 2 even with zero valid rows so there's exactly one place that
+  writes the final report) + status list with a conditional "download
+  error report" row action. Admin-only by omission from Teach's explicit
+  resource list, same precedent B3/B9 already established — no
+  `canAccess()` override needed.
+- New tests: `ImportStudentsFromCsvTest` (4, job-level — new student,
+  existing-user linking, cross-tenant email refusal, combined+sorted
+  error report), `DownloadStudentImportErrorReportControllerTest` (3),
+  `CreateStudentImportBatchTest` (1, end-to-end through the real
+  Filament upload page).
+- Caught by the test run: `->fillForm(['csv' => $tempPath])` failed
+  inside Filament's own `getValidationRules()` — `FileUpload`'s state is
+  always an array (uuid-keyed), never a bare string, even when
+  simulating an already-uploaded file. Fixed by wrapping the path in an
+  array; `handleRecordCreation()`'s own `is_array($data['csv']) ?
+  array_values(...)[0] : ...` already handled either shape.
+- `composer test`: 1346 tests, 1345 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B11 — Bulk enrolment as a background job — not started
 
