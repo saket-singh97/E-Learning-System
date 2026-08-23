@@ -2,18 +2,23 @@
 
 namespace App\Domains\Operations\Filament\Resources\Enquiries;
 
+use App\Domains\Batches\Models\Batch;
 use App\Domains\Content\Models\Course;
 use App\Domains\Operations\Filament\Resources\Enquiries\Pages\CreateEnquiry;
 use App\Domains\Operations\Filament\Resources\Enquiries\Pages\EditEnquiry;
 use App\Domains\Operations\Filament\Resources\Enquiries\Pages\ListEnquiries;
+use App\Domains\Operations\Filament\Resources\Enquiries\RelationManagers\FollowUpsRelationManager;
 use App\Domains\Operations\Models\Enquiry;
+use App\Domains\Operations\Services\EnquiryConversionService;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -94,7 +99,39 @@ class EnquiryResource extends Resource
             ->recordActions([
                 EditAction::make(),
                 DeleteAction::make(),
+                // S.S4 pt.2, design decision 9 — writes a real Enrolment
+                // through BatchEnrolmentService, not a parallel path.
+                Action::make('convertToEnrolment')
+                    ->label('Convert to enrolment')
+                    ->requiresConfirmation()
+                    ->visible(fn (Enquiry $record): bool => $record->status !== 'converted')
+                    ->schema([
+                        Select::make('batch_id')
+                            ->label('Batch')
+                            ->options(fn (Enquiry $record): array => Batch::query()
+                                ->when($record->course_id, fn ($query) => $query->where('course_id', $record->course_id))
+                                ->pluck('title', 'id')
+                                ->all())
+                            ->searchable()
+                            ->required(),
+                    ])
+                    ->action(function (Enquiry $record, array $data): void {
+                        app(EnquiryConversionService::class)->convert(
+                            $record,
+                            Batch::findOrFail($data['batch_id']),
+                            auth()->user(),
+                        );
+
+                        Notification::make()->title('Enquiry converted to enrolment')->success()->send();
+                    }),
             ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            FollowUpsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

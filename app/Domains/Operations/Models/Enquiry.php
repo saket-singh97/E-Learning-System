@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Genuinely new business surface (design doc §3.1) — pre-enrolment,
@@ -45,5 +46,10 @@ class Enquiry extends Model
     public function convertedEnrolment(): BelongsTo
     {
         return $this->belongsTo(Enrolment::class, 'converted_enrolment_id');
+    }
+
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(EnquiryFollowUp::class)->orderByDesc('created_at');
     }
 }

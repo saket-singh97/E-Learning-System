@@ -52,6 +52,7 @@ use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Content\Models\Wishlist;
 use App\Domains\Fees\Models\FeeCoupon;
 use App\Domains\Operations\Models\Enquiry;
+use App\Domains\Operations\Models\EnquiryFollowUp;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Security\Models\AccountSharingFlag;
@@ -131,6 +132,7 @@ class TenantModelRegistry
         BatchFeedback::class,
         StudentImportBatch::class,
         Enquiry::class,
+        EnquiryFollowUp::class,
     ];
 
     /**
@@ -813,6 +815,11 @@ class TenantModelRegistry
                 'email' => 'row-'.uniqid().'@example.com',
                 'status' => 'new',
             ],
+            EnquiryFollowUp::class => [
+                'enquiry_id' => Enquiry::create(['name' => 'Parent', 'email' => 'parent-'.uniqid().'@example.com', 'status' => 'new'])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'note' => 'Row',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -884,6 +891,7 @@ class TenantModelRegistry
             BatchFeedback::class => ['rating' => 1],
             StudentImportBatch::class => ['status' => 'tampered'],
             Enquiry::class => ['status' => 'tampered'],
+            EnquiryFollowUp::class => ['note' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

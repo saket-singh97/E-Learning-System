@@ -43,7 +43,7 @@ stop and report before starting the next block.
 | B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ✅ done |
 | B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ✅ done |
 | B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ✅ done |
-| B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ⬜ not started |
+| B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ✅ done |
 | B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ⬜ not started |
 | B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ⬜ not started |
 | B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ⬜ not started |
@@ -455,13 +455,27 @@ undershot its actual by a wide margin.
 - `composer test`: 1357 tests, 1356 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B14 — Admission CRM follow-up + convert-to-enrolment — not started
+### B14 — Admission CRM follow-up + convert-to-enrolment — done
 
-- `enquiry_follow_ups` migration + model, registered in `TenantModelRegistry`.
-- Follow-up note logging, `next_follow_up_at` reminder field.
-- "Convert to enrolment" action calling `BatchEnrolmentService::addManually()`
-  (design decision 9 — real enrolment, not a parallel path), sets
-  `enquiries.status = 'converted'` + `converted_enrolment_id`.
+- `enquiry_follow_ups` migration + model, registered in
+  `TenantModelRegistry`. `FollowUpsRelationManager` on `EnquiryResource`
+  — note + `next_follow_up_at`, logger defaulted to the acting admin via
+  `mutateFormDataUsing()`, not a form field.
+- `EnquiryConversionService::convert()` — find-or-create the student
+  `User` by email (same "existing same-tenant email reused, different-
+  tenant email refused" posture B10/B11/B12 already established), grants
+  the `student` role through `RoleAssignmentPolicy` for a genuinely new
+  account, then `BatchEnrolmentService::addManually()` for the real
+  `Enrolment` (design decision 9). `converted_enrolment_id` set from that
+  call's own return value; `enquiries.status = 'converted'`. New
+  `EnquiryConversionException` (409) for "already converted" and
+  "different tenant" — registered in `bootstrap/app.php`.
+- "Convert to enrolment" table action on `EnquiryResource`, batch
+  `Select` scoped to the enquiry's own `course_id` when set.
+- New tests: `EnquiryConversionServiceTest` (4, service-level) +
+  `EnquiryResourceTest` (2 more, through the real Filament actions).
+- `composer test`: 1364 tests, 1363 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B15 — ID card generation — not started
 
