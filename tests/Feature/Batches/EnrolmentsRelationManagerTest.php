@@ -151,6 +151,21 @@ it('denies adding a student manually from an actor in a different tenant', funct
     expect(Enrolment::where('batch_id', $this->batch->id)->where('user_id', $student->id)->count())->toBe(0);
 });
 
+it('queues a bulk enrolment job for a list of existing student emails', function () {
+    $studentA = User::factory()->create(['tenant_id' => $this->tenant->id, 'email' => 'bulk-a@example.com']);
+    $studentA->assignRole('student');
+    $studentB = User::factory()->create(['tenant_id' => $this->tenant->id, 'email' => 'bulk-b@example.com']);
+    $studentB->assignRole('student');
+
+    Livewire::test(EnrolmentsRelationManager::class, [
+        'ownerRecord' => $this->batch,
+        'pageClass' => EditBatch::class,
+    ])->callTableAction('bulkEnrol', data: ['emails' => "bulk-a@example.com\nbulk-b@example.com"]);
+
+    expect(Enrolment::where('batch_id', $this->batch->id)->where('user_id', $studentA->id)->exists())->toBeTrue();
+    expect(Enrolment::where('batch_id', $this->batch->id)->where('user_id', $studentB->id)->exists())->toBeTrue();
+});
+
 it('denies approval from an instructor in a different tenant', function () {
     $otherTenant = Tenant::factory()->create(['subdomain' => 'chemistry']);
     $outsider = User::factory()->create(['tenant_id' => $otherTenant->id]);

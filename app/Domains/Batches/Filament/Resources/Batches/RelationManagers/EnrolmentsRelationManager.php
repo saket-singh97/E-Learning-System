@@ -2,6 +2,7 @@
 
 namespace App\Domains\Batches\Filament\Resources\Batches\RelationManagers;
 
+use App\Domains\Batches\Jobs\BulkEnrolStudents;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Policies\EnrolmentApprovalPolicy;
@@ -11,6 +12,8 @@ use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -73,6 +76,34 @@ class EnrolmentsRelationManager extends RelationManager
                             User::findOrFail($data['user_id']),
                             $actor,
                         );
+                    }),
+                Action::make('bulkEnrol')
+                    ->label('Bulk enrol')
+                    // F10 pt.1 — thin ShouldQueue wrapper around the exact
+                    // same addManually() call above, once per email
+                    // (design decision 7); existing students only, an
+                    // email with no matching User is skipped, not created.
+                    ->schema([
+                        Textarea::make('emails')
+                            ->label('Student emails (one per line)')
+                            ->required()
+                            ->helperText('Existing students in this tenant only.'),
+                    ])
+                    ->action(function (array $data): void {
+                        $actor = $this->authorizedActor();
+                        /** @var Batch $batch */
+                        $batch = $this->getOwnerRecord();
+
+                        $emails = collect(explode("\n", (string) $data['emails']))
+                            ->map(fn (string $email): string => strtolower(trim($email)))
+                            ->filter()
+                            ->unique()
+                            ->values()
+                            ->all();
+
+                        BulkEnrolStudents::dispatch($batch->tenant_id, $batch->id, $emails, $actor->id);
+
+                        Notification::make()->title('Bulk enrolment queued')->success()->send();
                     }),
             ])
             ->recordActions([

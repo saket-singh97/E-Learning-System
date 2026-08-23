@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ✅ done |
 | B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ✅ done |
 | B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ✅ done |
-| B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ⬜ not started |
+| B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ✅ done |
 | B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ⬜ not started |
 | B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ⬜ not started |
 | B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ⬜ not started |
@@ -382,12 +382,30 @@ undershot its actual by a wide margin.
 - `composer test`: 1346 tests, 1345 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B11 — Bulk enrolment as a background job — not started
+### B11 — Bulk enrolment as a background job — done
 
-- Thin `ShouldQueue` job wrapping `BatchEnrolmentService::addManually()`
-  once per row in a submitted student-id/email list (design decision 7)
-  — no new enrolment code path, every existing guarantee (seat lock,
-  policy gate) inherited for free.
+- Verified before coding: design decision 7 names "seat-limit
+  `lockForUpdate()`" as a guarantee this wrapper inherits, but
+  `addManually()` itself has none — no lock, no seat check, lands
+  `active` unconditionally (confirmed by reading the whole service, not
+  assumed). That lock belongs to `enrolDirect()`/`approve()`, not the
+  staff-add path. Reusing `addManually()` here inherits *that* exact
+  existing behavior — same as the single-row "Add student" action
+  already has — not a new gap.
+  `BulkEnrolStudents` (`ShouldQueue`, `RebindsTenant`) — one
+  `addManually()` call per email; unmatched/cross-tenant emails are
+  skipped (logged), not created — that's F9's own job, not this one's.
+  No status/error-report table (unlike B9/B10) — this block's own plan
+  text scopes it to just the queued wrapper.
+- New "Bulk enrol" header action on `EnrolmentsRelationManager`
+  (alongside the existing single "Add student" one, not replacing it) —
+  a newline-separated email `Textarea`, dispatches the job through the
+  same `authorizedActor()` gate the single-add action already uses.
+- New tests: `BulkEnrolStudentsTest` (4, job-level) +
+  `EnrolmentsRelationManagerTest` (1 more, through the real header
+  action).
+- `composer test`: 1351 tests, 1350 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B12 — Bulk instructor invitations as a background job — not started
 
