@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B6 | Discussion forum UI — batch-scoped Livewire component, enrolment-gated (F6 pt.2) | ✅ done |
 | B7 | Batch feedback schema + student submission — `batch_feedback` (F8 pt.1) | ✅ done |
 | B8 | Batch feedback aggregation view — instructor/admin-facing average + comments (F8 pt.2) | ✅ done |
-| B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ⬜ not started |
+| B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ✅ done |
 | B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ⬜ not started |
 | B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ⬜ not started |
 | B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ⬜ not started |
@@ -304,13 +304,35 @@ undershot its actual by a wide margin.
 - `composer test`: 1333 tests, 1332 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B9 — Bulk student CSV import — schema + parser — not started
+### B9 — Bulk student CSV import — schema + parser — done
 
 - `student_import_batches` migration (`status`, `total_rows`,
   `success_count`, `error_count`, `error_report_disk_path` nullable).
+  `success_count`/`error_report_disk_path` stay unset until B10's queued
+  job actually runs — phase 1 only ever writes `total_rows`/`status`/
+  `error_count` (validation-time errors, not creation-time ones).
+  `batch_id` deliberately isn't a column here (matches the design doc's
+  own literal schema) — the CSV's own `batch` column (a slug) lets one
+  upload span multiple batches, resolved per row.
 - `StudentImportBatch` model, registered in `TenantModelRegistry`.
-- Synchronous phase-1 parse/validate (design decision 6) — file-shape and
-  per-row validation errors collected before any queue dispatch.
+- `StudentCsvImporter::parse()` — file-shape refusal (bad headers, no
+  data rows) throws `InvalidStudentImportFileException` (422) before any
+  row is even written, same "immediate feedback, no queue wait" reason
+  design decision 6 gives. Per-row errors (missing name, invalid email,
+  unknown batch slug, duplicate email within the file) don't refuse the
+  whole file — returned alongside the valid rows for B10's own upload
+  action to hand to the queued creation job. Plain CSV parsing
+  (`str_getcsv`), not `Excel::import()` — this app's first real import,
+  per the design doc's own verification that `maatwebsite/excel` has
+  never been used for import here.
+- New `tests/Feature/Batches/StudentCsvImporterTest.php` (4 tests): a
+  valid file parses and resolves batches correctly, bad headers refuse
+  before writing any row, an empty file refuses, and a mixed file
+  produces the exact right per-row errors without dropping valid rows.
+- `composer test`: 1338 tests, 1337 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors. First
+  run failed with connection-refused errors — Docker Desktop wasn't
+  running (unrelated to this block's own code); started it and reran.
 
 ### B10 — Bulk student CSV import — queued job + error report — not started
 

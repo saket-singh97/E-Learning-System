@@ -20,6 +20,7 @@ use App\Exceptions\CannotImpersonateException;
 use App\Exceptions\CircuitOpenException;
 use App\Exceptions\CircularPrerequisiteException;
 use App\Exceptions\ForumReplyDepthExceededException;
+use App\Exceptions\InvalidStudentImportFileException;
 use App\Exceptions\ConcurrentStreamLimitExceededException;
 use App\Exceptions\CouponNotRedeemableException;
 use App\Exceptions\DeviceLimitExceededException;
@@ -234,4 +235,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (CircularPrerequisiteException $e) => abort(409, $e->getMessage()));
 
         $exceptions->render(fn (ForumReplyDepthExceededException $e) => abort(409, $e->getMessage()));
+
+        $exceptions->render(fn (InvalidStudentImportFileException $e) => abort(422, $e->getMessage()));
     })->create();

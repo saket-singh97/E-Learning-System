@@ -14,6 +14,7 @@ use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchFeedback;
+use App\Domains\Batches\Models\StudentImportBatch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Models\InstituteZoomConnection;
@@ -127,6 +128,7 @@ class TenantModelRegistry
         ForumThread::class,
         ForumPost::class,
         BatchFeedback::class,
+        StudentImportBatch::class,
     ];
 
     /**
@@ -800,6 +802,10 @@ class TenantModelRegistry
                 'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'rating' => 5,
             ],
+            StudentImportBatch::class => [
+                'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'pending',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -869,6 +875,7 @@ class TenantModelRegistry
             ForumThread::class => ['title' => 'tampered'],
             ForumPost::class => ['body' => 'tampered'],
             BatchFeedback::class => ['rating' => 1],
+            StudentImportBatch::class => ['status' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
