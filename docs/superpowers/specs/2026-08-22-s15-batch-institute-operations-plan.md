@@ -45,7 +45,7 @@ stop and report before starting the next block.
 | B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ✅ done |
 | B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ✅ done |
 | B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ✅ done |
-| B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ⬜ not started |
+| B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ✅ done |
 | B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ⬜ not started |
 | B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ⬜ not started |
 | B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ⬜ not started |
@@ -507,12 +507,30 @@ undershot its actual by a wide margin.
 - `composer test`: 1370 tests, 1369 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B16 — Noticeboard schema + authoring — not started
+### B16 — Noticeboard schema + authoring — done
 
-- `notices` migration (`audience_roles` json, `published_at` nullable —
-  null is draft).
-- `Notice` model, registered in `TenantModelRegistry`.
-- Admin-panel compose/publish page.
+- `notices` migration (`audience_roles` jsonb, `published_at` nullable —
+  null is draft). `Notice` model (Comms domain, plain-text `body` same
+  precedent `DirectMessage`/`ForumPost` already established), registered
+  in `TenantModelRegistry`. `Notice::audienceRoleOptions()` derives the
+  Select's own options from `RoleHierarchy::LEVELS` (design decision 11
+  — a subset of the same 5 roles, no separate enum invented).
+- `NoticeResource` — Admin-only by omission from Teach's own
+  discovered/explicit resource lists, same precedent B3/B9 already
+  established (no `canAccess()` override needed). Compose form leaves
+  `published_at` optional (blank = draft, per the schema's own design);
+  a "Publish now" row action turns an existing draft published without
+  needing to re-open the edit form. B17 builds the actual display side.
+- New `tests/Feature/Comms/NoticeResourceTest.php` (4 tests): draft
+  creation with author auto-set, publish-now action, tenant-scoped
+  listing, unreachable from Teach.
+- Caught by the test run: `TextColumn::make('audience_roles')->formatStateUsing(fn (array $state) ...)` crashed with a
+  `string given` type error under some Filament table-render paths for
+  this jsonb column — widened the closure to `array|string|null` and
+  `json_decode()` the string case, rather than trust the Eloquent cast
+  always runs first.
+- `composer test`: 1375 tests, 1374 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B17 — Noticeboard display + read tracking — not started
 

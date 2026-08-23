@@ -33,6 +33,7 @@ use App\Domains\Comms\Models\DirectMessage;
 use App\Domains\Comms\Models\ForumPost;
 use App\Domains\Comms\Models\ForumThread;
 use App\Domains\Comms\Models\MessageReport;
+use App\Domains\Comms\Models\Notice;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
 use App\Domains\Content\Models\AttendanceRecord;
@@ -135,6 +136,7 @@ class TenantModelRegistry
         Enquiry::class,
         EnquiryFollowUp::class,
         IdCard::class,
+        Notice::class,
     ];
 
     /**
@@ -842,6 +844,12 @@ class TenantModelRegistry
                 'disk_path' => 'id-cards/row.pdf',
                 'issued_at' => now(),
             ],
+            Notice::class => [
+                'title' => 'Row',
+                'body' => 'Row body',
+                'audience_roles' => ['student'],
+                'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -915,6 +923,7 @@ class TenantModelRegistry
             Enquiry::class => ['status' => 'tampered'],
             EnquiryFollowUp::class => ['note' => 'tampered'],
             IdCard::class => ['disk_path' => 'tampered.pdf'],
+            Notice::class => ['title' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
