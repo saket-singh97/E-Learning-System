@@ -21,6 +21,7 @@
          but this keeps both portals consistent if that ever changes. --}}
     <livewire:student-portal />
 
+    <livewire:comms.notice-board />
     <livewire:notification-centre />
     <livewire:impersonation-banner />
     <livewire:user-profile />

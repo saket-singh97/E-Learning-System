@@ -22,6 +22,7 @@
          Auth::user() before the logout takes effect (S8 B8 review). --}}
     <livewire:parent-portal />
 
+    <livewire:comms.notice-board />
     <livewire:notification-centre />
     <livewire:impersonation-banner />
     <livewire:user-profile />

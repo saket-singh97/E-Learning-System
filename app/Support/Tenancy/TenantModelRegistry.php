@@ -34,6 +34,7 @@ use App\Domains\Comms\Models\ForumPost;
 use App\Domains\Comms\Models\ForumThread;
 use App\Domains\Comms\Models\MessageReport;
 use App\Domains\Comms\Models\Notice;
+use App\Domains\Comms\Models\NoticeReadReceipt;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
 use App\Domains\Content\Models\AttendanceRecord;
@@ -137,6 +138,7 @@ class TenantModelRegistry
         EnquiryFollowUp::class,
         IdCard::class,
         Notice::class,
+        NoticeReadReceipt::class,
     ];
 
     /**
@@ -850,6 +852,16 @@ class TenantModelRegistry
                 'audience_roles' => ['student'],
                 'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
             ],
+            NoticeReadReceipt::class => [
+                'notice_id' => Notice::create([
+                    'title' => 'Parent',
+                    'body' => 'Parent body',
+                    'audience_roles' => ['student'],
+                    'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                ])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'read_at' => now(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -924,6 +936,7 @@ class TenantModelRegistry
             EnquiryFollowUp::class => ['note' => 'tampered'],
             IdCard::class => ['disk_path' => 'tampered.pdf'],
             Notice::class => ['title' => 'tampered'],
+            NoticeReadReceipt::class => ['read_at' => now()->subDay()],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

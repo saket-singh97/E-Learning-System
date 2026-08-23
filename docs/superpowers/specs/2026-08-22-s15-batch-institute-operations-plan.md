@@ -46,7 +46,7 @@ stop and report before starting the next block.
 | B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ✅ done |
 | B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ✅ done |
 | B16 | Noticeboard schema + authoring — `notices`, role-targeted, Admin-panel compose (§S.S6 pt.1) | ✅ done |
-| B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ⬜ not started |
+| B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ✅ done |
 | B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ⬜ not started |
 | B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ⬜ not started |
 | B20 | `TenantModelRegistry` sweep — all 11 new `BelongsToTenant` models confirmed registered | ⬜ not started |
@@ -532,12 +532,37 @@ undershot its actual by a wide margin.
 - `composer test`: 1375 tests, 1374 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B17 — Noticeboard display + read tracking — not started
+### B17 — Noticeboard display + read tracking — done
 
 - `notice_read_receipts` migration (unique on `notice_id`+`user_id`) +
   model, registered in `TenantModelRegistry`.
-- Portal/panel banner or list showing published notices matching the
-  viewer's own role, mark-as-read action.
+- `NoticeBoard` Livewire component (Comms) — published notices whose
+  `audience_roles` intersects any of the viewer's own roles
+  (`whereJsonContains`, OR'd across each role the viewer holds), mark-
+  as-read writes a `NoticeReadReceipt` (`firstOrCreate`, idempotent).
+  Embedded on both the student and parent dashboards, same "one
+  component, reused wherever needed" shape `NotificationCentre` already
+  established — Admin/Teach panel embedding intentionally out of scope
+  for this block (the plan's own "portal/panel banner **or** list"
+  wording), staff already see everything they authored via
+  `NoticeResource` itself.
+- New `tests/Feature/Comms/NoticeBoardTest.php` (5 tests): shows a
+  role-matched published notice, hides a different-role notice, hides
+  an unpublished draft, read receipt is idempotent, guest sees nothing.
+- Caught by the test run, embedding on the real dashboards: `comms.notice-board`
+  had no `Livewire::component()` alias, unlike every other domain-
+  namespaced component in this app (`AppServiceProvider` registers each
+  one explicitly — Livewire's default auto-discovery root is
+  `App\Livewire` only, not `App\Domains\*\Livewire`). Broke 9
+  pre-existing tests that hit the real student/parent dashboard over
+  HTTP. Fixing this also surfaced that **B6's `comms.batch-forum` and
+  B7's `batches.batch-feedback-form` had the exact same gap** — both
+  silently 500'd on their own real host pages the whole time; neither
+  block's own tests ever hit those pages over HTTP (only direct
+  `Livewire::test(Class::class)` calls, which bypass tag-name resolution
+  entirely). All three registered now.
+- `composer test`: 1381 tests, 1380 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B18 — Enrolment report export — not started
 

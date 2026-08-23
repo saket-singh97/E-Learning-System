@@ -14,7 +14,10 @@ use App\Domains\Content\Listeners\EnrolFromProgramPayment;
 use App\Domains\Content\Listeners\GenerateLessonSubtitles;
 use App\Domains\Batches\Listeners\SendEnrolmentExpiredNotification;
 use App\Domains\Batches\Livewire\BatchCatalog;
+use App\Domains\Batches\Livewire\BatchFeedbackForm;
+use App\Domains\Comms\Livewire\BatchForum;
 use App\Domains\Comms\Livewire\DirectMessages;
+use App\Domains\Comms\Livewire\NoticeBoard;
 use App\Domains\Content\Livewire\CourseReviews;
 use App\Domains\Content\Livewire\LessonNotes;
 use App\Domains\Content\Livewire\LessonQuestions;
@@ -192,6 +195,14 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('content.lesson-notes', LessonNotes::class);
         Livewire::component('comms.direct-messages', DirectMessages::class);
         Livewire::component('content.course-reviews', CourseReviews::class);
+        // Found missing (S15 B17's own full-suite run): comms.batch-forum
+        // (B6) and batches.batch-feedback-form (B7) were never registered
+        // either — both silently 500'd on their real host pages, only ever
+        // caught by direct Livewire::test(Class::class) calls that bypass
+        // tag-name resolution entirely, never an HTTP hit on the real page.
+        Livewire::component('comms.batch-forum', BatchForum::class);
+        Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
+        Livewire::component('comms.notice-board', NoticeBoard::class);
 
         // Unscoped (no third $scopes argument) — applies to all three
         // Filament panels (admin/teach/super) with one registration,
