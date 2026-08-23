@@ -41,7 +41,7 @@ stop and report before starting the next block.
 | B9 | Bulk student CSV import — schema + parser/validator — `student_import_batches` (F9 pt.1) | ✅ done |
 | B10 | Bulk student CSV import — queued creation job + downloadable per-row error report (F9 pt.2) | ✅ done |
 | B11 | Bulk enrolment as a background job — thin `ShouldQueue` wrapper around `BatchEnrolmentService::addManually()` (F10 pt.1) | ✅ done |
-| B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ⬜ not started |
+| B12 | Bulk instructor invitations as a background job — thin `ShouldQueue` wrapper around B1's own invitation path (F10 pt.2) | ✅ done |
 | B13 | Admission CRM schema — new `Operations` domain, `enquiries` (§S.S4 pt.1) | ⬜ not started |
 | B14 | Admission CRM follow-up + convert-to-enrolment — `enquiry_follow_ups`, real `Enrolment` on convert (§S.S4 pt.2) | ⬜ not started |
 | B15 | ID card generation — `id_cards`, dompdf + qr-code reuse from `Certificate`'s own precedent (§S.S5) | ⬜ not started |
@@ -407,10 +407,28 @@ undershot its actual by a wide margin.
 - `composer test`: 1351 tests, 1350 pass, 1 pre-existing unrelated
   `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
-### B12 — Bulk instructor invitations as a background job — not started
+### B12 — Bulk instructor invitations as a background job — done
 
-- Thin `ShouldQueue` job wrapping B1's own single-invitation path once
-  per row in a submitted email list (design decision 8).
+- `App\Domains\Operations\Jobs\InviteInstructorsFromEmailList` — this
+  slice's first file in the new `Operations` domain (design doc §3.1:
+  "the bulk job itself is an operations concern" even though it
+  dispatches through Tenancy's own `InstructorInvitationService`), one
+  block ahead of B13's own scaffold-building — just the `Jobs/`
+  subfolder exists for now, B13 adds the rest (`Models/`, `Filament/`
+  etc. for the admission CRM). Same thin-wrapper posture `BulkEnrolStudents`
+  (B11) already established — one `invite()` call per email, no
+  duplicate-pending-invite guard added (design decision 8: "not a
+  separate bulk-specific invitation code path" — adding one would be
+  exactly that).
+- New "Bulk invite" header action on `ListInstructorInvitations`
+  (alongside the existing single `CreateAction`, not replacing it) —
+  emails `Textarea` + the same batch-assignment `Select` the single-invite
+  form already uses, all invited emails get the same batches.
+- New tests: `InviteInstructorsFromEmailListTest` (1, job-level, asserts
+  both invitations created and both notifications sent) +
+  `InstructorInvitationTest` (1 more, through the real header action).
+- `composer test`: 1353 tests, 1352 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors.
 
 ### B13 — Admission CRM schema — not started
 

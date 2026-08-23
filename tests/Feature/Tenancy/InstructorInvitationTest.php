@@ -4,6 +4,7 @@ use App\Domains\Batches\Models\Batch;
 use App\Domains\Content\Models\Course;
 use App\Domains\Tenancy\Filament\Resources\InstructorInvitations\InstructorInvitationResource;
 use App\Domains\Tenancy\Filament\Resources\InstructorInvitations\Pages\CreateInstructorInvitation;
+use App\Domains\Tenancy\Filament\Resources\InstructorInvitations\Pages\ListInstructorInvitations;
 use App\Domains\Tenancy\Models\InstructorInvitation;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Services\InstructorInvitationService;
@@ -79,6 +80,29 @@ it('creates an invitation from the Filament admin page', function () {
         ->assertHasNoFormErrors();
 
     expect(InstructorInvitation::where('email', 'new-teacher@example.com')->exists())->toBeTrue();
+});
+
+it('bulk-invites a list of emails to the same batches from the Filament admin page', function () {
+    $tenant = Tenant::factory()->create(['subdomain' => 'physics']);
+    app(CurrentTenant::class)->set($tenant);
+    $admin = User::factory()->create(['tenant_id' => $tenant->id]);
+    $admin->assignRole('institute_admin');
+    $batch = makeBatch($tenant);
+
+    $this->actingAs($admin)
+        ->get(InstructorInvitationResource::getUrl('index', ['subdomain' => 'physics'], panel: 'admin'))
+        ->assertOk();
+
+    Notification::fake();
+
+    Livewire::test(ListInstructorInvitations::class)
+        ->callAction('bulkInvite', data: [
+            'emails' => "bulk-a@example.com\nbulk-b@example.com",
+            'batch_ids' => [$batch->id],
+        ]);
+
+    expect(InstructorInvitation::where('email', 'bulk-a@example.com')->exists())->toBeTrue();
+    expect(InstructorInvitation::where('email', 'bulk-b@example.com')->exists())->toBeTrue();
 });
 
 it('accepting a pending invitation creates the user, grants the instructor role, and assigns the batch', function () {
