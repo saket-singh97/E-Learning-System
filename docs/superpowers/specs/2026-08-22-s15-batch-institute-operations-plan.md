@@ -49,7 +49,7 @@ stop and report before starting the next block.
 | B17 | Noticeboard display + read tracking — `notice_read_receipts`, portal/panel banner (§S.S6 pt.2) | ✅ done |
 | B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ✅ done |
 | B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ✅ done |
-| B20 | `TenantModelRegistry` sweep — all 11 new `BelongsToTenant` models confirmed registered | ⬜ not started |
+| B20 | `TenantModelRegistry` sweep — all 11 new `BelongsToTenant` models confirmed registered | ✅ done |
 | B21 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 **Test suite:** 1283/1284 at slice start (1 pre-existing, unrelated
@@ -603,14 +603,28 @@ undershot its actual by a wide margin.
   run hit composer's own 300s process-timeout wrapper (not a test
   failure) — reran with `COMPOSER_PROCESS_TIMEOUT=900`.
 
-### B20 — TenantModelRegistry sweep — not started
+### B20 — TenantModelRegistry sweep — done
 
-- Confirm all 11 new `BelongsToTenant` models (`InstructorInvitation`,
+- Confirmed only, no code changes needed — each B0-B19 block already
+  registered its own model as it built (design doc §3.3's own discipline
+  held). All 11 new `BelongsToTenant` models (`InstructorInvitation`,
   `TimetableTemplate`, `ForumThread`, `ForumPost`, `BatchFeedback`,
   `StudentImportBatch`, `Enquiry`, `EnquiryFollowUp`, `IdCard`, `Notice`,
-  `NoticeReadReceipt`) registered with `seedAttributes()`/`updateAttributes()`
-  entries; `CrossTenantTest` generates coverage for each with no
-  hand-written per-model test.
+  `NoticeReadReceipt`) present in `TenantModelRegistry::MODELS` with
+  `seedAttributes()`/`updateAttributes()` entries.
+- Reverse sweep also run (not just the 11 named ones): grepped every
+  `app/Domains/*/Models/*.php` for real `BelongsToTenant` trait usage
+  (62 files) against `MODELS`' own 62 entries — exact match, nothing
+  missing. `ImpersonationAudit` correctly stays unregistered (its own
+  docblock: deliberately no `BelongsToTenant`, `tenant_id` set explicitly
+  from the target user, not `CurrentTenant`) — the model's own comment
+  text mentioning "BelongsToTenant" is what surfaces it in a naive grep,
+  not real trait usage.
+- `composer test`: 1389 tests, 1388 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 errors. Test
+  run itself took longer than prior blocks (~750s vs ~500s) under system
+  load — not a regression, confirmed via `Get-Process php` showing active
+  CPU burn throughout, not a hang.
 
 ### B21 — Full test coverage, review pass — not started
 
