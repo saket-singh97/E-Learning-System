@@ -53,6 +53,11 @@ beforeEach(function () {
 });
 
 it('logs each event type once triggered on a proctoring-enabled quiz', function () {
+    // S16 B11's own violation threshold (default 3) would otherwise
+    // auto-submit this attempt partway through logging all 4 event
+    // types — set high enough here to isolate this test to B9's own
+    // event-logging behavior alone.
+    config(['assessments.proctoring_violation_threshold' => 99]);
     $quiz = ($this->makeQuiz)(true);
 
     $component = Livewire::actingAs($this->student)
@@ -99,6 +104,63 @@ it('logs nothing when no attempt is in progress', function () {
         ->call('logProctoringEvent', 'tab_switch');
 
     expect(QuizProctoringEvent::count())->toBe(0);
+});
+
+// S16 B11 (I9) — violation threshold -> auto-submit + flag.
+
+it('auto-submits and flags an attempt once the violation threshold is crossed', function () {
+    config(['assessments.proctoring_violation_threshold' => 3]);
+    $quiz = ($this->makeQuiz)(true);
+
+    $component = Livewire::actingAs($this->student)
+        ->test(QuizRunner::class, ['quiz' => $quiz])
+        ->call('startAttempt');
+
+    $component->call('logProctoringEvent', 'tab_switch');
+    $component->call('logProctoringEvent', 'copy');
+    $component->call('logProctoringEvent', 'paste');
+
+    $attempt = QuizAttempt::where('quiz_id', $quiz->id)->where('user_id', $this->student->id)->sole();
+
+    expect($attempt->status)->toBe('auto_submitted');
+    expect($attempt->flagged_for_review)->toBeTrue();
+});
+
+it('leaves the attempt in progress and unflagged while staying under the threshold', function () {
+    config(['assessments.proctoring_violation_threshold' => 3]);
+    $quiz = ($this->makeQuiz)(true);
+
+    Livewire::actingAs($this->student)
+        ->test(QuizRunner::class, ['quiz' => $quiz])
+        ->call('startAttempt')
+        ->call('logProctoringEvent', 'tab_switch')
+        ->call('logProctoringEvent', 'copy');
+
+    $attempt = QuizAttempt::where('quiz_id', $quiz->id)->where('user_id', $this->student->id)->sole();
+
+    expect($attempt->status)->toBe('in_progress');
+    expect($attempt->flagged_for_review)->toBeFalse();
+});
+
+it('never flags a time-expiry auto-submit, unrelated to violations', function () {
+    $quiz = ($this->makeQuiz)(true);
+    $question = Question::sole();
+
+    $attempt = QuizAttempt::create([
+        'quiz_id' => $quiz->id,
+        'user_id' => $this->student->id,
+        'question_ids' => [$question->id],
+        'status' => 'in_progress',
+        'started_at' => now()->subMinutes(25),
+        'expires_at' => now()->subMinute(),
+        'max_score' => 1,
+    ]);
+
+    app(\App\Domains\Assessments\Jobs\AutoSubmitExpiredQuizAttempts::class)->handle();
+
+    $attempt->refresh();
+    expect($attempt->status)->toBe('auto_submitted');
+    expect($attempt->flagged_for_review)->toBeFalse();
 });
 
 it('scopes a logged event to the current attempt and tenant', function () {

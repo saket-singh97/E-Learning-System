@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ✅ done |
 | B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ✅ done |
 | B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ✅ done |
-| B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ⬜ not started |
+| B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ✅ done |
 | B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ⬜ not started |
 | B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ⬜ not started |
 | B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ⬜ not started |
@@ -430,22 +430,45 @@ undershot its actual by a wide margin.
   `composer test`: 1480/1481 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B11 — I9: violation threshold → auto-submit + flag — not started
+### B11 — I9: violation threshold → auto-submit + flag — done
 
 - `quiz_attempts.flagged_for_review` boolean migration, default false.
-- A new config value (`config('assessments.proctoring_violation_threshold')`,
-  default 3) — once an in-progress attempt's own `quiz_proctoring_events`
-  count crosses it, `QuizAttemptService::submit($locked, [], 'auto_submitted')`
-  fires (the exact same call `AutoSubmitExpiredQuizAttempts` already makes
-  for time-expiry, design doc §4 decision 5) and `flagged_for_review` is
-  set true.
-- Instructor-facing review queue — a filter on the existing
-  `QuizAnswerResource`/a new small Filament page listing
-  `flagged_for_review = true` attempts, surfacing the event log alongside
-  the responses.
-- New tests: crossing the threshold auto-submits and flags, staying under
-  it leaves the attempt in progress, a time-expiry auto-submit (unrelated
-  to violations) never sets the flag.
+  `config('assessments.proctoring_violation_threshold')` (new
+  `config/assessments.php`, default 3, env-overridable, same shape every
+  `config/security.php` threshold already uses).
+- `QuizRunner::logProctoringEvent()` counts this attempt's own
+  `quiz_proctoring_events` after writing the new one; crossing the
+  threshold calls `QuizAttemptService::submit($attempt, [], 'auto_submitted')`
+  — the exact same call `AutoSubmitExpiredQuizAttempts` already makes for
+  time-expiry (design doc §4 decision 5) — then sets `flagged_for_review`
+  on the result. No row-locking here (unlike the background sweep) — this
+  runs inside a live user's own Livewire request, not an unscoped
+  cross-tenant sweep.
+- `App\Domains\Assessments\Filament\Resources\FlaggedQuizAttempts\FlaggedQuizAttemptResource`
+  — browse-only (same shape `QuizAnswerResource`/`MessageReportResource`),
+  scoped to `flagged_for_review = true`. A `viewDetails` modal action
+  surfaces both the attempt's own responses and its proctoring-event log
+  side by side (two `Placeholder` fields, same modal-action-with-schema
+  idiom `QuizAnswerResource`'s own review action already established) —
+  satisfies "surfacing the event log alongside the responses" without a
+  second nested resource. Auto-discovered on the Teach panel only, same
+  placement as `QuestionResource`/`QuizResource`/`QuizAnswerResource`
+  (Admin panel doesn't discover the Assessments resource directory).
+- New tests (9): crossing the threshold auto-submits and flags, staying
+  under it leaves the attempt in progress and unflagged, a time-expiry
+  auto-submit never sets the flag; the flagged-attempts queue lists a
+  flagged attempt but not an unflagged one. Fixed one real interaction
+  bug in an *existing* B9 test: it looped all 4 event types on one
+  attempt, which the new default threshold (3) now auto-submits partway
+  through — raised that test's own threshold to isolate it from B11's
+  side effect, not a production bug.
+- Hit the same accumulated-stray-export-file flake chased down in B7
+  again (two different export-download tests this time,
+  `DownloadEnrolmentExportControllerTest` +
+  `PruneAuditLogEntriesTest`'s own unrelated timing-boundary flake) —
+  confirmed both pass in isolation, cleaned the newly-accumulated stray
+  CSVs again, reran clean. `composer test`: 1484/1485 pass; sole failure
+  the pre-existing unrelated `CourseSlugUniquenessTest`.
 
 ### B12 — I10 pt.1: test series schema + bundling — not started
 

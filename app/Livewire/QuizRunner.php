@@ -152,6 +152,18 @@ class QuizRunner extends Component
             'event_type' => $eventType,
             'occurred_at' => now(),
         ]);
+
+        // S16 B11 (I9, design doc §4 decision 5) — reuses the exact same
+        // auto_submitted call AutoSubmitExpiredQuizAttempts already makes
+        // for time-expiry; flagged_for_review is the only new state, since
+        // *why* an attempt auto-submitted (expired vs. violated) is what
+        // an instructor reviewing it needs, not a new terminal status.
+        $violationCount = QuizProctoringEvent::where('quiz_attempt_id', $attempt->id)->count();
+
+        if ($violationCount >= config('assessments.proctoring_violation_threshold')) {
+            $submitted = app(QuizAttemptService::class)->submit($attempt, [], 'auto_submitted');
+            $submitted->update(['flagged_for_review' => true]);
+        }
     }
 
     public function render(): View

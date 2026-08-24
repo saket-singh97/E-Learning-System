@@ -25,6 +25,7 @@ class QuizAttempt extends Model
         'submitted_at',
         'score',
         'max_score',
+        'flagged_for_review',
     ];
 
     protected function casts(): array
@@ -36,6 +37,7 @@ class QuizAttempt extends Model
             'submitted_at' => 'datetime',
             'score' => 'decimal:2',
             'max_score' => 'decimal:2',
+            'flagged_for_review' => 'boolean',
         ];
     }
 
