@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ✅ done |
 | B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ✅ done |
 | B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ✅ done |
-| B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ⬜ not started |
+| B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ✅ done |
 | B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ⬜ not started |
 | B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ⬜ not started |
 | B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ⬜ not started |
@@ -322,17 +322,60 @@ undershot its actual by a wide margin.
   touches those export tests. `composer test`: 1458/1459 pass; sole
   failure the pre-existing unrelated `CourseSlugUniquenessTest`.
 
-### B8 — I6 pt.2: Filament UI + QuizRunner rendering — not started
+### B8 — I6 pt.2: Filament UI + QuizRunner rendering — done
 
-- `NormalizesQuestionFormData` gains form widgets for each new type
-  (multi-select checkboxes with correct-answer marking, fill-in-blank
-  accepted-answers repeater, matching pairs builder, ordering list).
-- `QuizRunner` gains a rendering branch per new type for the student-facing
-  attempt UI (checkbox group, text input, drag-or-select pairing, a
-  reorderable list).
-- New tests: creating each new question type through the real Filament
-  form, a student attempting each type through `QuizRunner` and the
-  response persisting correctly to `QuizAnswer.response`.
+- `NormalizesQuestionFormData` gains one virtual-field set per new type:
+  `multi_select` reuses the existing `options` `TagsInput` plus a
+  `CheckboxList` (same "ids are just the visible text" convention `mcq`'s
+  own `correct_answer_mcq` already established); `fill_in_blank` gets a
+  `TagsInput` of accepted answers; `matching`/`ordering` get a `Repeater`
+  each (`matching_pairs`: left/right text pairs; `ordering_items`: items
+  entered in the correct order).
+  - `matching`/`ordering` needed a real design call the plan left open:
+    naively storing the author's own entered order in `options` would let
+    a student read the correct pairing/order straight off the rendered
+    page. Both are built through a one-time shuffle at authoring time —
+    `buildMatchingShape()` shuffles the right-hand list once and records
+    `pairs` as indices into the *shuffled* result; `buildOrderingShape()`
+    shuffles the item list once and records `correct_sequence` as indices
+    into *that*. Decorrelates stored display order from the answer
+    without any client-side JS or per-attempt state.
+- `QuestionResource::form()` adds the matching Filament fields, each
+  `visible()`/`required()` on `type`, same conditional-field idiom the 4
+  existing types already use.
+- `QuizRunner`'s Blade view (no PHP-class change needed — `$responses` is
+  already a generic array) gains one rendering branch per new type:
+  `multi_select` = checkbox group (array `wire:model`, native Livewire
+  checkbox-array binding); `fill_in_blank` = plain text input;
+  `matching`/`ordering` = per-row `<select>` dropdowns ("select," not
+  drag-and-drop, matching the plan's own "drag-or-select" wording) whose
+  response shape lines up with B7's grading directly (`matching`:
+  `{leftIndex: rightIndex}`; `ordering`: sequence-array by position) —
+  zero transform code needed in the component. Also fixed a latent
+  "Array to string conversion" display bug in the post-submit results
+  view once a response could be array-valued.
+- New tests (17): `QuestionResourceTest` — one creation test per new type
+  proving the exact stored `options`/`correct_answer` shape, plus 2
+  edit-and-resave tests proving the *decoded* pairing/order survives an
+  unrelated field edit (raw-array-identity isn't the right check here —
+  `normalizeQuestionFormData` re-shuffles fresh on every save, so a
+  literal byte-for-byte comparison is inherently flaky; asserted the
+  semantic meaning instead). `QuizRunnerExtendedTypesTest` — one test per
+  new type proving the response persists to `QuizAnswer.response` and
+  grades correctly through the real component, plus a partial-credit
+  matching case. Verified the shuffle-dependent tests aren't flaky with 3
+  repeat runs.
+- Found and fixed 2 real bugs during testing, not left for a later review
+  pass: (1) `correct_answer_multi_select` needs the exact same
+  numeric-string-becomes-int-array-key cast `correct_answer_mcq` already
+  documents — missed on the first pass, caught by a failing create test;
+  (2) `multi_select`'s `correct_answer` was stored as a bare array instead
+  of the `{correct_option_ids: [...]}` shape B7's own `gradeMultiSelect()`
+  reads — a real cross-block contract mismatch between B7 (grading) and
+  B8 (authoring), caught by a failing `QuizRunner` grading test, not
+  assumed correct from the form saving without error.
+- `composer test`: 1469/1470 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B9 — I8 pt.1: proctoring event capture — not started
 

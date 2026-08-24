@@ -14,6 +14,8 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -67,8 +69,8 @@ class QuestionResource extends Resource
                 ->helperText('The answer choices a student picks from — add at least 2.')
                 ->live()
                 ->rules(['min:2'])
-                ->visible(fn (Get $get): bool => $get('type') === 'mcq')
-                ->required(fn (Get $get): bool => $get('type') === 'mcq'),
+                ->visible(fn (Get $get): bool => in_array($get('type'), ['mcq', 'multi_select'], true))
+                ->required(fn (Get $get): bool => in_array($get('type'), ['mcq', 'multi_select'], true)),
             Select::make('correct_answer_mcq')
                 ->label('Correct option')
                 ->options(fn (Get $get): array => collect($get('options') ?? [])
@@ -76,6 +78,14 @@ class QuestionResource extends Resource
                     ->all())
                 ->visible(fn (Get $get): bool => $get('type') === 'mcq')
                 ->required(fn (Get $get): bool => $get('type') === 'mcq'),
+            CheckboxList::make('correct_answer_multi_select')
+                ->label('Correct options')
+                ->helperText('Every option a student must select to earn full credit — partial credit for a partially-correct selection (design doc §4 decision 3).')
+                ->options(fn (Get $get): array => collect($get('options') ?? [])
+                    ->mapWithKeys(fn (string $option): array => [$option => $option])
+                    ->all())
+                ->visible(fn (Get $get): bool => $get('type') === 'multi_select')
+                ->required(fn (Get $get): bool => $get('type') === 'multi_select'),
             Select::make('correct_answer_true_false')
                 ->label('Correct answer')
                 ->options(['True' => 'True', 'False' => 'False'])
@@ -96,6 +106,33 @@ class QuestionResource extends Resource
                 ->numeric()
                 ->default(0)
                 ->visible(fn (Get $get): bool => $get('type') === 'numerical'),
+            TagsInput::make('correct_answer_fill_in_blank')
+                ->label('Accepted answers')
+                ->helperText('Every acceptable answer — matched case-insensitively, exact only, not fuzzy.')
+                ->visible(fn (Get $get): bool => $get('type') === 'fill_in_blank')
+                ->required(fn (Get $get): bool => $get('type') === 'fill_in_blank')
+                ->rules(['min:1']),
+            Repeater::make('matching_pairs')
+                ->label('Pairs')
+                ->helperText('Each row is one correct left-to-right pair — the right-hand side is shuffled for the student, add at least 2 pairs.')
+                ->schema([
+                    TextInput::make('left')->required(),
+                    TextInput::make('right')->required(),
+                ])
+                ->columns(2)
+                ->visible(fn (Get $get): bool => $get('type') === 'matching')
+                ->required(fn (Get $get): bool => $get('type') === 'matching')
+                ->rules(['min:2']),
+            Repeater::make('ordering_items')
+                ->label('Items, in the correct order')
+                ->helperText('Add each step/item in its correct order — the student sees them shuffled and puts them back in order.')
+                ->schema([
+                    TextInput::make('label')->required(),
+                ])
+                ->reorderable()
+                ->visible(fn (Get $get): bool => $get('type') === 'ordering')
+                ->required(fn (Get $get): bool => $get('type') === 'ordering')
+                ->rules(['min:2']),
             Textarea::make('explanation')
                 ->helperText('Shown to the student alongside their result.')
                 ->maxLength(65535),
