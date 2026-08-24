@@ -16,6 +16,7 @@ use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
@@ -215,6 +216,36 @@ class BatchSessionsRelationManager extends RelationManager
 
                             event(new AttendanceRecorded($userId, $record->tenant_id, $status));
                         });
+                    }),
+                // S16 B5 (H13 pt.1) — the instructor's own presence, one
+                // row not a roster, same updateOrCreate shape as
+                // markAttendance above. Teach-panel only: BatchResource's
+                // own getEloquentQuery() already scopes every batch an
+                // instructor reaches here to their own instructor_id, so
+                // this is always the viewer marking themselves, never a
+                // colleague.
+                Action::make('markMyAttendance')
+                    ->label('Mark my attendance')
+                    ->visible(fn (): bool => Filament::getCurrentPanel()?->getId() === 'teach')
+                    ->action(function (BatchSession $record): void {
+                        $instructorId = auth()->id();
+
+                        AttendanceRecord::updateOrCreate(
+                            [
+                                'attendable_type' => BatchSession::class,
+                                'attendable_id' => $record->id,
+                                'user_id' => $instructorId,
+                            ],
+                            [
+                                'role' => 'instructor',
+                                'status' => 'present',
+                                'source' => 'manual',
+                                'marked_by' => $instructorId,
+                                'recorded_at' => now(),
+                            ]
+                        );
+
+                        event(new AttendanceRecorded($instructorId, $record->tenant_id, 'present'));
                     }),
                 DeleteAction::make(),
             ]);

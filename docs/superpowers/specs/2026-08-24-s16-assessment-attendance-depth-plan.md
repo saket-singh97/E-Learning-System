@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ✅ done |
 | B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ✅ done |
 | B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ✅ done |
-| B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ⬜ not started |
+| B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ✅ done |
 | B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ⬜ not started |
 | B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ⬜ not started |
 | B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ⬜ not started |
@@ -201,19 +201,37 @@ undershot its actual by a wide margin.
   1431/1432 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B5 — H13 pt.1: teacher attendance capture + sweep — not started
+### B5 — H13 pt.1: teacher attendance capture + sweep — done
 
-- Instructor self-marks their own presence for a `BatchSession` they're
-  assigned to (reuses `markAttendance`'s own action shape, scoped to
-  `role = 'instructor'`, one row not a roster).
-- `TeacherAttendanceSweep` — unscoped daily job (same
+- `markMyAttendance` action added to `BatchSessionsRelationManager`,
+  reusing `markAttendance`'s own `updateOrCreate` shape scoped to
+  `role = 'instructor'`, one row not a roster. Teach-panel only
+  (`Filament::getCurrentPanel()?->getId() === 'teach'`) — `BatchResource`'s
+  own `getEloquentQuery()` already scopes every batch an instructor
+  reaches to their own `instructor_id`, so this is always the viewer
+  marking themselves.
+- `TeacherAttendanceSweep` (Batches/Jobs) — unscoped daily job, same
   `CurrentTenant::clear()` shape `CheckCourseCompletionAndIssueCertificates`
-  (S10)/`SuspendOverdueTenantSubscriptions` (S11) already established)
-  finds every `BatchSession` whose `starts_at + duration_minutes` has
-  passed with no `role = 'instructor'` `AttendanceRecord` for it.
-- New tests: instructor marking their own session writes a
-  `role='instructor'` row, the sweep finds an unmarked-past-end session and
-  skips a marked one.
+  (S10)/`SuspendOverdueTenantSubscriptions` (S11) already established,
+  scheduled in `bootstrap/app.php` alongside them. `unmarkedSessions()`
+  filters `starts_at < now()` in SQL, then compares the computed end time
+  (`starts_at + duration_minutes`) in PHP since it's not a stored column
+  and this app's security baseline forbids raw-SQL query methods in
+  `app/Domains/`. Detection only — `handle()` calls `unmarkedSessions()`
+  but B6 is what turns each row into a `TeacherAttendanceFlag` (that
+  table doesn't exist until B6).
+- New tests (14): instructor marks their own session (`role=instructor`,
+  fires `AttendanceRecorded`), idempotent re-run, action hidden on the
+  Admin panel; sweep finds an unmarked-past-end session, skips one with an
+  instructor row, skips one that hasn't ended yet, isn't fooled by a
+  *student*-role row on the same session, `handle()` runs clean unscoped.
+  Caught and fixed one real bug this block's own docblock introduced: a
+  security-baseline regression test does a plain substring search for
+  raw-SQL method names across every file in `app/Domains/` — the original
+  docblock explaining *why* raw SQL wasn't used literally contained those
+  two strings as text, tripping the guard on prose, not code. Reworded.
+  `composer test`: 1439/1440 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B6 — H13 pt.2: flag + admin resolution — not started
 

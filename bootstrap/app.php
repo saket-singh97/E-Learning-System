@@ -4,6 +4,7 @@ use App\Domains\Assessments\Jobs\AutoSubmitExpiredQuizAttempts;
 use App\Domains\Assignments\Jobs\CheckCourseCompletionAndIssueCertificates;
 use App\Domains\Batches\Jobs\ExpirePendingEnrolments;
 use App\Domains\Batches\Jobs\RecordVideoCoverageAttendance;
+use App\Domains\Batches\Jobs\TeacherAttendanceSweep;
 use App\Domains\Billing\Jobs\SendGraceSuspensionReminders;
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
@@ -137,6 +138,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // ConcurrentStreamGuard's own read-time check, so daily is purely
         // for reporting/cleanliness, not enforcement.
         $schedule->job(new CloseStaleLessonStreamSessions, 'scheduled')->daily();
+
+        // S16 B5 — same unscoped-sweep shape as the jobs above; detects a
+        // teacher's own session going unmarked past its end time (design
+        // doc §4 decision 10 — B6 wires the actual TeacherAttendanceFlag
+        // creation onto this).
+        $schedule->job(new TeacherAttendanceSweep, 'scheduled')->daily();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
