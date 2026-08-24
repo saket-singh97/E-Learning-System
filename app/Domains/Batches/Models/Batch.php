@@ -9,6 +9,7 @@ use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Batch extends Model
@@ -75,5 +76,10 @@ class Batch extends Model
     public function feedback(): HasMany
     {
         return $this->hasMany(BatchFeedback::class);
+    }
+
+    public function geofence(): HasOne
+    {
+        return $this->hasOne(BatchGeofence::class);
     }
 }

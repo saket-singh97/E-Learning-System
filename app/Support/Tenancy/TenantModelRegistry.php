@@ -14,6 +14,7 @@ use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchFeedback;
+use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Batches\Models\StudentImportBatch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
@@ -139,6 +140,7 @@ class TenantModelRegistry
         IdCard::class,
         Notice::class,
         NoticeReadReceipt::class,
+        BatchGeofence::class,
     ];
 
     /**
@@ -862,6 +864,20 @@ class TenantModelRegistry
                 'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'read_at' => now(),
             ],
+            BatchGeofence::class => [
+                'batch_id' => Batch::create([
+                    'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                    'title' => 'Parent',
+                    'slug' => 'parent-'.uniqid(),
+                    'starts_on' => now()->toDateString(),
+                    'ends_on' => now()->addMonth()->toDateString(),
+                    'self_enrol_mode' => 'manual_only',
+                    'status' => 'draft',
+                ])->id,
+                'latitude' => 12.9716,
+                'longitude' => 77.5946,
+                'radius_meters' => 100,
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -937,6 +953,7 @@ class TenantModelRegistry
             IdCard::class => ['disk_path' => 'tampered.pdf'],
             Notice::class => ['title' => 'tampered'],
             NoticeReadReceipt::class => ['read_at' => now()->subDay()],
+            BatchGeofence::class => ['radius_meters' => 999],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

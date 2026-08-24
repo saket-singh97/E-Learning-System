@@ -9,10 +9,12 @@ use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\BatchSession
 use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\EnrolmentsRelationManager;
 use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\FeedbackRelationManager;
 use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Content\Models\Course;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
@@ -227,6 +229,7 @@ class BatchResource extends Resource
             ->recordActions([
                 EditAction::make(),
                 ...(Filament::getCurrentPanel()?->getId() === 'teach' ? [] : [
+                    static::geofenceAction(),
                     DeleteAction::make(),
                     ForceDeleteAction::make(),
                     RestoreAction::make(),
@@ -235,6 +238,53 @@ class BatchResource extends Resource
             ->modifyQueryUsing(fn (Builder $query) => $query->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]));
+    }
+
+    /**
+     * S16 B2 (H11 pt.1) — a small modal form on BatchResource, same
+     * "extends the existing resource" shape FeedbackRelationManager (S15
+     * B8) already took, rather than a standalone resource for a table
+     * that's ever at most one row per batch. Admin-panel only, same
+     * instructor/admin split canCreate()/getEloquentQuery() already draw.
+     */
+    protected static function geofenceAction(): Action
+    {
+        return Action::make('geofence')
+            ->label(fn (Batch $record): string => $record->geofence ? 'Edit geofence' : 'Set geofence')
+            ->icon(Heroicon::OutlinedMapPin)
+            ->fillForm(fn (Batch $record): array => [
+                'latitude' => $record->geofence?->latitude,
+                'longitude' => $record->geofence?->longitude,
+                'radius_meters' => $record->geofence?->radius_meters,
+            ])
+            ->schema([
+                TextInput::make('latitude')
+                    ->numeric()
+                    ->minValue(-90)
+                    ->maxValue(90)
+                    ->required(),
+                TextInput::make('longitude')
+                    ->numeric()
+                    ->minValue(-180)
+                    ->maxValue(180)
+                    ->required(),
+                TextInput::make('radius_meters')
+                    ->label('Radius (meters)')
+                    ->numeric()
+                    ->minValue(1)
+                    ->required(),
+            ])
+            ->action(function (Batch $record, array $data): void {
+                BatchGeofence::updateOrCreate(
+                    ['batch_id' => $record->id],
+                    [
+                        'tenant_id' => $record->tenant_id,
+                        'latitude' => $data['latitude'],
+                        'longitude' => $data['longitude'],
+                        'radius_meters' => $data['radius_meters'],
+                    ],
+                );
+            });
     }
 
     public static function getRelations(): array

@@ -30,7 +30,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | `attendance_records.role` column (H7, foundation for H13) — teacher vs. student attendance rows in the same table | ✅ done |
 | B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ✅ done |
-| B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ⬜ not started |
+| B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ✅ done |
 | B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ⬜ not started |
 | B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ⬜ not started |
 | B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ⬜ not started |
@@ -105,18 +105,32 @@ undershot its actual by a wide margin.
   exclusion). `composer test`: 1414/1415 pass, sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`.
 
-### B2 — H11 pt.1: geofence schema + service — not started
+### B2 — H11 pt.1: geofence schema + service — done
 
-- `batch_geofences` migration (unique `batch_id`), model, registered in
+- `batch_geofences` migration (unique `batch_id`), `BatchGeofence` model
+  (Batches), `Batch::geofence(): HasOne`, registered in
   `TenantModelRegistry`.
+- `ImpossibleTravelDetector`'s own private `haversineKm()` extracted to
+  `App\Support\Geo\HaversineDistance` (cross-domain shared code, per
+  CLAUDE.md's Support/ convention — calling directly into a Security-domain
+  service from Batches would have broken the "domains talk through Events
+  only" rule) — `ImpossibleTravelDetector` itself refactored to call the
+  shared version, no behavior change, no test referenced the old private
+  method directly.
 - `GeofenceCheckInService::isWithinRadius(BatchGeofence, lat, lng): bool`
-  reusing `ImpossibleTravelDetector`'s existing haversine distance
-  function (S12 B2) — not a second hand-rolled copy.
-- Admin-panel CRUD for `BatchGeofence` (a small form on `BatchResource`,
-  same "extends the existing resource" shape `FeedbackRelationManager`
-  (S15 B8) took rather than a standalone resource).
-- New tests: `GeofenceCheckInServiceTest` — inside radius, outside radius,
-  edge-of-radius boundary.
+  (Batches) uses the same shared formula, not a second hand-rolled copy.
+- Admin-panel CRUD: a `geofence` modal `Action` on `BatchResource`'s table
+  (admin-panel only, same instructor/admin split `canCreate()`/
+  `getEloquentQuery()` already draw) — `fillForm` pre-loads the existing
+  row, `updateOrCreate` keyed on `batch_id` so re-opening it edits rather
+  than duplicates.
+- New tests (7): `GeofenceCheckInServiceTest` (inside/outside/exact-center/
+  boundary — a 0-radius geofence only accepts its exact center point), 2
+  new `BatchResourceTest` cases (sets a geofence via the table action,
+  re-saving updates rather than duplicates). `composer test`: 1421/1422
+  pass (CrossTenantTest's generated suite auto-covers `BatchGeofence`
+  isolation); sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B3 — H11 pt.2: student check-in UI — not started
 

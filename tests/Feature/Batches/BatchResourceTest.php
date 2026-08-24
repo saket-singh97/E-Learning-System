@@ -5,6 +5,7 @@ use App\Domains\Batches\Filament\Resources\Batches\Pages\CreateBatch;
 use App\Domains\Batches\Filament\Resources\Batches\Pages\EditBatch;
 use App\Domains\Batches\Filament\Resources\Batches\Pages\ListBatches;
 use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Content\Models\Course;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -237,4 +238,51 @@ it('soft-deletes a batch and restores it from the table actions', function () {
         ->callTableAction('restore', $batch);
 
     expect($batch->refresh()->trashed())->toBeFalse();
+});
+
+// S16 B2 (H11 pt.1) — geofence table action.
+it('sets a geofence for a batch from the admin table action', function () {
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'title' => 'Geo Batch',
+        'slug' => 'geo-batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    Livewire::test(ListBatches::class)
+        ->callTableAction('geofence', $batch, data: [
+            'latitude' => 12.9752,
+            'longitude' => 77.6068,
+            'radius_meters' => 150,
+        ]);
+
+    $geofence = BatchGeofence::where('batch_id', $batch->id)->sole();
+    expect($geofence->radius_meters)->toBe(150);
+    expect($geofence->tenant_id)->toBe($this->tenant->id);
+});
+
+it('updates an existing geofence rather than creating a duplicate', function () {
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'title' => 'Geo Batch 2',
+        'slug' => 'geo-batch-2',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+    BatchGeofence::create(['batch_id' => $batch->id, 'latitude' => 1, 'longitude' => 1, 'radius_meters' => 50]);
+
+    Livewire::test(ListBatches::class)
+        ->callTableAction('geofence', $batch, data: [
+            'latitude' => 12.9752,
+            'longitude' => 77.6068,
+            'radius_meters' => 200,
+        ]);
+
+    expect(BatchGeofence::where('batch_id', $batch->id)->count())->toBe(1);
+    expect(BatchGeofence::where('batch_id', $batch->id)->sole()->radius_meters)->toBe(200);
 });

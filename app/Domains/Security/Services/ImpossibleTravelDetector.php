@@ -3,6 +3,7 @@
 namespace App\Domains\Security\Services;
 
 use App\Integrations\GeoIpResolver;
+use App\Support\Geo\HaversineDistance;
 use Illuminate\Support\Carbon;
 
 /**
@@ -15,8 +16,6 @@ use Illuminate\Support\Carbon;
  */
 class ImpossibleTravelDetector
 {
-    private const EARTH_RADIUS_KM = 6371.0;
-
     public function __construct(
         private readonly GeoIpResolver $geoIp,
     ) {}
@@ -35,7 +34,7 @@ class ImpossibleTravelDetector
             return false;
         }
 
-        $distanceKm = $this->haversineKm($from['lat'], $from['lon'], $to['lat'], $to['lon']);
+        $distanceKm = HaversineDistance::kilometers($from['lat'], $from['lon'], $to['lat'], $to['lon']);
 
         // abs() explicitly, not trusted to already be unsigned — the
         // plain default diffInSeconds() call turned out to still return a
@@ -49,16 +48,5 @@ class ImpossibleTravelDetector
         $hours = max(0.001, abs($toAt->diffInSeconds($fromAt)) / 3600);
 
         return ($distanceKm / $hours) > config('security.impossible_travel_max_kmh');
-    }
-
-    private function haversineKm(float $lat1, float $lon1, float $lat2, float $lon2): float
-    {
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLon = deg2rad($lon2 - $lon1);
-
-        $a = sin($dLat / 2) ** 2
-            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
-
-        return self::EARTH_RADIUS_KM * (2 * atan2(sqrt($a), sqrt(1 - $a)));
     }
 }
