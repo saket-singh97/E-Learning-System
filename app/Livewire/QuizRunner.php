@@ -6,6 +6,7 @@ use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
+use App\Domains\Assessments\Models\QuizProctoringEvent;
 use App\Domains\Assessments\Services\QuizAttemptService;
 use App\Exceptions\QuizAttemptLimitExceededException;
 use App\Exceptions\QuizNotAvailableException;
@@ -115,6 +116,42 @@ class QuizRunner extends Component
         app(QuizAttemptService::class)->submit($attempt, $this->responses);
 
         $this->responses = [];
+    }
+
+    /**
+     * S16 B9 (I8 pt.1) — client-side listeners (Page Visibility API,
+     * Fullscreen API, copy/paste DOM events) call this once triggered.
+     * Detection/evidence only, not prevention (design doc §4 decision 4).
+     * Every guard here is server-side, not trusted from the client: an
+     * unrecognised event type, a disabled quiz, or no active attempt for
+     * this viewer/quiz all silently no-op rather than writing a row —
+     * the JS only ever attaches these listeners when proctoring is
+     * enabled, but a crafted Livewire call must not be able to write an
+     * event for a quiz that never opted in.
+     */
+    public function logProctoringEvent(string $eventType): void
+    {
+        if (! in_array($eventType, QuizProctoringEvent::EVENT_TYPES, true) || ! $this->quiz->proctoring_enabled) {
+            return;
+        }
+
+        $user = auth()->user();
+
+        if ($user === null) {
+            return;
+        }
+
+        $attempt = $this->activeAttempt($user->id);
+
+        if ($attempt === null) {
+            return;
+        }
+
+        QuizProctoringEvent::create([
+            'quiz_attempt_id' => $attempt->id,
+            'event_type' => $eventType,
+            'occurred_at' => now(),
+        ]);
     }
 
     public function render(): View

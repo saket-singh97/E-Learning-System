@@ -9,6 +9,7 @@ use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
+use App\Domains\Assessments\Models\QuizProctoringEvent;
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Assignments\Models\Certificate;
@@ -145,6 +146,7 @@ class TenantModelRegistry
         BatchGeofence::class,
         DeviceWebhookCredential::class,
         TeacherAttendanceFlag::class,
+        QuizProctoringEvent::class,
     ];
 
     /**
@@ -911,6 +913,34 @@ class TenantModelRegistry
                     'flagged_at' => now(),
                 ];
             })(),
+            QuizProctoringEvent::class => [
+                'quiz_attempt_id' => QuizAttempt::create([
+                    'quiz_id' => Quiz::create([
+                        'lesson_id' => Lesson::create([
+                            'course_section_id' => CourseSection::create([
+                                'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                                'title' => 'Parent',
+                                'position' => 0,
+                            ])->id,
+                            'title' => 'Parent',
+                            'type' => 'quiz',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Parent Quiz',
+                        'blueprint' => [],
+                        'time_limit_minutes' => 30,
+                        'max_attempts' => 3,
+                    ])->id,
+                    'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'question_ids' => [1],
+                    'status' => 'in_progress',
+                    'started_at' => now(),
+                    'expires_at' => now()->addMinutes(30),
+                    'max_score' => 10,
+                ])->id,
+                'event_type' => 'tab_switch',
+                'occurred_at' => now(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -989,6 +1019,7 @@ class TenantModelRegistry
             BatchGeofence::class => ['radius_meters' => 999],
             DeviceWebhookCredential::class => ['device_label' => 'tampered'],
             TeacherAttendanceFlag::class => ['status' => 'resolved'],
+            QuizProctoringEvent::class => ['event_type' => 'copy'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

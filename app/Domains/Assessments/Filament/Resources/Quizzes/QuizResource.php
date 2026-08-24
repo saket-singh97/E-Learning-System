@@ -14,6 +14,7 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -82,6 +83,14 @@ class QuizResource extends Resource
                 ->default('draft')
                 ->required()
                 ->native(false),
+            Toggle::make('proctoring_enabled')
+                ->label('Enable proctoring')
+                // Detection/evidence only, not prevention (design doc §4
+                // decision 4) — same opt-in-per-quiz posture Lesson's own
+                // print_disabled (S14) took for a similar browser-deterrent
+                // toggle.
+                ->helperText('Logs tab-switch/fullscreen-exit/copy/paste events during an attempt for instructor review — does not lock the browser.')
+                ->default(false),
         ]);
     }
 

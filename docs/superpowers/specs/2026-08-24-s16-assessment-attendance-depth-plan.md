@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ✅ done |
 | B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ✅ done |
 | B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ✅ done |
-| B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ⬜ not started |
+| B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ✅ done |
 | B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ⬜ not started |
 | B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ⬜ not started |
 | B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ⬜ not started |
@@ -377,21 +377,29 @@ undershot its actual by a wide margin.
 - `composer test`: 1469/1470 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B9 — I8 pt.1: proctoring event capture — not started
+### B9 — I8 pt.1: proctoring event capture — done
 
-- `quiz_proctoring_events` migration + model, registered in
-  `TenantModelRegistry`.
-- `QuizRunner` gains client-side listeners (Page Visibility API for
-  tab-switch, Fullscreen API for fullscreen-exit, `copy`/`paste` DOM
-  events) dispatching a Livewire call that writes an event row — framed to
-  the instructor-facing review UI as detection/evidence, not prevention
-  (design doc §4 decision 4).
-- Only fires when the owning `Quiz` has proctoring enabled (a new
-  `quizzes.proctoring_enabled` boolean, default false — opt-in per quiz,
-  same posture `print_disabled` (S14) took for a similar browser-deterrent
-  toggle).
-- New tests: an enabled quiz logs each event type once triggered, a
-  disabled quiz logs nothing, events are tenant/attempt-scoped correctly.
+- `quizzes.proctoring_enabled` boolean migration (default false, opt-in,
+  same posture `print_disabled` (S14) already took) + Filament `Toggle`
+  on `QuizResource`. `quiz_proctoring_events` migration + `QuizProctoringEvent`
+  model (Assessments), registered in `TenantModelRegistry`.
+- `QuizRunner::logProctoringEvent(string $eventType)` — every guard is
+  server-side, not trusted from the client: an unrecognised event type, a
+  disabled quiz, or no active attempt for the viewer/quiz all silently
+  no-op rather than writing a row.
+- The Blade view wires `visibilitychange` (tab-switch), `fullscreenchange`
+  (fullscreen-exit), `copy`, `paste` — detection/evidence only, no
+  lockdown (design doc §4 decision 4). Guarded with a `window`-level
+  "already attached" flag: Livewire re-renders this block on every
+  `saveAnswer`/submit round-trip, and without the guard each re-render
+  would attach a second, third... copy of every listener, multiplying one
+  real tab-switch into several logged events — caught before it shipped,
+  not left as a known gap.
+- New tests (6): each event type logs once on a proctoring-enabled quiz,
+  a disabled quiz logs nothing, an unrecognised event type logs nothing,
+  no active attempt logs nothing, a logged event is scoped to the right
+  attempt/tenant. `composer test`: 1475/1476 pass; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`.
 
 ### B10 — I8 pt.2: per-question timing — not started
 

@@ -9,6 +9,45 @@
     @if ($attempt !== null)
         <p>Attempt in progress &mdash; expires {{ $attempt->expires_at->diffForHumans() }}.</p>
 
+        @if ($quiz->proctoring_enabled)
+            {{-- S16 B9 (I8 pt.1) — detection/evidence only, no lockdown.
+            Page Visibility API for tab-switch, Fullscreen API for
+            fullscreen-exit, plain copy/paste DOM events — each calls the
+            component's own logProctoringEvent(), which re-verifies
+            proctoring_enabled and an active attempt server-side before
+            writing anything. --}}
+            <script>
+                // Guarded against Livewire re-rendering this block on every
+                // saveAnswer/submit round-trip — without this, each
+                // re-render would attach a second, third... copy of every
+                // listener, multiplying one real tab-switch into several
+                // logged events.
+                if (! window.__quizProctoringListenersAttached) {
+                    window.__quizProctoringListenersAttached = true;
+
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.hidden) {
+                            @this.call('logProctoringEvent', 'tab_switch');
+                        }
+                    });
+
+                    document.addEventListener('fullscreenchange', () => {
+                        if (! document.fullscreenElement) {
+                            @this.call('logProctoringEvent', 'fullscreen_exit');
+                        }
+                    });
+
+                    document.addEventListener('copy', () => {
+                        @this.call('logProctoringEvent', 'copy');
+                    });
+
+                    document.addEventListener('paste', () => {
+                        @this.call('logProctoringEvent', 'paste');
+                    });
+                }
+            </script>
+        @endif
+
         <ol>
             @foreach ($questions as $question)
                 <li wire:key="question-{{ $question->id }}">

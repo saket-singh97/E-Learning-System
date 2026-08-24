@@ -23,6 +23,7 @@ class Quiz extends Model
         'time_limit_minutes',
         'max_attempts',
         'status',
+        'proctoring_enabled',
     ];
 
     protected function casts(): array
@@ -31,6 +32,7 @@ class Quiz extends Model
             'blueprint' => 'array',
             'time_limit_minutes' => 'integer',
             'max_attempts' => 'integer',
+            'proctoring_enabled' => 'boolean',
         ];
     }
 
