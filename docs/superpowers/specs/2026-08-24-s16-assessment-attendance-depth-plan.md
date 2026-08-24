@@ -1,0 +1,332 @@
+# Implementation Plan: S16 Assessment & Attendance Depth
+
+Full design: `2026-08-24-s16-assessment-attendance-depth-design.md`. This is
+the block-by-block build log — update the PROGRESS table as each block
+lands, same as every S1-S15 plan did. 18 blocks (B0-B17), finer-grained
+than the 9-item real build scope since several items split into
+independent blocks (extended question types split in two, proctoring split
+in two, geofenced check-in split in two, substitute-teacher workflow split
+in two, test series/ranking split in two, OMR split in two).
+
+---
+
+## Per-block build command
+
+Use this for every block, swap `0` for block number:
+
+```
+Read docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md and
+docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-plan.md, then build
+Block 0 of the S16 plan. Update the PROGRESS table and check off that
+block's tasks when done, run composer test before marking it complete, then
+stop and report before starting the next block.
+```
+
+---
+
+## PROGRESS — read this first, update it last
+
+| Block | What | Status |
+|---|---|---|
+| B0 | `attendance_records.role` column (H7, foundation for H13) — teacher vs. student attendance rows in the same table | ⬜ not started |
+| B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ⬜ not started |
+| B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ⬜ not started |
+| B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ⬜ not started |
+| B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ⬜ not started |
+| B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ⬜ not started |
+| B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ⬜ not started |
+| B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ⬜ not started |
+| B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ⬜ not started |
+| B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ⬜ not started |
+| B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ⬜ not started |
+| B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ⬜ not started |
+| B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ⬜ not started |
+| B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ⬜ not started |
+| B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ⬜ not started |
+| B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ⬜ not started |
+| B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ⬜ not started |
+| B17 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+
+**Test suite:** 1406/1407 at slice start (1 pre-existing, unrelated
+`CourseSlugUniquenessTest` failure carried since S1/S2, out of scope here
+same as every prior slice). Design doc §5 estimates ~60-90 new tests by
+B17 — a rough anchor, not a target; every prior slice's own estimate
+undershot its actual by a wide margin.
+
+---
+
+## Block detail (expand as each block builds; stubs below are the starting checklist)
+
+### B0 — `attendance_records.role` column — not started
+
+- Migration: `role` string column on `attendance_records`, default
+  `'student'`, backfilling every existing row (all attendance to date is
+  student attendance, confirmed — no teacher-role writer exists before this
+  block).
+- `AttendanceRecord::ROLES = ['student', 'instructor']` constant, `role`
+  added to `$fillable`.
+- No behavior change to any existing reader (`StudentMetrics`,
+  `BatchSessionsRelationManager::markAttendance`, `RecordVideoCoverageAttendance`)
+  — all three explicitly scope to `role = 'student'` (or the new default
+  covers them for free) so this block introduces zero regression risk to
+  every existing S5/S8/S9 consumer.
+- Foundation-only block, same posture S15 B0 took for
+  `instructor_invitations` — B5/B6 (H13) are what actually write/read a
+  `role = 'instructor'` row.
+
+### B1 — H10: tenant-configurable at-risk threshold + staff view — not started
+
+- `tenants.at_risk_threshold_percent` nullable decimal migration.
+  `StudentMetrics::isAtRisk()` reads `$tenant->at_risk_threshold_percent ??
+  self::AT_RISK_THRESHOLD` — existing hardcoded 60.0 stays the fallback for
+  every tenant that never sets one, zero blast radius.
+- Admin-panel setting, same shape `CustomDomainSettings` (S9 B4) already
+  established for a single-field tenant-settings page.
+- New staff-facing "At-risk students" Admin/Teach page — `StudentMetrics`
+  already computes everything needed per student; this is a new roster view
+  reusing `StudentProgress`'s own `studentsQuery()` shape (S8 B5), filtered
+  to `isAtRisk() === true`. Teach panel scopes to the instructor's own
+  assigned batches (S15 B2's own `instructor_id` scoping, reused not
+  reinvented).
+- New tests: threshold override respected, default fallback unchanged,
+  staff view lists only at-risk students, Teach panel scoping.
+
+### B2 — H11 pt.1: geofence schema + service — not started
+
+- `batch_geofences` migration (unique `batch_id`), model, registered in
+  `TenantModelRegistry`.
+- `GeofenceCheckInService::isWithinRadius(BatchGeofence, lat, lng): bool`
+  reusing `ImpossibleTravelDetector`'s existing haversine distance
+  function (S12 B2) — not a second hand-rolled copy.
+- Admin-panel CRUD for `BatchGeofence` (a small form on `BatchResource`,
+  same "extends the existing resource" shape `FeedbackRelationManager`
+  (S15 B8) took rather than a standalone resource).
+- New tests: `GeofenceCheckInServiceTest` — inside radius, outside radius,
+  edge-of-radius boundary.
+
+### B3 — H11 pt.2: student check-in UI — not started
+
+- `App\Livewire\GeofenceCheckIn` — browser Geolocation API captures
+  lat/lng client-side, submitted to the component; refuses (visible error,
+  not a silent no-op) when outside the batch's own configured radius or
+  when no `BatchGeofence` row exists is treated as "geofencing off,
+  always accepted" (design doc §3.2's own opt-in framing).
+- Writes `AttendanceRecord` with `source = 'geofence_checkin'`,
+  `role = 'student'`, `status = 'present'`.
+- Embedded on the student portal's batch session view, same "one shared
+  component, embedded wherever needed" posture `NoticeBoard` (S15 B17)
+  already established.
+- New tests: inside-radius check-in writes a present record, outside-radius
+  refused with a visible error, no-geofence-configured batch always
+  accepts, duplicate check-in for the same session is idempotent
+  (`updateOrCreate`, matching `markAttendance`'s own shape).
+
+### B4 — H12: generic device webhook — not started
+
+- `device_webhook_credentials` migration + model, registered in
+  `TenantModelRegistry`.
+- A bare, host-agnostic webhook route + controller — HMAC-SHA256
+  verification against the credential's own `webhook_secret`, same
+  signature-header shape `ZoomRecordingWebhookHandler` (S14 B8) already
+  established. Payload contract: `{device_label, user_identifier,
+  event: 'check_in'|'check_out', timestamp}` — `user_identifier` resolved
+  against `User.email` or a new lightweight per-tenant device-id mapping
+  (decided at build time once the exact matching need is confirmed against
+  the design doc's own §4 decision 11 scope).
+- Writes `AttendanceRecord` with `source = 'device_webhook'`.
+- New tests: valid signature accepted and writes a record, invalid/missing
+  signature refused (401/403), unknown `user_identifier` refused without
+  a fatal error, wrong-tenant credential can't write into another tenant's
+  attendance.
+
+### B5 — H13 pt.1: teacher attendance capture + sweep — not started
+
+- Instructor self-marks their own presence for a `BatchSession` they're
+  assigned to (reuses `markAttendance`'s own action shape, scoped to
+  `role = 'instructor'`, one row not a roster).
+- `TeacherAttendanceSweep` — unscoped daily job (same
+  `CurrentTenant::clear()` shape `CheckCourseCompletionAndIssueCertificates`
+  (S10)/`SuspendOverdueTenantSubscriptions` (S11) already established)
+  finds every `BatchSession` whose `starts_at + duration_minutes` has
+  passed with no `role = 'instructor'` `AttendanceRecord` for it.
+- New tests: instructor marking their own session writes a
+  `role='instructor'` row, the sweep finds an unmarked-past-end session and
+  skips a marked one.
+
+### B6 — H13 pt.2: flag + admin resolution — not started
+
+- `teacher_attendance_flags` migration + model, registered in
+  `TenantModelRegistry`. `TeacherAttendanceSweep` (B5) creates one per
+  detected gap, `status = 'open'`.
+- Admin-panel notification (reuses the existing `NotificationCentre`
+  render-hook shape, S8 B7) + a new Filament resource/page listing open
+  flags.
+- "Resolve" action — institute_admin marks resolved, optionally
+  reassigning the session's batch `instructor_id` (S15's own field, no new
+  reassignment mechanism) in the same action.
+- New tests: sweep-created flag appears in the admin queue, resolving
+  without reassignment just closes it, resolving with a reassignment
+  updates `Batch::instructor_id` and closes the flag.
+
+### B7 — I6 pt.1: extended question types schema + grading — not started
+
+- `Question::TYPES` widened to include `multi_select`, `fill_in_blank`,
+  `matching`, `ordering` (5 types before this block: mcq, true_false,
+  short_answer, numerical → 9 after).
+- `QuizAttemptService::grade()` gains one `match` arm per new type,
+  implementing design doc §4 decision 3's exact partial-credit fractions.
+- No new columns — `correct_answer`'s existing jsonb column carries each
+  new type's own shape (§4 decision 2).
+- New tests: `QuizAttemptServiceTest` additions — one grading test per new
+  type proving exact partial-credit scores for a partially-correct
+  response, plus a fully-correct and fully-wrong case each.
+
+### B8 — I6 pt.2: Filament UI + QuizRunner rendering — not started
+
+- `NormalizesQuestionFormData` gains form widgets for each new type
+  (multi-select checkboxes with correct-answer marking, fill-in-blank
+  accepted-answers repeater, matching pairs builder, ordering list).
+- `QuizRunner` gains a rendering branch per new type for the student-facing
+  attempt UI (checkbox group, text input, drag-or-select pairing, a
+  reorderable list).
+- New tests: creating each new question type through the real Filament
+  form, a student attempting each type through `QuizRunner` and the
+  response persisting correctly to `QuizAnswer.response`.
+
+### B9 — I8 pt.1: proctoring event capture — not started
+
+- `quiz_proctoring_events` migration + model, registered in
+  `TenantModelRegistry`.
+- `QuizRunner` gains client-side listeners (Page Visibility API for
+  tab-switch, Fullscreen API for fullscreen-exit, `copy`/`paste` DOM
+  events) dispatching a Livewire call that writes an event row — framed to
+  the instructor-facing review UI as detection/evidence, not prevention
+  (design doc §4 decision 4).
+- Only fires when the owning `Quiz` has proctoring enabled (a new
+  `quizzes.proctoring_enabled` boolean, default false — opt-in per quiz,
+  same posture `print_disabled` (S14) took for a similar browser-deterrent
+  toggle).
+- New tests: an enabled quiz logs each event type once triggered, a
+  disabled quiz logs nothing, events are tenant/attempt-scoped correctly.
+
+### B10 — I8 pt.2: per-question timing — not started
+
+- `quiz_answers.time_spent_seconds` nullable int migration.
+  `QuizAttemptService::saveAnswer()` (the existing S9 B7 autosave path)
+  accepts and persists a client-reported elapsed-seconds value per
+  question, accumulated not overwritten on repeated saves to the same
+  question.
+- New tests: repeated `saveAnswer()` calls for the same question accumulate
+  time rather than resetting it, a never-visited question stays null not
+  zero.
+
+### B11 — I9: violation threshold → auto-submit + flag — not started
+
+- `quiz_attempts.flagged_for_review` boolean migration, default false.
+- A new config value (`config('assessments.proctoring_violation_threshold')`,
+  default 3) — once an in-progress attempt's own `quiz_proctoring_events`
+  count crosses it, `QuizAttemptService::submit($locked, [], 'auto_submitted')`
+  fires (the exact same call `AutoSubmitExpiredQuizAttempts` already makes
+  for time-expiry, design doc §4 decision 5) and `flagged_for_review` is
+  set true.
+- Instructor-facing review queue — a filter on the existing
+  `QuizAnswerResource`/a new small Filament page listing
+  `flagged_for_review = true` attempts, surfacing the event log alongside
+  the responses.
+- New tests: crossing the threshold auto-submits and flags, staying under
+  it leaves the attempt in progress, a time-expiry auto-submit (unrelated
+  to violations) never sets the flag.
+
+### B12 — I10 pt.1: test series schema + bundling — not started
+
+- `test_series` migration + model, registered in `TenantModelRegistry`.
+  `quizzes.test_series_id` nullable FK migration.
+- Admin-panel `TestSeriesResource` CRUD; `QuizResource`'s form gains an
+  optional `test_series_id` select, same "bundle via an FK on the bundled
+  thing" shape `Program`/`fee_invoices.program_id` (S13) already
+  established.
+- New tests: creating a series, assigning quizzes to it, a quiz with no
+  series stays unaffected by every existing Quiz test.
+
+### B13 — I10 pt.2: ranking + student results view — not started
+
+- `TestSeriesRankingService::rankingsFor(TestSeries, User $viewer): Collection`
+  — per student in the series's own tenant, sums best-attempt score per
+  quiz in the series, sorts descending in PHP (design doc §4 decision 6 —
+  no `DB::raw` window function), computes rank + percentile + the top
+  scorer's own score for comparison.
+- Student-facing results view (a bare host route/Livewire component, same
+  "no existing page to embed on, add a small host route" shape B6/B7 of
+  S15 already established) showing the viewer's own rank/percentile/gap-
+  to-topper, not the full roster (privacy — a student sees their own
+  standing, not classmates' names, matching this app's existing "no
+  cross-student data exposure" posture).
+- New tests: two students across two quizzes in one series rank/percentile
+  correctly, a student who attempted only one of the two quizzes in the
+  series is scored fairly (best-effort partial participation, exact rule
+  decided at build time and documented), cross-tenant students in a
+  same-named series never mix (belt-and-suspenders on top of the generated
+  `CrossTenantTest`).
+
+### B14 — I11 pt.1: OMR schema + template layout — not started
+
+- `omr_templates`/`omr_sheet_scans` migrations + models, registered in
+  `TenantModelRegistry`.
+- `OmrTemplate::generateLayout()` — deterministic bubble-grid coordinate
+  computation from `question_count`/`options_per_question`/
+  `roll_number_digits` (design doc §4 decision 8 — no freeform designer),
+  stored in `layout` jsonb.
+- Admin-panel action on `QuizResource` — "Generate OMR template" (creates
+  the template + a printable PDF via the existing `dompdf` dependency, same
+  reuse posture `IdCardGenerator` (S15) already took).
+- New tests: template layout generation is deterministic and covers every
+  question/option/roll-number-digit position with no overlaps.
+
+### B15 — I11 pt.2: scanner + auto-grade — not started
+
+- `OmrScanner::scan(OmrSheetScan): array` — GD-based: loads the uploaded
+  image, samples pixel darkness at each of the template's own known
+  coordinates, resolves the darkest-bubble-per-question/per-roll-number-
+  digit (design doc §4 decision 8/9). No skew/rotation correction (flagged
+  limitation, design doc §5).
+- Roll-number digits resolve to an `Enrolment.id` within the quiz's own
+  batch; a non-matching roll number sets `status = 'failed'` for manual
+  admin resolution (§4 decision 9), never silently dropped.
+- On a successful match, writes a real `QuizAttempt` + `QuizAnswer` rows
+  (reusing `QuizAttemptService`'s existing grade methods per question type)
+  so an OMR-graded offline test appears in the exact same Gradebook/
+  reports every online attempt already does — no parallel "offline score"
+  concept.
+- Admin-panel upload action + status list (mirrors `StudentImportBatchResource`'s
+  own upload-then-status-list shape, S15 B9/B10).
+- New tests: `OmrScannerTest` — a synthetically-generated bubble-sheet
+  image (drawn by the test at the template's own coordinates) round-trips
+  to the exact expected answers and roll number; a failed roll-number match
+  queues for manual resolution instead of crashing; a successful scan
+  produces a real gradeable `QuizAttempt`.
+
+### B16 — `TenantModelRegistry` sweep — not started
+
+- Confirm all 7 new `BelongsToTenant` models (`BatchGeofence`,
+  `DeviceWebhookCredential`, `TeacherAttendanceFlag`, `QuizProctoringEvent`,
+  `TestSeries`, `OmrTemplate`, `OmrSheetScan`) present in
+  `TenantModelRegistry::MODELS` with `seedAttributes()`/`updateAttributes()`
+  entries.
+- Reverse sweep (not just the 7 named ones) — grep every
+  `app/Domains/*/Models/*.php` for real `BelongsToTenant` trait usage
+  against `MODELS`' own entries, same discipline S14 B17/S15 B20 already
+  established.
+
+### B17 — Full test coverage, review pass — not started
+
+- Lifecycle E2E test(s) mirroring S11 B16/S12 B14/S13 B17/S14 B18/S15 B21's
+  own posture — at minimum: a teacher's session goes unmarked past its end
+  time → flagged → admin resolves by reassigning the instructor, chained in
+  one run; plus a full test-series lifecycle — two quizzes bundled → two
+  students attempt both → rank/percentile computed correctly for both.
+- Explicit review pass across every B0-B16 file for real bugs, not just a
+  green suite — same discipline S9 B14/S10 B15/S11 B16/S12 B14/S13 B17/S14
+  B18/S15 B21 each already established (each found real bugs this way).
+- Update `HANDOVER.md` (S16 complete entry + any new `## Avoid` entries),
+  `docs/PROJECT-STATUS.md` (new S16 section), `docs/ROADMAP.md` (S16 row
+  → Done, next proposed slice's own row unaffected).

@@ -7,6 +7,28 @@ at the source.
 
 ## Right now (2026-08-24)
 
+- **S16 — Assessment & Attendance Depth: DESIGN + PLAN DONE, build not
+  started.** `docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md`,
+  `...-plan.md`. `docs/ROADMAP.md`'s own S16 row lists I6-I11/H10-H13 (10
+  items as counted there), but **I7 (numerical/JEE-NEET questions) already
+  shipped in S6** (`Question::TYPES` includes `'numerical'`,
+  `QuizAttemptService::gradeNumerical()` tagged `(I7)` in its own docblock)
+  — the roadmap's own "9" item count already accounts for this, not a
+  miscount to fix. Real build scope is 9 items, a deliberate mixed P2/P3
+  grab-bag (unlike S9-S15's phase-boundary slices) since the roadmap's own
+  headline names every P3 item explicitly. **Verified before writing the
+  design**: H10 (low-attendance alerts) also already exists (S9 B13,
+  `SendLowAttendanceAlert`) with a hardcoded 60% threshold and parent-only
+  notification — this slice's real H10 gap is narrow (tenant-configurable
+  threshold + a staff-facing view), not a rebuild. No new domain — every
+  item extends `Assessments` (Question/Quiz-adjacent: I6/I8/I9/I10/I11),
+  `Content` (the existing `AttendanceRecord` model gains a `role` column,
+  H7, foundation for H13), `Batches` (new attendance writers: geofence
+  check-in H11, device webhook H12, teacher-attendance sweep H13), `Comms`
+  (H10's staff view), or `Tenancy` (H10's per-institute threshold setting).
+  7 new `BelongsToTenant` models. 18 blocks (B0-B17). Next step: run the
+  per-block build command in the plan doc starting at B0.
+
 - **S15 — Batch & Institute Operations: COMPLETE, all 22 blocks
   (2026-08-24).** `docs/superpowers/specs/2026-08-22-s15-batch-institute-operations-design.md`,
   `...-plan.md` (full per-block build log + B21's own review-pass notes
