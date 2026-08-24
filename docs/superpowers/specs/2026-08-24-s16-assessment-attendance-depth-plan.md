@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B0 | `attendance_records.role` column (H7, foundation for H13) — teacher vs. student attendance rows in the same table | ✅ done |
 | B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ✅ done |
 | B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ✅ done |
-| B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ⬜ not started |
+| B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ✅ done |
 | B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ⬜ not started |
 | B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ⬜ not started |
 | B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ⬜ not started |
@@ -132,22 +132,33 @@ undershot its actual by a wide margin.
   isolation); sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B3 — H11 pt.2: student check-in UI — not started
+### B3 — H11 pt.2: student check-in UI — done
 
-- `App\Livewire\GeofenceCheckIn` — browser Geolocation API captures
-  lat/lng client-side, submitted to the component; refuses (visible error,
-  not a silent no-op) when outside the batch's own configured radius or
-  when no `BatchGeofence` row exists is treated as "geofencing off,
-  always accepted" (design doc §3.2's own opt-in framing).
-- Writes `AttendanceRecord` with `source = 'geofence_checkin'`,
-  `role = 'student'`, `status = 'present'`.
-- Embedded on the student portal's batch session view, same "one shared
-  component, embedded wherever needed" posture `NoticeBoard` (S15 B17)
-  already established.
-- New tests: inside-radius check-in writes a present record, outside-radius
-  refused with a visible error, no-geofence-configured batch always
-  accepts, duplicate check-in for the same session is idempotent
-  (`updateOrCreate`, matching `markAttendance`'s own shape).
+- `App\Livewire\GeofenceCheckIn` — `checkIn(lat, lng)` is called from the
+  view via `navigator.geolocation.getCurrentPosition()` + `@this.call()`
+  (no Alpine dependency); refuses with a visible `$error` (not a silent
+  no-op) when outside the batch's own configured radius. No `BatchGeofence`
+  row for the batch means geofencing is off — every check-in accepted
+  (design doc §3.2's own opt-in framing).
+- Writes `AttendanceRecord` via `updateOrCreate` keyed the same way
+  `BatchSessionsRelationManager::markAttendance` already does
+  (`attendable_type`/`attendable_id`/`user_id`) — `source =
+  'geofence_checkin'`, `role = 'student'`, `status = 'present'` — then
+  fires `AttendanceRecorded` so the existing S9 cache-bust/alert listeners
+  pick it up same as any other writer. `AttendanceRecord::SOURCES` widened
+  to include `geofence_checkin` (no DB CHECK constraint on `source` to
+  migrate — the const is documentation only, not validated anywhere).
+- No existing student-facing "batch session" page existed to embed this
+  on (`JoinLiveClassController` just redirects away) — added a small host
+  route (`GET /batch-sessions/{session}/check-in`, `routes/batches.php`,
+  auth-required) + `batches.batch-session-check-in` view, same "no
+  existing page, add a small host route" shape S15 B6/B7 already took.
+- New tests (4): inside-radius writes a present/`geofence_checkin` record,
+  outside-radius refused with the visible error and writes nothing,
+  no-geofence-configured batch always accepts, a duplicate check-in
+  updates the existing row rather than creating a second one. `composer
+  test`: 1425/1426 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B4 — H12: generic device webhook — not started
 

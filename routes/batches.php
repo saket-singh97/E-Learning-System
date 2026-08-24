@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\BatchSession;
 use App\Http\Controllers\Batches\DownloadIdCardController;
 use App\Http\Controllers\Batches\DownloadStudentImportErrorReportController;
 use App\Http\Controllers\Batches\ZoomOAuthController;
@@ -25,6 +26,17 @@ Route::get('/batches/{batch}/feedback', function (Request $request) {
 
     return view('batches.batch-feedback', ['batch' => $batch]);
 })->name('batch-feedback.show');
+
+// S16 B3 (H11 pt.2) — no existing student-facing "batch session" page to
+// embed GeofenceCheckIn on, same "add a small host route" shape S15
+// B6/B7 already took. Auth-required (unlike /batches/{batch}/feedback) —
+// a check-in with no viewer has nothing to attribute the attendance row
+// to, so there's no meaningful guest state to render here.
+Route::get('/batch-sessions/{session}/check-in', function (Request $request) {
+    $session = BatchSession::findOrFail($request->route('session'));
+
+    return view('batches.batch-session-check-in', ['session' => $session]);
+})->middleware(['auth'])->name('batch-session.check-in');
 
 // Same double-check posture as /zoom/connect above — role:institute_admin
 // middleware plus the controller's own tenant-scoped lookup.
