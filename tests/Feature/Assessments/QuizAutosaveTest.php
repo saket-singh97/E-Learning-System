@@ -181,3 +181,65 @@ it('persists a draft answer through the QuizRunner Livewire component on blur/se
     expect($answer->response)->toBe('4')
         ->and($answer->status)->toBe('draft');
 });
+
+// S16 B10 (I8 pt.2) — per-question timing.
+
+it('accumulates time_spent_seconds across repeated autosaves instead of overwriting it', function () {
+    $question = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    $attempt = ($this->makeAttempt)([$question->id]);
+
+    app(QuizAttemptService::class)->saveAnswer($attempt, $question->id, '3', 12);
+    app(QuizAttemptService::class)->saveAnswer($attempt, $question->id, '4', 8);
+
+    expect(QuizAnswer::sole()->time_spent_seconds)->toBe(20);
+});
+
+it('ignores a negative elapsed value rather than subtracting it from the accumulated total', function () {
+    $question = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    $attempt = ($this->makeAttempt)([$question->id]);
+
+    app(QuizAttemptService::class)->saveAnswer($attempt, $question->id, '4', 10);
+    app(QuizAttemptService::class)->saveAnswer($attempt, $question->id, '4', -5);
+
+    expect(QuizAnswer::sole()->time_spent_seconds)->toBe(10);
+});
+
+it('leaves time_spent_seconds null for a question the student never visited, not zero', function () {
+    $visited = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    $neverVisited = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    $attempt = ($this->makeAttempt)([$visited->id, $neverVisited->id]);
+
+    app(QuizAttemptService::class)->saveAnswer($attempt, $visited->id, '4', 15);
+    app(QuizAttemptService::class)->submit($attempt, []);
+
+    $visitedAnswer = QuizAnswer::where('question_id', $visited->id)->sole();
+    $neverVisitedAnswer = QuizAnswer::where('question_id', $neverVisited->id)->sole();
+
+    expect($visitedAnswer->time_spent_seconds)->toBe(15);
+    expect($neverVisitedAnswer->time_spent_seconds)->toBeNull();
+});
+
+it('submit() never touches an already-recorded time_spent_seconds', function () {
+    $question = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    $attempt = ($this->makeAttempt)([$question->id]);
+
+    app(QuizAttemptService::class)->saveAnswer($attempt, $question->id, '4', 25);
+    app(QuizAttemptService::class)->submit($attempt, [$question->id => '4']);
+
+    expect(QuizAnswer::sole()->time_spent_seconds)->toBe(25);
+});
+
+it('persists an accumulated elapsed value through the QuizRunner Livewire component', function () {
+    $question = ($this->makeQuestion)('mcq', ['options' => ['3', '4'], 'correct_answer' => '4']);
+    ($this->makeAttempt)([$question->id]);
+
+    $this->actingAs($this->student);
+
+    $component = Livewire::test(QuizRunner::class, ['quiz' => $this->quiz])
+        ->set('responses.'.$question->id, '3')
+        ->call('saveAnswer', $question->id, 7);
+
+    $component->call('saveAnswer', $question->id, 4);
+
+    expect(QuizAnswer::sole()->time_spent_seconds)->toBe(11);
+});

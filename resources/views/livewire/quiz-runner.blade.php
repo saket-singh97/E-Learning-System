@@ -9,6 +9,28 @@
     @if ($attempt !== null)
         <p>Attempt in progress &mdash; expires {{ $attempt->expires_at->diffForHumans() }}.</p>
 
+        <script>
+            // S16 B10 (I8 pt.2) — quizElapsedSeconds(questionId) reports the
+            // delta since the *last* report for that question (not a
+            // running total; QuizAttemptService::saveAnswer() itself
+            // accumulates), checkpointed from attempt-render time on first
+            // call. Guarded the same way as the proctoring listeners below
+            // against Livewire re-attaching this on every re-render.
+            if (! window.__quizTimingInitialised) {
+                window.__quizTimingInitialised = true;
+                window.__quizQuestionCheckpoints = {};
+                window.__quizAttemptRenderedAt = Date.now();
+
+                window.quizElapsedSeconds = function (questionId) {
+                    const now = Date.now();
+                    const last = window.__quizQuestionCheckpoints[questionId] ?? window.__quizAttemptRenderedAt;
+                    window.__quizQuestionCheckpoints[questionId] = now;
+
+                    return Math.max(0, Math.round((now - last) / 1000));
+                };
+            }
+        </script>
+
         @if ($quiz->proctoring_enabled)
             {{-- S16 B9 (I8 pt.1) — detection/evidence only, no lockdown.
             Page Visibility API for tab-switch, Fullscreen API for
@@ -59,7 +81,7 @@
                                 <input
                                     type="radio"
                                     wire:model="responses.{{ $question->id }}"
-                                    wire:change="saveAnswer({{ $question->id }})"
+                                    wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                                     value="{{ $option }}"
                                 >
                                 {{ $option }}
@@ -68,14 +90,14 @@
                     @elseif ($question->type === 'short_answer')
                         <textarea
                             wire:model="responses.{{ $question->id }}"
-                            wire:blur="saveAnswer({{ $question->id }})"
+                            wire:blur="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                         ></textarea>
                     @elseif ($question->type === 'numerical')
                         <input
                             type="number"
                             step="any"
                             wire:model="responses.{{ $question->id }}"
-                            wire:blur="saveAnswer({{ $question->id }})"
+                            wire:blur="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                         >
                     @elseif ($question->type === 'multi_select')
                         @foreach ($question->options as $option)
@@ -83,7 +105,7 @@
                                 <input
                                     type="checkbox"
                                     wire:model="responses.{{ $question->id }}"
-                                    wire:change="saveAnswer({{ $question->id }})"
+                                    wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                                     value="{{ $option }}"
                                 >
                                 {{ $option }}
@@ -93,7 +115,7 @@
                         <input
                             type="text"
                             wire:model="responses.{{ $question->id }}"
-                            wire:blur="saveAnswer({{ $question->id }})"
+                            wire:blur="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                         >
                     @elseif ($question->type === 'matching')
                         @foreach ($question->options['left'] ?? [] as $leftIndex => $leftLabel)
@@ -101,7 +123,7 @@
                                 <span>{{ $leftLabel }}</span>
                                 <select
                                     wire:model="responses.{{ $question->id }}.{{ $leftIndex }}"
-                                    wire:change="saveAnswer({{ $question->id }})"
+                                    wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                                 >
                                     <option value="">— match —</option>
                                     @foreach ($question->options['right'] ?? [] as $rightIndex => $rightLabel)
@@ -116,7 +138,7 @@
                                 <label>Position {{ $position + 1 }}</label>
                                 <select
                                     wire:model="responses.{{ $question->id }}.{{ $position }}"
-                                    wire:change="saveAnswer({{ $question->id }})"
+                                    wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                                 >
                                     <option value="">— pick —</option>
                                     @foreach ($question->options as $itemIndex => $itemLabel)

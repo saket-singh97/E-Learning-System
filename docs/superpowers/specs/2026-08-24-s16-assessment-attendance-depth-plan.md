@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ✅ done |
 | B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ✅ done |
 | B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ✅ done |
-| B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ⬜ not started |
+| B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ✅ done |
 | B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ⬜ not started |
 | B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ⬜ not started |
 | B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ⬜ not started |
@@ -401,16 +401,34 @@ undershot its actual by a wide margin.
   attempt/tenant. `composer test`: 1475/1476 pass; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`.
 
-### B10 — I8 pt.2: per-question timing — not started
+### B10 — I8 pt.2: per-question timing — done
 
-- `quiz_answers.time_spent_seconds` nullable int migration.
-  `QuizAttemptService::saveAnswer()` (the existing S9 B7 autosave path)
-  accepts and persists a client-reported elapsed-seconds value per
-  question, accumulated not overwritten on repeated saves to the same
-  question.
-- New tests: repeated `saveAnswer()` calls for the same question accumulate
-  time rather than resetting it, a never-visited question stays null not
-  zero.
+- `quiz_answers.time_spent_seconds` nullable, no-default int migration —
+  a never-visited question's row (created only at submit time, via
+  `submit()`'s own `updateOrCreate` which never mentions this column)
+  stays null, not 0.
+- `QuizAttemptService::saveAnswer(..., int $elapsedSeconds = 0)` reads the
+  existing row's `time_spent_seconds`, adds the new delta (floored at 0 —
+  a negative client value can't subtract from the accumulated total), and
+  writes the sum back — `submit()`'s own `updateOrCreate` call is
+  untouched (doesn't mention the column), so it never clobbers an
+  already-accumulated value on an existing row.
+- `QuizRunner::saveAnswer()` widened the same way, default `0` so the one
+  existing 1-arg Livewire test call keeps passing unchanged.
+- Blade view: `quizElapsedSeconds(questionId)` — a small JS helper
+  (checkpointed per question, guarded against Livewire's own re-render
+  re-initialising it, same pattern B9's proctoring listeners already
+  established) reports the delta since the *last* report for that
+  question, not a running total — the service does the accumulating.
+  Appended as a second argument to the exact same `wire:blur`/`wire:change`
+  triggers every question type already had; no new DOM events, no new
+  Livewire method.
+- New tests (5): repeated autosaves accumulate rather than overwrite, a
+  negative elapsed value doesn't subtract, a never-visited question stays
+  null after submit, `submit()` never touches an already-recorded value,
+  the accumulation persists through the real `QuizRunner` component.
+  `composer test`: 1480/1481 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B11 — I9: violation threshold → auto-submit + flag — not started
 

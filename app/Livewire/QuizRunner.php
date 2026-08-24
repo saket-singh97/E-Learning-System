@@ -71,7 +71,7 @@ class QuizRunner extends Component
      * the DB rather than trusting any client-held id, same posture
      * submitAttempt() already uses.
      */
-    public function saveAnswer(int $questionId): void
+    public function saveAnswer(int $questionId, int $elapsedSeconds = 0): void
     {
         $user = auth()->user();
 
@@ -85,7 +85,7 @@ class QuizRunner extends Component
             return;
         }
 
-        app(QuizAttemptService::class)->saveAnswer($attempt, $questionId, $this->responses[$questionId] ?? null);
+        app(QuizAttemptService::class)->saveAnswer($attempt, $questionId, $this->responses[$questionId] ?? null, $elapsedSeconds);
     }
 
     /**

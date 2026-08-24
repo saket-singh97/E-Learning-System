@@ -28,6 +28,7 @@ class QuizAnswer extends Model
         'status',
         'reviewed_by',
         'reviewed_at',
+        'time_spent_seconds',
     ];
 
     protected function casts(): array
@@ -37,6 +38,7 @@ class QuizAnswer extends Model
             'is_correct' => 'boolean',
             'score' => 'decimal:2',
             'reviewed_at' => 'datetime',
+            'time_spent_seconds' => 'integer',
         ];
     }
 

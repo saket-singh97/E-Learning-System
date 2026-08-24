@@ -148,8 +148,14 @@ class QuizAttemptService
      * the attempt is no longer in_progress (expired between keystrokes, or
      * already submitted from another tab) — the student finds out via
      * submitAttempt()'s own check, not from a failed background autosave.
+     *
+     * S16 B10 (I8 pt.2) — `$elapsedSeconds` is a client-reported delta
+     * since the last autosave for this question (not a running total), so
+     * it's added to whatever was already recorded, never overwrites it —
+     * a question autosaved 5 times racks up 5 deltas' worth of time, not
+     * just the last one's.
      */
-    public function saveAnswer(QuizAttempt $attempt, int $questionId, mixed $response): void
+    public function saveAnswer(QuizAttempt $attempt, int $questionId, mixed $response, int $elapsedSeconds = 0): void
     {
         if ($attempt->status !== 'in_progress') {
             return;
@@ -159,9 +165,12 @@ class QuizAttemptService
             return;
         }
 
+        $existing = QuizAnswer::where('quiz_attempt_id', $attempt->id)->where('question_id', $questionId)->first();
+        $accumulatedSeconds = ($existing->time_spent_seconds ?? 0) + max(0, $elapsedSeconds);
+
         QuizAnswer::updateOrCreate(
             ['quiz_attempt_id' => $attempt->id, 'question_id' => $questionId],
-            ['response' => $response, 'status' => 'draft'],
+            ['response' => $response, 'status' => 'draft', 'time_spent_seconds' => $accumulatedSeconds],
         );
     }
 
