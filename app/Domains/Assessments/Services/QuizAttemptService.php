@@ -240,6 +240,10 @@ class QuizAttemptService
             'mcq', 'true_false' => $this->gradeExactMatch($question, $response),
             'numerical' => $this->gradeNumerical($question, $response),
             'short_answer' => $this->gradeShortAnswer($response),
+            'multi_select' => $this->gradeMultiSelect($question, $response),
+            'fill_in_blank' => $this->gradeFillInBlank($question, $response),
+            'matching' => $this->gradeMatching($question, $response),
+            'ordering' => $this->gradeOrdering($question, $response),
             default => [false, 0.0, 'auto_graded'],
         };
     }
@@ -287,6 +291,126 @@ class QuizAttemptService
         }
 
         return [null, null, 'pending_review'];
+    }
+
+    /**
+     * S16 B7 (I6, design doc §4 decision 3) — partial credit is a simple
+     * fraction of correct selections, never negative: (correct selections
+     * − incorrect selections) / total correct options, floored at 0. A
+     * question with zero `correct_option_ids` configured has nothing to
+     * score against and grades as wrong rather than dividing by zero.
+     *
+     * `is_correct` follows `reviewAnswer()`'s own established meaning for
+     * a fractional score elsewhere in this class — "earned some credit"
+     * (`score > 0`), not "every part right." `score` is rounded to 4dp in
+     * memory; `QuizAnswer.score`'s own `decimal:2` cast rounds it further
+     * on write/read, same as every other type's score.
+     *
+     * @return array{0: bool, 1: float, 2: string}
+     */
+    protected function gradeMultiSelect(Question $question, mixed $response): array
+    {
+        $correctIds = collect($question->correct_answer['correct_option_ids'] ?? [])
+            ->map(fn (mixed $id): string => (string) $id)
+            ->all();
+
+        $totalCorrect = count($correctIds);
+
+        if ($totalCorrect === 0 || ! is_array($response)) {
+            return [false, 0.0, 'auto_graded'];
+        }
+
+        $selectedIds = array_map('strval', $response);
+        $correctSelections = count(array_intersect($selectedIds, $correctIds));
+        $incorrectSelections = count(array_diff($selectedIds, $correctIds));
+
+        $score = max(0.0, ($correctSelections - $incorrectSelections) / $totalCorrect);
+
+        return [$score > 0, round($score, 4), 'auto_graded'];
+    }
+
+    /**
+     * Case-insensitive exact match against a list of accepted answers, not
+     * fuzzy matching — same binary (exact match or zero) shape
+     * `mcq`/`true_false` already have, no partial credit (design doc §4
+     * decision 3).
+     *
+     * @return array{0: bool, 1: float, 2: string}
+     */
+    protected function gradeFillInBlank(Question $question, mixed $response): array
+    {
+        if ($response === null || trim((string) $response) === '') {
+            return [false, 0.0, 'auto_graded'];
+        }
+
+        $accepted = collect($question->correct_answer['accepted_answers'] ?? [])
+            ->map(fn (mixed $answer): string => mb_strtolower(trim((string) $answer)))
+            ->all();
+
+        $isCorrect = in_array(mb_strtolower(trim((string) $response)), $accepted, true);
+
+        return [$isCorrect, $isCorrect ? 1.0 : 0.0, 'auto_graded'];
+    }
+
+    /**
+     * Fraction of the configured `pairs` the response also pairs
+     * correctly — response shape is `{left_id: right_id, ...}`, keyed the
+     * same way as `pairs`' own left side, both sides string-compared so a
+     * numeric or string id form on either side still matches.
+     *
+     * @return array{0: bool, 1: float, 2: string}
+     */
+    protected function gradeMatching(Question $question, mixed $response): array
+    {
+        $correctPairs = collect($question->correct_answer['pairs'] ?? []);
+        $totalPairs = $correctPairs->count();
+
+        if ($totalPairs === 0 || ! is_array($response)) {
+            return [false, 0.0, 'auto_graded'];
+        }
+
+        $responseMap = collect($response)->mapWithKeys(
+            fn (mixed $value, int|string $key): array => [(string) $key => (string) $value]
+        );
+
+        $correctCount = $correctPairs->filter(
+            fn (array $pair): bool => $responseMap->get((string) $pair[0]) === (string) $pair[1]
+        )->count();
+
+        $score = $correctCount / $totalPairs;
+
+        return [$score > 0, round($score, 4), 'auto_graded'];
+    }
+
+    /**
+     * Fraction of positions where the response's own sequence matches
+     * `correct_sequence` index-for-index — a response shorter than the
+     * correct sequence simply scores 0 on every position past its own
+     * length, not an error.
+     *
+     * @return array{0: bool, 1: float, 2: string}
+     */
+    protected function gradeOrdering(Question $question, mixed $response): array
+    {
+        $correctSequence = collect($question->correct_answer['correct_sequence'] ?? [])
+            ->map(fn (mixed $id): string => (string) $id)
+            ->values();
+
+        $total = $correctSequence->count();
+
+        if ($total === 0 || ! is_array($response)) {
+            return [false, 0.0, 'auto_graded'];
+        }
+
+        $responseSequence = collect($response)->map(fn (mixed $id): string => (string) $id)->values();
+
+        $correctPositions = $correctSequence->filter(
+            fn (string $id, int $index): bool => $responseSequence->get($index) === $id
+        )->count();
+
+        $score = $correctPositions / $total;
+
+        return [$score > 0, round($score, 4), 'auto_graded'];
     }
 
     /**

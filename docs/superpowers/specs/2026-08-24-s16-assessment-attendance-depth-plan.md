@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ✅ done |
 | B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ✅ done |
 | B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ✅ done |
-| B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ⬜ not started |
+| B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ✅ done |
 | B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ⬜ not started |
 | B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ⬜ not started |
 | B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ⬜ not started |
@@ -274,18 +274,53 @@ undershot its actual by a wide margin.
   1446/1447 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B7 — I6 pt.1: extended question types schema + grading — not started
+### B7 — I6 pt.1: extended question types schema + grading — done
 
 - `Question::TYPES` widened to include `multi_select`, `fill_in_blank`,
-  `matching`, `ordering` (5 types before this block: mcq, true_false,
-  short_answer, numerical → 9 after).
+  `matching`, `ordering` (4 types before this block: mcq, true_false,
+  short_answer, numerical → 8 after — the plan's own "5→9" count was off
+  by one, not load-bearing).
 - `QuizAttemptService::grade()` gains one `match` arm per new type,
-  implementing design doc §4 decision 3's exact partial-credit fractions.
+  implementing design doc §4 decision 3's exact partial-credit fractions:
+  `multi_select` = (correct − incorrect selections) / total correct,
+  floored at 0; `matching`/`ordering` = fraction of pairs/positions
+  correct; `fill_in_blank` stays binary (case-insensitive exact match
+  against `accepted_answers`, no partial credit). `is_correct` follows
+  `reviewAnswer()`'s own established meaning for a fractional score
+  elsewhere in this service — `score > 0`, not "every part right."
 - No new columns — `correct_answer`'s existing jsonb column carries each
-  new type's own shape (§4 decision 2).
-- New tests: `QuizAttemptServiceTest` additions — one grading test per new
-  type proving exact partial-credit scores for a partially-correct
-  response, plus a fully-correct and fully-wrong case each.
+  new type's own shape (§4 decision 2): `multi_select`
+  `{correct_option_ids}`, `fill_in_blank` `{accepted_answers}`, `matching`
+  `{pairs: [[left_id, right_id], ...]}`, `ordering` `{correct_sequence}`.
+  Response shape for `matching` is left as a build-time call (not pinned
+  by the design doc): `{left_id: right_id, ...}`, mirroring `pairs`' own
+  left-side convention — `QuizRunner`'s student-facing UI (B8) will need
+  to build a response in this shape.
+- No Filament form UI for the new types in this block (that's B8) —
+  `QuestionResource`'s type `Select` already reads `Question::TYPES`
+  dynamically, so the 4 new types are selectable in the dropdown today
+  with no matching answer-shape fields yet; a real but expected one-block
+  transitional gap, same as every other split block in this plan (B2/B3,
+  B5/B6).
+- New tests (12): `QuizAttemptServiceExtendedTypesTest` — one
+  fully-correct + one partially-correct + one fully-wrong case per
+  partial-credit type (`multi_select`, `matching`, `ordering`), and
+  exact-match + case-insensitive-match + wrong for the binary
+  `fill_in_blank`. Found and cleaned up an unrelated pre-existing test-
+  infra gap while chasing a flaky full-suite failure: several Comms export
+  download tests (`DownloadCompletionExportControllerTest` etc.) write
+  real CSVs to `storage/app/private/*-exports/` via `Storage::disk('local')`
+  with no `Storage::fake()`, and this session's many `migrate:fresh`-
+  triggered full-suite reruns today (new migrations every block) kept
+  resetting tenant auto-increment IDs back to a low range, so a stale
+  leftover file from an earlier run's tenant #N collided with today's own
+  tenant #N and made a "404 before generated" test see someone else's old
+  file. Not a B7 regression — deleted the ~66 accumulated stray CSVs
+  (`storage/app/private` is gitignored, nothing tracked) and the suite
+  went back to green; the underlying missing-`Storage::fake()` gap itself
+  is out of this block's scope, left for whichever block/review pass next
+  touches those export tests. `composer test`: 1458/1459 pass; sole
+  failure the pre-existing unrelated `CourseSlugUniquenessTest`.
 
 ### B8 — I6 pt.2: Filament UI + QuizRunner rendering — not started
 

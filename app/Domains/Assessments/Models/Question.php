@@ -14,7 +14,16 @@ class Question extends Model
 {
     use BelongsToTenant, SoftDeletes;
 
-    public const TYPES = ['mcq', 'true_false', 'short_answer', 'numerical'];
+    /**
+     * @var array<int, string> S16 B7 (I6) widens the original 4 (mcq,
+     * true_false, short_answer, numerical) with 4 partial-credit-capable
+     * types — each stores its own answer shape in the same
+     * `correct_answer` jsonb column (design doc §4 decision 2), no schema
+     * change: `multi_select` `{correct_option_ids: [...]}`, `fill_in_blank`
+     * `{accepted_answers: [...]}`, `matching` `{pairs: [[left_id,
+     * right_id], ...]}`, `ordering` `{correct_sequence: [...]}`.
+     */
+    public const TYPES = ['mcq', 'true_false', 'short_answer', 'numerical', 'multi_select', 'fill_in_blank', 'matching', 'ordering'];
 
     public const DIFFICULTIES = ['easy', 'medium', 'hard'];
 
