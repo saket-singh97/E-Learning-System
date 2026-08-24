@@ -229,11 +229,23 @@ class StudentMetrics
      * struggling (InstituteOverviewWidget's own original reasoning, S8
      * B5, carried over unchanged).
      *
+     * S16 B1 (H10): threshold reads $student->tenant->at_risk_threshold_percent
+     * when set, falling back to the existing hardcoded AT_RISK_THRESHOLD for
+     * every tenant that never configures one — zero blast radius on existing
+     * tenants (design doc §4 decision 12).
+     *
      * @param  array{attendance_percent: ?float, coverage_percent: ?float, quiz_average_percent: ?float, fee_status: string, outstanding_invoices: Collection<int, FeeInvoice>}  $summary
      */
-    public function isAtRisk(array $summary): bool
+    public function isAtRisk(array $summary, User $student): bool
     {
-        return ($summary['attendance_percent'] !== null && $summary['attendance_percent'] < self::AT_RISK_THRESHOLD)
-            || ($summary['coverage_percent'] !== null && $summary['coverage_percent'] < self::AT_RISK_THRESHOLD);
+        $threshold = $this->thresholdFor($student);
+
+        return ($summary['attendance_percent'] !== null && $summary['attendance_percent'] < $threshold)
+            || ($summary['coverage_percent'] !== null && $summary['coverage_percent'] < $threshold);
+    }
+
+    public function thresholdFor(User $student): float
+    {
+        return $student->tenant?->at_risk_threshold_percent ?? self::AT_RISK_THRESHOLD;
     }
 }

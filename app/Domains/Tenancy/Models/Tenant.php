@@ -41,12 +41,14 @@ class Tenant extends Model
         'custom_domain',
         'plan_tier',
         'plan_id',
+        'at_risk_threshold_percent',
     ];
 
     protected function casts(): array
     {
         return [
             'custom_domain_verified_at' => 'datetime',
+            'at_risk_threshold_percent' => 'float',
         ];
     }
 

@@ -245,3 +245,30 @@ it('never caches outstanding_invoices, even while the rest of the summary is ser
     $second = $this->metrics->summarize($this->student);
     expect($second['outstanding_invoices']->pluck('id')->all())->toBe([]);
 });
+
+// S16 B1 (H10) — isAtRisk() now reads a per-tenant threshold override.
+it('falls back to the hardcoded default threshold when the tenant has not configured one', function () {
+    $session = batchSessionRow();
+    AttendanceRecord::create(['attendable_type' => BatchSession::class, 'attendable_id' => $session->id, 'user_id' => $this->student->id, 'status' => 'absent', 'source' => 'manual', 'recorded_at' => now()]);
+
+    $summary = $this->metrics->summarize($this->student);
+
+    expect($this->metrics->isAtRisk($summary, $this->student))->toBeTrue();
+});
+
+it('respects a tenant-configured threshold override instead of the default', function () {
+    // 90% attendance, below the tenant's own strict 95% override but above
+    // the hardcoded 60% default — proves the override is actually read.
+    $this->tenant->update(['at_risk_threshold_percent' => 95.0]);
+
+    $session = batchSessionRow();
+    for ($i = 0; $i < 9; $i++) {
+        AttendanceRecord::create(['attendable_type' => BatchSession::class, 'attendable_id' => $session->id + $i, 'user_id' => $this->student->id, 'status' => 'present', 'source' => 'manual', 'recorded_at' => now()]);
+    }
+    AttendanceRecord::create(['attendable_type' => BatchSession::class, 'attendable_id' => $session->id + 9, 'user_id' => $this->student->id, 'status' => 'absent', 'source' => 'manual', 'recorded_at' => now()]);
+
+    $summary = $this->metrics->summarize($this->student);
+
+    expect($summary['attendance_percent'])->toBe(90.0);
+    expect($this->metrics->isAtRisk($summary, $this->student))->toBeTrue();
+});

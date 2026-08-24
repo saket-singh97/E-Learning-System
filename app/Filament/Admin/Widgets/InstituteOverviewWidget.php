@@ -54,7 +54,7 @@ class InstituteOverviewWidget extends StatsOverviewWidget
             Stat::make('Active enrolments', (string) $stats['active_enrolments']),
             Stat::make('Revenue (paid invoices)', '₹'.number_format($stats['paid_revenue'], 2)),
             Stat::make('At-risk students', (string) $stats['at_risk_count'])
-                ->description('Attendance or coverage below '.StudentMetrics::AT_RISK_THRESHOLD.'%'),
+                ->description('Attendance or coverage below '.$this->displayThreshold().'%'),
             // S10 J6 — a distinct axis from the attendance/coverage flag
             // above, not a replacement: a student can be at-risk on one and
             // fine on the other (design doc §2.3).
@@ -94,7 +94,14 @@ class InstituteOverviewWidget extends StatsOverviewWidget
     {
         $metrics = app(StudentMetrics::class);
 
-        return $metrics->isAtRisk($metrics->summarize($student));
+        return $metrics->isAtRisk($metrics->summarize($student), $student);
+    }
+
+    protected function displayThreshold(): float
+    {
+        $tenant = app(CurrentTenant::class)->isBound() ? app(CurrentTenant::class)->get() : null;
+
+        return $tenant?->at_risk_threshold_percent ?? StudentMetrics::AT_RISK_THRESHOLD;
     }
 
     /**

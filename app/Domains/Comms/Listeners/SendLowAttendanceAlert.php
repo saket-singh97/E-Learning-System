@@ -39,7 +39,7 @@ class SendLowAttendanceAlert
         $metrics = app(StudentMetrics::class);
         $summary = $metrics->summarize($student);
 
-        if (! $metrics->isAtRisk($summary)) {
+        if (! $metrics->isAtRisk($summary, $student)) {
             return;
         }
 

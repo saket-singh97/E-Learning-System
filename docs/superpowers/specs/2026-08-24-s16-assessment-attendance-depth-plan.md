@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | `attendance_records.role` column (H7, foundation for H13) — teacher vs. student attendance rows in the same table | ✅ done |
-| B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ⬜ not started |
+| B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ✅ done |
 | B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ⬜ not started |
 | B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ⬜ not started |
 | B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ⬜ not started |
@@ -78,22 +78,32 @@ undershot its actual by a wide margin.
   the pre-existing `CourseSlugUniquenessTest` (carried since S1/S2,
   unrelated, out of scope).
 
-### B1 — H10: tenant-configurable at-risk threshold + staff view — not started
+### B1 — H10: tenant-configurable at-risk threshold + staff view — done
 
 - `tenants.at_risk_threshold_percent` nullable decimal migration.
-  `StudentMetrics::isAtRisk()` reads `$tenant->at_risk_threshold_percent ??
+  `StudentMetrics::isAtRisk(array $summary, User $student)` now takes the
+  student so it can read `$student->tenant->at_risk_threshold_percent ??
   self::AT_RISK_THRESHOLD` — existing hardcoded 60.0 stays the fallback for
-  every tenant that never sets one, zero blast radius.
-- Admin-panel setting, same shape `CustomDomainSettings` (S9 B4) already
-  established for a single-field tenant-settings page.
-- New staff-facing "At-risk students" Admin/Teach page — `StudentMetrics`
-  already computes everything needed per student; this is a new roster view
-  reusing `StudentProgress`'s own `studentsQuery()` shape (S8 B5), filtered
-  to `isAtRisk() === true`. Teach panel scopes to the instructor's own
-  assigned batches (S15 B2's own `instructor_id` scoping, reused not
-  reinvented).
-- New tests: threshold override respected, default fallback unchanged,
-  staff view lists only at-risk students, Teach panel scoping.
+  every tenant that never sets one, zero blast radius. Both existing
+  callers (`InstituteOverviewWidget`, `SendLowAttendanceAlert`) updated to
+  pass `$student`; no existing test called `isAtRisk()` directly, so the
+  signature change was safe.
+- `App\Filament\Admin\Pages\AtRiskThresholdSettings` — same single-field
+  settings-page shape `CustomDomainSettings` (S9 B4) already established;
+  blank clears the override back to the default.
+- New staff-facing "At-risk students" pages — `App\Filament\Admin\Pages\AtRiskStudents`
+  (tenant-wide) and `App\Filament\Teach\Pages\AtRiskStudents` (scoped to the
+  instructor's own assigned batches, reusing `StudentProgress`'s own
+  `studentsQuery()` shape, S15 B2's `instructor_id` scoping). Both filter
+  in PHP since `isAtRisk()` reads two computed/cached percentages, not
+  queryable columns — same shape `InstituteOverviewWidget::atRiskCount()`
+  already takes.
+- New tests (8): `AtRiskThresholdSettingsTest` (save + clear), 2 new
+  `StudentMetricsTest` cases (default fallback, tenant override respected),
+  `AtRiskStudentsAdminPageTest` (roster + cross-tenant exclusion),
+  `AtRiskStudentsTeachPageTest` (own-batch roster + cross-instructor
+  exclusion). `composer test`: 1414/1415 pass, sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`.
 
 ### B2 — H11 pt.1: geofence schema + service — not started
 
