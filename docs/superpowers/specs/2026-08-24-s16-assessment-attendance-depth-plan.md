@@ -28,7 +28,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | `attendance_records.role` column (H7, foundation for H13) — teacher vs. student attendance rows in the same table | ⬜ not started |
+| B0 | `attendance_records.role` column (H7, foundation for H13) — teacher vs. student attendance rows in the same table | ✅ done |
 | B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ⬜ not started |
 | B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ⬜ not started |
 | B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ⬜ not started |
@@ -57,22 +57,26 @@ undershot its actual by a wide margin.
 
 ## Block detail (expand as each block builds; stubs below are the starting checklist)
 
-### B0 — `attendance_records.role` column — not started
+### B0 — `attendance_records.role` column — done
 
-- Migration: `role` string column on `attendance_records`, default
-  `'student'`, backfilling every existing row (all attendance to date is
-  student attendance, confirmed — no teacher-role writer exists before this
-  block).
-- `AttendanceRecord::ROLES = ['student', 'instructor']` constant, `role`
-  added to `$fillable`.
-- No behavior change to any existing reader (`StudentMetrics`,
-  `BatchSessionsRelationManager::markAttendance`, `RecordVideoCoverageAttendance`)
-  — all three explicitly scope to `role = 'student'` (or the new default
-  covers them for free) so this block introduces zero regression risk to
-  every existing S5/S8/S9 consumer.
+- Migration `2026_08_24_150000_add_role_to_attendance_records_table.php`:
+  `role` string column on `attendance_records`, default `'student'`
+  (backfills every existing row for free — all attendance to date is
+  student attendance, confirmed before writing — no teacher-role writer
+  exists before this block).
+- `AttendanceRecord::ROLES = ['student', 'instructor']` constant added,
+  `role` added to `$fillable`.
+- No code change needed in any existing reader/writer (`RecordVideoCoverageAttendance`,
+  `BatchSessionsRelationManager::markAttendance`) — grepped both
+  `AttendanceRecord::create`/`updateOrCreate` call sites, neither passes
+  `role`, so the new column's default covers them for free — zero
+  regression risk to every existing S5/S8/S9 consumer.
 - Foundation-only block, same posture S15 B0 took for
   `instructor_invitations` — B5/B6 (H13) are what actually write/read a
   `role = 'instructor'` row.
+- `composer test`: 1406/1407 pass, migration applied clean. Sole failure is
+  the pre-existing `CourseSlugUniquenessTest` (carried since S1/S2,
+  unrelated, out of scope).
 
 ### B1 — H10: tenant-configurable at-risk threshold + staff view — not started
 
