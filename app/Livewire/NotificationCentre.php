@@ -7,6 +7,7 @@ use App\Notifications\EnrolmentRequestExpired;
 use App\Notifications\FeeReminderDue;
 use App\Notifications\InactivityNudgeDue;
 use App\Notifications\LowAttendanceAlertDue;
+use App\Notifications\TeacherAttendanceFlagged;
 use Illuminate\Contracts\View\View;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Auth;
@@ -57,6 +58,7 @@ class NotificationCentre extends Component
             EnrolmentRequestExpired::class => 'Enrolment request expired: '.($notification->data['batch_title'] ?? ''),
             LowAttendanceAlertDue::class => ($notification->data['student_name'] ?? 'A student').' is below the attendance/coverage threshold',
             InactivityNudgeDue::class => 'No learning activity in the last few days — come back and continue where you left off',
+            TeacherAttendanceFlagged::class => ($notification->data['instructor_name'] ?? 'An instructor').'\'s attendance is unmarked for a past session',
             default => class_basename($notification->type),
         };
     }

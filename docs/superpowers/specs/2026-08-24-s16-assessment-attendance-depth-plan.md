@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ✅ done |
 | B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ✅ done |
 | B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ✅ done |
-| B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ⬜ not started |
+| B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ✅ done |
 | B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ⬜ not started |
 | B8 | I6 pt.2 — Filament form UI for the 4 new types + `QuizRunner` student-facing rendering | ⬜ not started |
 | B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ⬜ not started |
@@ -233,20 +233,46 @@ undershot its actual by a wide margin.
   `composer test`: 1439/1440 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B6 — H13 pt.2: flag + admin resolution — not started
+### B6 — H13 pt.2: flag + admin resolution — done
 
-- `teacher_attendance_flags` migration + model, registered in
-  `TenantModelRegistry`. `TeacherAttendanceSweep` (B5) creates one per
-  detected gap, `status = 'open'`.
-- Admin-panel notification (reuses the existing `NotificationCentre`
-  render-hook shape, S8 B7) + a new Filament resource/page listing open
-  flags.
-- "Resolve" action — institute_admin marks resolved, optionally
-  reassigning the session's batch `instructor_id` (S15's own field, no new
-  reassignment mechanism) in the same action.
-- New tests: sweep-created flag appears in the admin queue, resolving
-  without reassignment just closes it, resolving with a reassignment
-  updates `Batch::instructor_id` and closes the flag.
+- `teacher_attendance_flags` migration (`instructor_id` is a stamp of the
+  batch's own instructor at flag time, not a live reference — a later
+  reassignment must not rewrite who the flag was originally raised
+  against) + `TeacherAttendanceFlag` model, registered in
+  `TenantModelRegistry`. `TeacherAttendanceSweep::handle()` (B5) now
+  actually creates one per detected gap, `status = 'open'` — dedupes on
+  `batch_session_id` regardless of the existing flag's status (a resolved
+  flag doesn't retroactively backfill an instructor attendance row, so
+  without the dedupe the same gap would re-flag forever); skips a session
+  whose batch has no assigned instructor at all. Same `withoutEvents()` +
+  explicit `tenant_id` shape `RecordVideoCoverageAttendance` (S5 B7)
+  already established for writing a `BelongsToTenant` row from this
+  unscoped sweep.
+- `App\Notifications\TeacherAttendanceFlagged` — database-only (no mail/
+  WhatsApp, an internal admin worklist item not a customer alert, same
+  posture `MessageReportResource`'s moderation queue already takes), sent
+  to every institute_admin for the tenant (`GracePeriodReminder`'s own
+  "no dedicated recipient concept" reasoning). Picked up for free by the
+  existing `NotificationCentre` (S8 B7, already rendered on every panel's
+  topbar) — added one `summarize()` case, no new render-hook registration
+  needed.
+- `App\Domains\Batches\Filament\Resources\TeacherAttendanceFlags\TeacherAttendanceFlagResource`
+  — browse-only, same shape `MessageReportResource` already established
+  (no create/edit pages). Auto-discovered on the Admin panel only (its own
+  `discoverResources` directory scan on `Domains/Batches/Filament/Resources`;
+  Teach panel lists Batches resources explicitly and doesn't include it).
+  `resolve` action closes the flag and, if an institute_admin picks a
+  `reassign_instructor_id`, updates the session's batch `instructor_id` in
+  the same action (S15's own field, no new reassignment mechanism) —
+  otherwise the flag just closes with no batch change.
+- New tests (7): sweep `handle()` creates an open flag + notifies every
+  institute_admin, doesn't re-flag an already-flagged session (even a
+  resolved one), skips a session with no assigned instructor; admin queue
+  lists a sweep-created flag, resolves without reassignment (instructor
+  unchanged), resolves with a reassignment (`Batch::instructor_id`
+  updated), resolve action hidden once already resolved. `composer test`:
+  1446/1447 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B7 — I6 pt.1: extended question types schema + grading — not started
 

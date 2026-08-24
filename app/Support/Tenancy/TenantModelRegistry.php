@@ -25,6 +25,7 @@ use App\Domains\Batches\Models\LivePoll;
 use App\Domains\Batches\Models\LivePollOption;
 use App\Domains\Batches\Models\LivePollResponse;
 use App\Domains\Batches\Models\LiveRecording;
+use App\Domains\Batches\Models\TeacherAttendanceFlag;
 use App\Domains\Batches\Models\TimetableTemplate;
 use App\Domains\Billing\Models\Plan;
 use App\Domains\Billing\Models\SubscriptionInvoice;
@@ -143,6 +144,7 @@ class TenantModelRegistry
         NoticeReadReceipt::class,
         BatchGeofence::class,
         DeviceWebhookCredential::class,
+        TeacherAttendanceFlag::class,
     ];
 
     /**
@@ -884,6 +886,31 @@ class TenantModelRegistry
                 'device_label' => 'Row Device',
                 'webhook_secret' => 'secret-'.uniqid(),
             ],
+            TeacherAttendanceFlag::class => (function () {
+                $instructor = User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()]);
+                $batch = Batch::create([
+                    'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                    'instructor_id' => $instructor->id,
+                    'title' => 'Parent',
+                    'slug' => 'parent-'.uniqid(),
+                    'starts_on' => now()->toDateString(),
+                    'ends_on' => now()->addMonth()->toDateString(),
+                    'self_enrol_mode' => 'manual_only',
+                    'status' => 'draft',
+                ]);
+                $session = BatchSession::create([
+                    'batch_id' => $batch->id,
+                    'starts_at' => now()->subDay(),
+                    'duration_minutes' => 60,
+                    'position' => 0,
+                ]);
+
+                return [
+                    'batch_session_id' => $session->id,
+                    'instructor_id' => $instructor->id,
+                    'flagged_at' => now(),
+                ];
+            })(),
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -961,6 +988,7 @@ class TenantModelRegistry
             NoticeReadReceipt::class => ['read_at' => now()->subDay()],
             BatchGeofence::class => ['radius_meters' => 999],
             DeviceWebhookCredential::class => ['device_label' => 'tampered'],
+            TeacherAttendanceFlag::class => ['status' => 'resolved'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
