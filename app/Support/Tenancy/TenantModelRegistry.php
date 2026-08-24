@@ -15,6 +15,7 @@ use App\Domains\Assignments\Models\Certificate;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchFeedback;
 use App\Domains\Batches\Models\BatchGeofence;
+use App\Domains\Batches\Models\DeviceWebhookCredential;
 use App\Domains\Batches\Models\StudentImportBatch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
@@ -141,6 +142,7 @@ class TenantModelRegistry
         Notice::class,
         NoticeReadReceipt::class,
         BatchGeofence::class,
+        DeviceWebhookCredential::class,
     ];
 
     /**
@@ -878,6 +880,10 @@ class TenantModelRegistry
                 'longitude' => 77.5946,
                 'radius_meters' => 100,
             ],
+            DeviceWebhookCredential::class => [
+                'device_label' => 'Row Device',
+                'webhook_secret' => 'secret-'.uniqid(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -954,6 +960,7 @@ class TenantModelRegistry
             Notice::class => ['title' => 'tampered'],
             NoticeReadReceipt::class => ['read_at' => now()->subDay()],
             BatchGeofence::class => ['radius_meters' => 999],
+            DeviceWebhookCredential::class => ['device_label' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

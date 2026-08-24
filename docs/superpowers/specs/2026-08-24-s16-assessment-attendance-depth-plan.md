@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B1 | H10 — tenant-configurable at-risk threshold + staff-facing at-risk students view (extends the existing S9 alert, not a rebuild) | ✅ done |
 | B2 | H11 pt.1 — `batch_geofences` schema + `GeofenceCheckInService` (haversine, reuses `ImpossibleTravelDetector`'s formula) | ✅ done |
 | B3 | H11 pt.2 — student-facing geofenced check-in Livewire component (browser geolocation) | ✅ done |
-| B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ⬜ not started |
+| B4 | H12 — generic HMAC-signed device webhook (biometric/RFID, vendor-agnostic) | ✅ done |
 | B5 | H13 pt.1 — teacher/instructor attendance capture + `TeacherAttendanceSweep` (unmarked-past-session-end detection) | ⬜ not started |
 | B6 | H13 pt.2 — `TeacherAttendanceFlag` + admin notification + manual substitute reassignment action (no auto-matching) | ⬜ not started |
 | B7 | I6 pt.1 — extended question types schema (`Question::TYPES` widened) + `QuizAttemptService::grade()` partial-credit branches | ⬜ not started |
@@ -160,23 +160,46 @@ undershot its actual by a wide margin.
   test`: 1425/1426 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B4 — H12: generic device webhook — not started
+### B4 — H12: generic device webhook — done
 
-- `device_webhook_credentials` migration + model, registered in
+- `device_webhook_credentials` migration (`batch_id` nullable — null means
+  "any batch") + `DeviceWebhookCredential` model (Batches), registered in
   `TenantModelRegistry`.
-- A bare, host-agnostic webhook route + controller — HMAC-SHA256
-  verification against the credential's own `webhook_secret`, same
-  signature-header shape `ZoomRecordingWebhookHandler` (S14 B8) already
-  established. Payload contract: `{device_label, user_identifier,
-  event: 'check_in'|'check_out', timestamp}` — `user_identifier` resolved
-  against `User.email` or a new lightweight per-tenant device-id mapping
-  (decided at build time once the exact matching need is confirmed against
-  the design doc's own §4 decision 11 scope).
-- Writes `AttendanceRecord` with `source = 'device_webhook'`.
-- New tests: valid signature accepted and writes a record, invalid/missing
-  signature refused (401/403), unknown `user_identifier` refused without
-  a fatal error, wrong-tenant credential can't write into another tenant's
-  attendance.
+- `App\Http\Controllers\Batches\DeviceWebhookController` (route
+  `POST /api/webhooks/device/{credential}`, no `Route::domain(...)`,
+  same "no business logic in the controller" split as
+  `ZoomRecordingWebhookController`) + `DeviceWebhookHandler` (Batches) —
+  HMAC-SHA256 over `v0:{timestamp}:{body}` prefixed `v0=`, same scheme
+  `ZoomRecordingWebhookHandler` established, verified against the
+  looked-up credential's own `webhook_secret` (not one fixed app-wide
+  secret, since each tenant configures its own).
+- `user_identifier` resolves against `User.email`, explicitly scoped to
+  the credential's own `tenant_id` — this is also what makes a
+  correctly-signed request for tenant A's credential structurally unable
+  to write into tenant B's attendance even naming a real tenant-B email,
+  no special-case check needed.
+- Build-time call the plan flagged as undecided: the payload carries no
+  session reference, so the target `BatchSession` is resolved as the one
+  currently-live session (`liveState() === STATE_LIVE`) among the batches
+  the credential covers (its own `batch_id`, or every batch the user is
+  actively enrolled in when null) that the user is actually enrolled in.
+  No live match (off-hours, wrong device) is a silent no-op, not an
+  error — a physical device firing outside class hours must not 500.
+  Writes `AttendanceRecord` via the same `updateOrCreate` shape as B3's
+  `GeofenceCheckIn`, `source = 'device_webhook'`, fires
+  `AttendanceRecorded`. `AttendanceRecord::SOURCES` widened again.
+- No Admin-panel CRUD for `DeviceWebhookCredential` in this block — not
+  listed in the plan's own B4 checklist; a credential is provisioned via
+  tinker/seeder for now, same as any other build-time gap this app has
+  left for a later block/review pass to pick up if it turns out load-
+  bearing.
+- New tests (5): valid signature writes a present/`device_webhook`
+  record, bad signature refused 401 and writes nothing, missing signature
+  refused 401, unknown `user_identifier` no-ops without a fatal error, a
+  correctly-signed request naming a different tenant's real user writes
+  nothing (tenant-scoped lookup, not a special case). `composer test`:
+  1431/1432 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B5 — H13 pt.1: teacher attendance capture + sweep — not started
 

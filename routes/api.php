@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Batches\DeviceWebhookController;
 use App\Http\Controllers\Batches\ZoomRecordingWebhookController;
 use App\Http\Controllers\Billing\RazorpaySubscriptionWebhookController;
 use App\Http\Controllers\Fees\RazorpayWebhookController;
@@ -29,3 +30,10 @@ Route::post('/webhooks/razorpay-subscriptions', RazorpaySubscriptionWebhookContr
 // BatchSession inside the handler, not the route.
 Route::post('/webhooks/zoom-recording', ZoomRecordingWebhookController::class)
     ->name('webhooks.zoom-recording');
+
+// S16 B4 (H12) — per-credential secret, not one fixed app-wide one, so
+// the route carries the credential id; the controller looks it up (no
+// tenant scope bound yet, same reasoning as the Zoom route above) before
+// checking its signature.
+Route::post('/webhooks/device/{credential}', DeviceWebhookController::class)
+    ->name('webhooks.device');
