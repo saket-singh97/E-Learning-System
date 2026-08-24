@@ -3,18 +3,24 @@
 namespace App\Http\Controllers\Batches;
 
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Batches\Policies\EnrolmentApprovalPolicy;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Same gated shape as DownloadStudentImportErrorReportController (B10) —
- * role + tenant-scoped `find()` inside the controller, no extra route
- * middleware (matches DownloadGradebookPdfExportController's own bare
- * route registration). {enrolment} resolved via $request->route(), not
- * a type-hinted route-model-bound parameter (CLAUDE.md's domain-route
- * splicing gotcha).
+ * B21 review-pass fix: the original role-only check (institute_admin OR
+ * instructor) let any instructor in the tenant download any other
+ * instructor's own batch's ID cards — the exact per-instructor boundary
+ * B2 closed everywhere else in this slice. Reuses
+ * EnrolmentApprovalPolicy::canDecide() (already the canonical "may this
+ * actor act on this batch" check) instead of a bespoke role list — its
+ * institute_admin branch also closes the sibling cross-tenant gap (a
+ * same-role actor from a different tenant, reachable because Filament
+ * roles carry no tenant_id of their own). {enrolment} resolved via
+ * $request->route(), not a type-hinted route-model-bound parameter
+ * (CLAUDE.md's domain-route splicing gotcha).
  */
 class DownloadIdCardController extends Controller
 {
@@ -22,11 +28,13 @@ class DownloadIdCardController extends Controller
     {
         $viewer = $request->user();
 
-        abort_unless($viewer !== null && $viewer->hasAnyRole(['institute_admin', 'instructor']), 403);
+        abort_unless($viewer !== null && $viewer->hasAnyRole(EnrolmentApprovalPolicy::DECIDER_ROLES), 403);
 
         $enrolment = Enrolment::find($request->route('enrolment'));
 
         abort_unless($enrolment !== null, 404);
+
+        abort_unless(app(EnrolmentApprovalPolicy::class)->canDecide($viewer, $enrolment->batch), 403);
 
         $idCard = $enrolment->idCard;
 

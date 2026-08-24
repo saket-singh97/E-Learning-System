@@ -40,6 +40,12 @@ class StudentImportBatchResource extends Resource
                 ->directory('student-imports/tmp')
                 ->acceptedFileTypes(['text/csv', 'text/plain'])
                 ->rules(['mimes:csv,txt'])
+                // Phase 1 (StudentCsvImporter::parse()) reads the whole
+                // file into memory and processes every line synchronously,
+                // in-request — this caps it well above what 5000 short
+                // rows needs (roughly 1MB), so the upload UI's own "Up to
+                // 5000 rows" claim is actually enforced, not just stated.
+                ->maxSize(2048)
                 ->required()
                 ->dehydrated()
                 ->helperText('Columns: name, email, phone (optional), batch (the batch\'s own slug). Up to 5000 rows.'),

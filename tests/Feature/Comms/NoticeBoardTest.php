@@ -96,3 +96,49 @@ it('shows nothing for a guest', function () {
     Livewire::test(NoticeBoard::class)
         ->assertDontSee('Holiday notice');
 });
+
+it('hides a notice with a future published_at instead of treating non-null as live', function () {
+    Notice::create([
+        'title' => 'Scheduled notice',
+        'body' => 'Not yet.',
+        'audience_roles' => ['student'],
+        'published_at' => now()->addDay(),
+        'created_by_user_id' => $this->admin->id,
+    ]);
+
+    Livewire::actingAs($this->student)
+        ->test(NoticeBoard::class)
+        ->assertDontSee('Scheduled notice');
+});
+
+it('shows nothing for an authenticated viewer with no roles, rather than every notice', function () {
+    Notice::create([
+        'title' => 'Admin-only notice',
+        'body' => 'Confidential.',
+        'audience_roles' => ['institute_admin'],
+        'published_at' => now(),
+        'created_by_user_id' => $this->admin->id,
+    ]);
+
+    $roleless = User::factory()->create(['tenant_id' => $this->tenant->id]);
+
+    Livewire::actingAs($roleless)
+        ->test(NoticeBoard::class)
+        ->assertDontSee('Admin-only notice');
+});
+
+it('refuses to record a read receipt for a notice the viewer was never shown', function () {
+    $hidden = Notice::create([
+        'title' => 'Staff meeting',
+        'body' => 'Friday 5pm.',
+        'audience_roles' => ['instructor'],
+        'published_at' => now(),
+        'created_by_user_id' => $this->admin->id,
+    ]);
+
+    Livewire::actingAs($this->student)
+        ->test(NoticeBoard::class)
+        ->call('markAsRead', $hidden->id);
+
+    expect(NoticeReadReceipt::where('notice_id', $hidden->id)->where('user_id', $this->student->id)->exists())->toBeFalse();
+});

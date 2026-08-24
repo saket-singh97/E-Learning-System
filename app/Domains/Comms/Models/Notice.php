@@ -45,7 +45,7 @@ class Notice extends Model
 
     public function isPublished(): bool
     {
-        return $this->published_at !== null;
+        return $this->published_at !== null && $this->published_at->isPast();
     }
 
     public function isForRole(string $role): bool

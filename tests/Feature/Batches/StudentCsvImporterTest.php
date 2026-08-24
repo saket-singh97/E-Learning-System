@@ -85,3 +85,28 @@ it('collects per-row errors without refusing the whole file', function () {
     expect($messages[2])->toContain('No batch found');
     expect($messages[3])->toContain('Duplicate email');
 });
+
+it('strips a UTF-8 BOM instead of rejecting the file as bad headers', function () {
+    $csv = "\xEF\xBB\xBFname,email,phone,batch\nAsha Kumar,asha@example.com,,batch-a";
+
+    $result = $this->importer->parse($csv, $this->admin);
+
+    expect($result['importBatch']->error_count)->toBe(0);
+    expect($result['valid'])->toHaveCount(1);
+    expect($result['valid'][0]['email'])->toBe('asha@example.com');
+});
+
+it('reports a per-row error instead of crashing on a column-count mismatch', function () {
+    $csv = implode("\n", [
+        'name,email,phone,batch',
+        'John,john@example.com,batch-a', // missing the phone column entirely
+        'Asha Kumar,asha@example.com,,batch-a',
+    ]);
+
+    $result = $this->importer->parse($csv, $this->admin);
+
+    expect($result['importBatch']->error_count)->toBe(1);
+    expect($result['valid'])->toHaveCount(1);
+    expect($result['valid'][0]['email'])->toBe('asha@example.com');
+    expect($result['errors'][0]['message'])->toContain('different number of columns');
+});

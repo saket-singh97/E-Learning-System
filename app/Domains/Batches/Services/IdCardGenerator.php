@@ -7,6 +7,7 @@ use App\Domains\Batches\Models\IdCard;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -24,24 +25,44 @@ class IdCardGenerator
 {
     public function generate(Enrolment $enrolment): IdCard
     {
-        $cardNumber = 'ID-'.strtoupper(Str::random(10));
-        $diskPath = "id-cards/{$enrolment->tenant_id}/{$enrolment->id}.pdf";
+        // The Filament action's own visible() check (!idCard()->exists())
+        // is only a UI hint, not a DB-level guard — two near-simultaneous
+        // "Issue ID card" requests (double-click, two open tabs) could
+        // otherwise both pass it, each write a distinct card_number to
+        // the exact same deterministic $diskPath, and leave the DB row
+        // desynced from whichever PDF the second write left on disk.
+        // lockForUpdate() serializes concurrent callers on this
+        // enrolment; the second one to acquire the lock finds the first
+        // one's row already committed and returns it unchanged instead
+        // of generating a duplicate.
+        return DB::transaction(function () use ($enrolment): IdCard {
+            $locked = Enrolment::whereKey($enrolment->id)->lockForUpdate()->firstOrFail();
 
-        $qrPng = (new PngWriter())->write(new QrCode(data: $cardNumber))->getString();
+            $existing = IdCard::where('enrolment_id', $locked->id)->first();
 
-        Pdf::loadView('batches.id-card-pdf', [
-            'student' => $enrolment->user,
-            'batch' => $enrolment->batch,
-            'cardNumber' => $cardNumber,
-            'qrDataUri' => 'data:image/png;base64,'.base64_encode($qrPng),
-            'issuedAt' => now(),
-        ])->save($diskPath, 'local');
+            if ($existing !== null) {
+                return $existing;
+            }
 
-        return IdCard::create([
-            'enrolment_id' => $enrolment->id,
-            'card_number' => $cardNumber,
-            'disk_path' => $diskPath,
-            'issued_at' => now(),
-        ]);
+            $cardNumber = 'ID-'.strtoupper(Str::random(10));
+            $diskPath = "id-cards/{$locked->tenant_id}/{$locked->id}.pdf";
+
+            $qrPng = (new PngWriter())->write(new QrCode(data: $cardNumber))->getString();
+
+            Pdf::loadView('batches.id-card-pdf', [
+                'student' => $locked->user,
+                'batch' => $locked->batch,
+                'cardNumber' => $cardNumber,
+                'qrDataUri' => 'data:image/png;base64,'.base64_encode($qrPng),
+                'issuedAt' => now(),
+            ])->save($diskPath, 'local');
+
+            return IdCard::create([
+                'enrolment_id' => $locked->id,
+                'card_number' => $cardNumber,
+                'disk_path' => $diskPath,
+                'issued_at' => now(),
+            ]);
+        });
     }
 }

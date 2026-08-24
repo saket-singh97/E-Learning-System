@@ -52,6 +52,10 @@ class BatchForum extends Component
 
     public function openThread(int $threadId): void
     {
+        if (! $this->canParticipate(auth()->user())) {
+            return;
+        }
+
         $thread = ForumThread::where('batch_id', $this->batch->id)->find($threadId);
 
         if ($thread !== null) {
@@ -172,11 +176,20 @@ class BatchForum extends Component
     public function render(): View
     {
         $viewer = auth()->user();
+        $canParticipate = $this->canParticipate($viewer);
 
+        // B21 review-pass fix: threads()/postTree() were being computed
+        // and handed to the view unconditionally — the route this
+        // component embeds on (`/batches/{batch}/forum`) carries no auth
+        // middleware, so a guest or a non-enrolled/non-staff tenant user
+        // could read every thread title and full nested post tree (author
+        // names + bodies) despite the class's own docblock claiming a
+        // "guest sees a log-in prompt inside the component" gate that,
+        // for the read path, was never actually wired up.
         return view('comms::batch-forum', [
-            'threads' => $this->threads(),
-            'posts' => $this->postTree(),
-            'canParticipate' => $this->canParticipate($viewer),
+            'threads' => $canParticipate ? $this->threads() : collect(),
+            'posts' => $canParticipate ? $this->postTree() : collect(),
+            'canParticipate' => $canParticipate,
         ]);
     }
 }

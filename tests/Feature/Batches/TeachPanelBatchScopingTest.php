@@ -85,6 +85,15 @@ it('forbids an instructor from creating a batch in the Teach panel', function ()
         ->assertForbidden();
 });
 
+it('hides the instructor_id field from the Teach panel edit form', function () {
+    $this->actingAs($this->instructorA)
+        ->get(BatchResource::getUrl('edit', ['record' => $this->batchA, 'subdomain' => 'physics'], panel: 'teach'))
+        ->assertOk();
+
+    Livewire::test(EditBatch::class, ['record' => $this->batchA->id])
+        ->assertFormFieldIsHidden('instructor_id');
+});
+
 it('lets the assigned instructor approve an enrolment for their own batch', function () {
     $student = User::factory()->create(['tenant_id' => $this->tenant->id]);
     $student->assignRole('student');

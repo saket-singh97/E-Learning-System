@@ -30,7 +30,16 @@ class NoticeBoard extends Component
 
         $roles = $viewer->getRoleNames()->all();
 
-        return Notice::whereNotNull('published_at')
+        // A roleless viewer must see nothing, not everything — an empty
+        // where(Closure) group below would add zero orWhereJsonContains()
+        // clauses, and the query builder drops an empty group entirely
+        // rather than matching nothing, silently degrading the whole
+        // audience filter to "every published notice in the tenant."
+        if ($roles === []) {
+            return collect();
+        }
+
+        return Notice::where('published_at', '<=', now())
             ->where(function (Builder $query) use ($roles): void {
                 foreach ($roles as $role) {
                     $query->orWhereJsonContains('audience_roles', $role);
@@ -45,6 +54,14 @@ class NoticeBoard extends Component
         $viewer = auth()->user();
 
         if ($viewer === null) {
+            return;
+        }
+
+        // Re-run the same visibility check notices() uses — the client
+        // hands back a bare int, so without this a crafted call could
+        // write a read receipt for a draft or a different-role notice
+        // the viewer was never actually shown.
+        if (! $this->notices()->contains('id', $noticeId)) {
             return;
         }
 

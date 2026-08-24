@@ -66,3 +66,39 @@ it('forbids a student from downloading', function () {
         ->get("http://physics.lms.test/id-cards/{$this->enrolment->id}/download")
         ->assertForbidden();
 });
+
+it('forbids an instructor not assigned to this enrolment\'s batch', function () {
+    (new IdCardGenerator)->generate($this->enrolment);
+
+    $otherInstructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $otherInstructor->assignRole('instructor');
+
+    $this->actingAs($otherInstructor)
+        ->get("http://physics.lms.test/id-cards/{$this->enrolment->id}/download")
+        ->assertForbidden();
+});
+
+it('allows the enrolment\'s own assigned instructor to download', function () {
+    (new IdCardGenerator)->generate($this->enrolment);
+
+    $instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $instructor->assignRole('instructor');
+    $this->enrolment->batch->update(['instructor_id' => $instructor->id]);
+
+    $this->actingAs($instructor)
+        ->get("http://physics.lms.test/id-cards/{$this->enrolment->id}/download")
+        ->assertOk()
+        ->assertDownload();
+});
+
+it('forbids an institute_admin from a different tenant', function () {
+    (new IdCardGenerator)->generate($this->enrolment);
+
+    $otherTenant = Tenant::factory()->create(['subdomain' => 'chemistry']);
+    $otherAdmin = User::factory()->create(['tenant_id' => $otherTenant->id]);
+    $otherAdmin->assignRole('institute_admin');
+
+    $this->actingAs($otherAdmin)
+        ->get("http://physics.lms.test/id-cards/{$this->enrolment->id}/download")
+        ->assertForbidden();
+});

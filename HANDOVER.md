@@ -5,30 +5,146 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-22)
+## Right now (2026-08-24)
 
-- **S15 — Batch & Institute Operations: DESIGN + PLAN DONE, build not
-  started.** `docs/superpowers/specs/2026-08-22-s15-batch-institute-operations-design.md`,
-  `...-plan.md`. `docs/ROADMAP.md`'s own S15 row lists F6-F10/§S.S2-S7 (11
-  items), but §S.S7 (job board/placement module) is P3 and not named in
-  the roadmap's own one-line S15 scope description — cut, same "P3 item
-  absent from the headline gets cut" precedent S14 established for
-  D10-D12. Real build scope is 10 items. **Verified before writing the
-  design, one real load-bearing gap found**: no instructor↔course/batch
-  assignment exists anywhere in the codebase — every `instructor`-role
-  user has blanket tenant-wide access today (Spatie roles are global,
-  not resource-scoped), and `docs/FEATURES.md`'s own §S.S1 row
+- **S15 — Batch & Institute Operations: COMPLETE, all 22 blocks
+  (2026-08-24).** `docs/superpowers/specs/2026-08-22-s15-batch-institute-operations-design.md`,
+  `...-plan.md` (full per-block build log + B21's own review-pass notes
+  live there, not repeated here). `docs/ROADMAP.md`'s own S15 row lists
+  F6-F10/§S.S2-S7 (11 items), but §S.S7 (job board/placement module) is
+  P3 and not named in the roadmap's own one-line S15 scope description —
+  cut, same "P3 item absent from the headline gets cut" precedent S14
+  established for D10-D12. Real build scope was 10 items. Closed a real,
+  never-built P1 gap found before writing the design: no
+  instructor↔course/batch assignment existed anywhere — every
+  `instructor`-role user had blanket tenant-wide access (Spatie roles are
+  global, not resource-scoped), and `docs/FEATURES.md`'s own §S.S1 row
   ("instructor invitations, 14-day link, assignment, deactivate/
   reactivate") was never actually built despite being P1-tier and S1
-  "Foundation" marked done — F7 (conflict detection) and §S.S2
-  (per-instructor permissions) both need this closed first, so B0-B2 of
-  the plan build it as this slice's own foundation before touching
-  either named item. New `Operations` domain for the admission CRM
+  "Foundation" marked done. New `Operations` domain for the admission CRM
   (§S.S4) — doesn't fit `Batches` (nothing to enrol into yet) or
   `Tenancy` (not a role/branding concern); everything else extends
-  `Tenancy`/`Batches`/`Comms`. 11 new `BelongsToTenant` models. 22 blocks
-  (B0-B21). Next step: run the per-block build command in the plan doc
-  starting at B0.
+  `Tenancy`/`Batches`/`Comms`. 11 new `BelongsToTenant` models, all
+  registered in `TenantModelRegistry`, confirmed exact-complete in B20.
+  - **B0-B2** built the slice's own foundation: `instructor_invitations`
+    (token + 14-day expiry) + `batches.instructor_id` (one primary
+    instructor per batch, not a pivot — design decision 1); Admin-panel
+    invite/accept/assign/deactivate/reactivate flow
+    (`InstructorInvitationService`, a host-agnostic accept Livewire page,
+    on-demand `Notification::route()` since no `User` row exists yet for
+    the invitee); per-instructor permission enforcement —
+    `EnrolmentApprovalPolicy::canDecide()` tightened from "any same-tenant
+    instructor" to "that batch's own assigned instructor,"
+    `BatchResource` registered on the Teach panel for the first time
+    (it had zero route there before this slice) and scoped to
+    `instructor_id = auth()->id()`.
+  - **B3-B4** built F7: `timetable_templates` (a reusable weekly-slot
+    stamp, no live FK back to sessions created from one — design decision
+    3) + `TeacherConflictDetector` (write-time overlap check across every
+    session sharing an instructor, any batch, wired into
+    `BatchSessionsRelationManager`'s own `->rule()`).
+  - **B5-B6** built F6: `forum_threads`/`forum_posts` (depth capped at 3,
+    enforced at write time via a stored `depth` column, refused not
+    flattened) + a batch-scoped `BatchForum` Livewire component,
+    enrolment-gated with an institute_admin/assigned-instructor bypass.
+  - **B7-B8** built F8: `batch_feedback` (unique per student per batch,
+    1-5 DB `CHECK`, same `CourseReview` precedent) + a read-only
+    `FeedbackRelationManager` with Filament's own `Average` summarizer.
+  - **B9-B10** built F9: `StudentCsvImporter` (phase 1, synchronous parse
+    + validate, ≤5000 rows) + `ImportStudentsFromCsv` (phase 2, queued
+    creation job + downloadable per-row error report) — this app's first
+    real CSV import (`maatwebsite/excel` had only ever been used for
+    export before this).
+  - **B11-B12** built F10: `BulkEnrolStudents` and
+    `InviteInstructorsFromEmailList` — both thin `ShouldQueue` wrappers
+    around the single-row path already built (B0/B1's invitation service,
+    `BatchEnrolmentService::addManually()`), not new bulk-insert code
+    paths, inheriting every existing guarantee for free.
+  - **B13-B14** built §S.S4: new `Operations` domain, `enquiries` +
+    `enquiry_follow_ups`; `EnquiryConversionService::convert()` writes a
+    real `Enrolment` through `BatchEnrolmentService`, not a parallel
+    enrolment mechanism (design decision 9).
+  - **B15** built §S.S5: `id_cards` + `IdCardGenerator` (dompdf + a QR
+    baked in as a base64 PNG data URI — new to this codebase, `Certificate`'s
+    own QR only ever renders inline SVG on a web page, a different
+    context), issued on demand only, never auto-generated (design
+    decision 10).
+  - **B16-B17** built §S.S6: `notices` (role-targeted via `audience_roles`
+    JSON, not per-user) + Admin-panel authoring, then `notice_read_receipts`
+    + a `NoticeBoard` Livewire component embedded on both student and
+    parent dashboards. Fixing B17's own missing `Livewire::component()`
+    alias also surfaced that **B6's `comms.batch-forum` and B7's
+    `batches.batch-feedback-form` had the exact same gap** — all three
+    had been silently 500ing on their real host pages the whole time,
+    caught only because B17 was the first of the three actually hit over
+    real HTTP instead of only `Livewire::test()`.
+  - **B18-B19** built S3's real gap-close: `ExportEnrolmentRegister` and
+    `ExportCompletionRegister`, both copying `ExportAttendanceRegister`'s
+    exact shape (queued job + `RebindsTenant` + a bare Filament export
+    page + a gated download controller) — completion reuses
+    `GradebookService::isComplete()`/`scoreFor()` verbatim, not
+    re-derived.
+  - **B20** — `TenantModelRegistry` sweep, confirmed exact-complete (all
+    11 named models plus a reverse grep over every real `BelongsToTenant`
+    usage in `app/Domains/*/Models/*.php`, 62-for-62).
+  - **B21's own dedicated review pass** — 10 parallel finder agents (the
+    widest pass this discipline has run, matching this being the largest
+    single slice), same discipline S9 B14/S10 B15/S11 B16/S12 B14/S13
+    B17/S14 B18 each already established. **Found and fixed 7 real bugs,
+    each independently corroborated by 2-4 agents:** (1) a cross-tenant +
+    cross-instructor leak on `DownloadIdCardController`/
+    `DownloadStudentImportErrorReportController` (role-only checks, no
+    tenant/ownership check — the exact leak class B18/B19's own sibling
+    export controllers in this same slice were already hardened against),
+    fixed by reusing `EnrolmentApprovalPolicy::canDecide()` plus the same
+    explicit tenant check; (2) `batches.instructor_id` had **no reachable
+    Admin-panel field anywhere** — the only path that ever wrote it was
+    invitation-accept, so every pre-existing batch and every
+    admin-assigned (not freshly-invited) instructor silently broke
+    `canDecide()`, `StudentProgress`, and `TeacherConflictDetector` (whose
+    own null-instructor early return meant the double-booking guard never
+    fired for such batches) — fixed with an Admin-only `instructor_id`
+    field on `BatchResource::form()`; (3) `StudentCsvImporter::parse()`
+    crashed the whole synchronous upload with an uncaught `ValueError` on
+    one column-count-mismatched row, fixed into a per-row error like every
+    other validation failure there; (4) a UTF-8 BOM (which Excel's own
+    "CSV UTF-8" save option always prepends) wasn't stripped, silently
+    failing a perfectly valid re-upload's header check; (5) `NoticeBoard`/
+    `Notice::isPublished()` treated any non-null `published_at` as "live
+    now," ignoring a future date, and separately a roleless viewer
+    bypassed the audience filter entirely (an empty `orWhereJsonContains`
+    loop produces an empty `where(Closure)` the query builder drops
+    rather than matching nothing) — both fixed, plus `markAsRead()`
+    hardened to re-check visibility; (6) `BatchForum`'s read path
+    (`threads()`/`openThread()`/`postTree()`) never called
+    `canParticipate()` — only the write paths did — so any guest or
+    non-enrolled/non-staff tenant user could read a batch's entire private
+    discussion over the component's own unauthenticated route, fixed by
+    gating the read path the same way; (7) `IdCardGenerator` had a
+    check-then-write race (UI-only duplicate guard, deterministic disk
+    path, no DB constraint) — two near-simultaneous "Issue ID card" clicks
+    could both pass and desync the DB row from whichever PDF the second
+    write left on disk, fixed with `DB::transaction()` +
+    `lockForUpdate()`, making `generate()` idempotent. **Flagged, not
+    fixed** (documented limitation, same posture S11 B15 took for its own
+    race): `TeacherConflictDetector` has a check-then-write race of its
+    own — the overlap check runs inside a synchronous Filament
+    `->rule()`, before Filament's own separate persistence step, so no
+    transaction the rule itself opens can span both; also flagged, not
+    new: the direct Comms→Assignments/Operations→Batches/
+    Operations→Tenancy service calls this slice adds bypass CLAUDE.md's
+    Events-only cross-domain rule, but this exact pattern was confirmed
+    already pervasive across S1-S14, not a new regression. Two new
+    lifecycle E2E tests (`S15BatchInstituteOperationsE2ETest`), both
+    chained through the real Filament resources/relation managers:
+    enquiry → follow-up → convert-to-enrolment → ID card issued; and
+    instructor invite → accept → both assigned batches → a second
+    overlapping session on the other assigned batch refused.
+  - Tests green: **1406/1407** (same 1 pre-existing, unrelated
+    `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+    scope) — 124 new tests across all 22 blocks.
+  - `docs/PROJECT-STATUS.md` and `docs/ROADMAP.md` updated to COMPLETE/
+    Done, matching S1-S14's own post-completion format.
 
 - **S14 — Video & Live-Class Depth: COMPLETE, all 19 blocks
   (2026-08-22).** `docs/superpowers/specs/2026-08-19-s14-video-live-depth-design.md`,

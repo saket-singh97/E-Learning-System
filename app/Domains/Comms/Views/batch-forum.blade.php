@@ -1,7 +1,9 @@
 <div>
     <h2>Discussion</h2>
 
-    @if ($openThreadId === null)
+    @if (! $canParticipate)
+        <p>Log in with an account enrolled in this batch to view the discussion.</p>
+    @elseif ($openThreadId === null)
         @if ($canParticipate)
             <form wire:submit="createThread">
                 <input type="text" wire:model="newThreadTitle" placeholder="Thread title">

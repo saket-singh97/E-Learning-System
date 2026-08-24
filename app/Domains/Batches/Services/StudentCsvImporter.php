@@ -27,6 +27,12 @@ class StudentCsvImporter
      */
     public function parse(string $csvContents, User $uploader): array
     {
+        // Strip a UTF-8 BOM before anything else — Excel's own "CSV UTF-8"
+        // save option always prepends one, and left in place it silently
+        // attaches itself to the first header cell (`\xEF\xBB\xBFname`),
+        // making a perfectly valid re-upload fail badHeaders() below.
+        $csvContents = preg_replace('/^\xEF\xBB\xBF/', '', $csvContents);
+
         $lines = array_values(array_filter(
             preg_split('/\r\n|\r|\n/', trim($csvContents)),
             fn (string $line): bool => $line !== '',
@@ -52,7 +58,20 @@ class StudentCsvImporter
 
         foreach ($lines as $index => $line) {
             $rowNumber = $index + 2; // header occupies row 1
-            $fields = array_combine($header, str_getcsv($line));
+            $values = str_getcsv($line);
+
+            // array_combine() throws a ValueError on a count mismatch
+            // (PHP 8) — a stray/missing trailing comma (very easy to
+            // author by hand for an "optional" column like phone) must
+            // become a per-row error like every other validation failure
+            // here, not an uncaught crash that aborts the whole upload.
+            if (count($values) !== count($header)) {
+                $errors[] = ['row' => $rowNumber, 'message' => 'Row has a different number of columns than the header.'];
+
+                continue;
+            }
+
+            $fields = array_combine($header, $values);
 
             $name = trim((string) ($fields['name'] ?? ''));
             $email = strtolower(trim((string) ($fields['email'] ?? '')));

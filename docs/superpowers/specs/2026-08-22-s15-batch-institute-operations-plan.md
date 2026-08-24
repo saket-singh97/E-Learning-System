@@ -50,7 +50,7 @@ stop and report before starting the next block.
 | B18 | Enrolment report export — CSV job, `ExportAttendanceRegister`-shaped (§S.S3 pt.1, real gap-close) | ✅ done |
 | B19 | Completion report export — CSV job, same shape (§S.S3 pt.2, real gap-close) | ✅ done |
 | B20 | `TenantModelRegistry` sweep — all 11 new `BelongsToTenant` models confirmed registered | ✅ done |
-| B21 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B21 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite:** 1283/1284 at slice start (1 pre-existing, unrelated
 `CourseSlugUniquenessTest` failure carried since S1/S2, out of scope here
@@ -626,16 +626,121 @@ undershot its actual by a wide margin.
   load — not a regression, confirmed via `Get-Process php` showing active
   CPU burn throughout, not a hang.
 
-### B21 — Full test coverage, review pass — not started
+### B21 — Full test coverage, review pass — done
 
-- Lifecycle E2E test(s) mirroring S11 B16/S12 B14/S13 B17/S14 B18's own
-  posture — at minimum: enquiry → follow-up → convert-to-enrolment → ID
-  card issued, chained in one run; plus instructor invite → accept →
-  assigned batch → conflict detected on a second overlapping session
-  attempt.
-- Explicit review pass across every B0-B20 file for real bugs, not just
-  a green suite — same discipline S9 B14/S10 B15/S11 B16/S12 B14/S13
-  B17/S14 B18 each already established (each found real bugs this way).
-- Update `HANDOVER.md` (S15 complete entry + any new `## Avoid` entries),
-  `docs/PROJECT-STATUS.md` (new S15 section), `docs/ROADMAP.md` (S15 row
-  → Done).
+- Two lifecycle E2E tests (`tests/Feature/S15BatchInstituteOperationsE2ETest.php`),
+  mirroring S11 B16/S12 B14/S13 B17/S14 B18's own posture — chained
+  through the real Filament resources/relation managers, not services
+  called in isolation: (1) enquiry → follow-up (real `FollowUpsRelationManager`
+  action) → convert-to-enrolment (real `ListEnquiries` table action) → ID
+  card issued (real `EnrolmentsRelationManager` row action); (2)
+  instructor invite → accept (real `InstructorInvitationAccept` Livewire
+  page) → both assigned batches → a second, overlapping session on the
+  *other* assigned batch refused by the real `BatchSessionsRelationManager`
+  validation rule.
+- Explicit review pass across every B0-B20 file — 10 parallel finder
+  agents (line-by-line diff scan, removed-behavior audit, cross-file
+  tracer, language-pitfall/PHP-Laravel specialist, wrapper/proxy
+  correctness, efficiency, altitude/right-depth, simplification,
+  CLAUDE.md conventions, reuse/duplication), same discipline S9 B14/S10
+  B15/S11 B16/S12 B14/S13 B17/S14 B18 each already established — the
+  widest review pass this discipline has run yet, reflecting this being
+  the largest single slice (22 blocks, 11 new models). **Found and fixed
+  7 real bugs, independently corroborated by 2-4 agents each:**
+  1. **Cross-tenant + cross-instructor ID-card/error-report leak**:
+     `DownloadIdCardController` checked only role membership, not batch
+     ownership — any instructor in the tenant could download any *other*
+     instructor's own batch's ID cards, and (same gap in
+     `DownloadStudentImportErrorReportController`) an institute_admin
+     logged in on a *different* tenant's subdomain could resolve and
+     download another institute's data, since Spatie roles carry no
+     `tenant_id` and `SESSION_DOMAIN` is a shared parent domain — the
+     exact leak class `DownloadEnrolmentExportController`/
+     `DownloadCompletionExportController` (B18/B19, same slice) were
+     already hardened against. Fixed by reusing
+     `EnrolmentApprovalPolicy::canDecide()` (closes both the tenant and
+     the per-instructor gap in one call) and adding the same explicit
+     `$viewer->tenant_id === CurrentTenant::id()` check the sibling
+     export controllers already have.
+  2. **`batches.instructor_id` had no reachable Admin-panel field
+     anywhere** — the only production code path that ever wrote it was
+     `InstructorInvitationService::accept()`, so an admin assigning an
+     already-active instructor (not a fresh email invitation), or any
+     batch that existed before this slice's migration (nullable, no
+     backfill), left `instructor_id` permanently `null`. Silently broke
+     three things this same slice built on that column:
+     `EnrolmentApprovalPolicy::canDecide()` (an assigned instructor
+     couldn't approve/reject/cancel/bulk-enrol/issue ID cards for their
+     own batch), `StudentProgress` (Teach panel roster went empty), and
+     `TeacherConflictDetector` (its own `instructor_id === null` early
+     return meant the double-booking guard silently never fired for any
+     admin-created batch). Fixed with an Admin-only `instructor_id`
+     `Select` on `BatchResource::form()` (hidden on the Teach panel — an
+     instructor shouldn't reassign their own batch away from themselves).
+  3. **`StudentCsvImporter::parse()` crashed the whole synchronous upload
+     on one malformed row** — `array_combine($header, str_getcsv($line))`
+     throws an uncaught `ValueError` (PHP 8) on a column-count mismatch, a
+     very easy mistake for a hand-authored CSV omitting an "optional"
+     trailing column. Fixed by counting first and routing a mismatch into
+     the same per-row `$errors` array every other validation failure
+     already uses.
+  4. **UTF-8 BOM not stripped** — Excel's own "CSV UTF-8" save option
+     always prepends one, silently attaching it to the first header cell
+     and failing `badHeaders()` on a perfectly valid re-upload. Fixed
+     with a `preg_replace` strip before line-splitting.
+  5. **`NoticeBoard`/`Notice::isPublished()` treated "has a `published_at`
+     value" as "is live now"**, ignoring a future-dated timestamp —
+     `NoticeResource`'s own `DateTimePicker` is freely editable to any
+     date, so a "schedule for later" read of the UI actually published
+     immediately. Separately, **a roleless viewer bypassed the audience
+     filter entirely**: an empty `orWhereJsonContains` loop produces an
+     empty `where(Closure)` group, which the query builder drops rather
+     than matching nothing, degrading to "every published notice in the
+     tenant." Fixed both (`published_at <= now()`, an explicit
+     empty-roles early return) plus hardened `markAsRead()` to re-check
+     visibility before writing a receipt for an arbitrary client-supplied
+     notice id.
+  6. **`BatchForum`'s read path (`threads()`/`openThread()`/`postTree()`/
+     `render()`) never called `canParticipate()`** — only the write paths
+     (`createThread()`/`reply()`) did. The embedding route carries no
+     `auth` middleware, so any guest or non-enrolled/non-staff tenant user
+     could read every thread title and the full nested post tree (author
+     names + bodies) for a batch they have no relationship to. Fixed by
+     gating `render()`'s data and `openThread()` itself behind the same
+     `canParticipate()` check the write paths already used.
+  7. **`IdCardGenerator` had a check-then-write race** — the Filament
+     action's `!idCard()->exists()` visibility guard is UI-only, no DB
+     constraint backs it, and the disk path is deterministic per
+     enrolment; two near-simultaneous "Issue ID card" clicks could both
+     pass, each write a distinct `card_number` to the *same* path, and
+     leave two `IdCard` rows with the second PDF silently overwriting the
+     first. Fixed with `DB::transaction()` + `lockForUpdate()` on the
+     `Enrolment` row, making `generate()` idempotent — a second call
+     while the first is in flight (or after) returns the existing card
+     instead of creating a duplicate.
+  Also added a `maxSize()` cap on the CSV upload field (the UI's own "Up
+  to 5000 rows" claim was previously unenforced — Phase 1 reads the whole
+  file into memory synchronously, in-request).
+  **Flagged, not fixed** (documented limitation, same "flag rather than
+  fix under this block's time-boxed scope" posture S11 B15 took for its
+  own webhook/manual-change race): `TeacherConflictDetector` has a
+  check-then-write race of its own — the overlap check runs inside a
+  synchronous Filament form `->rule()`, before the record is actually
+  persisted later in Filament's own separate lifecycle, so no transaction
+  the rule itself opens can hold through to the real insert; two
+  near-simultaneous overlapping-session submissions for the same
+  instructor could both pass. Also flagged: the direct
+  Comms→Assignments/Operations→Batches/Operations→Tenancy service calls
+  this slice adds each bypass CLAUDE.md's "domains talk through Events/
+  only" rule, but a repo-wide check confirmed this exact pattern is
+  already pervasive across S1-S14 — not a new regression, existing
+  architecture debt; and duplicated boilerplate across the 5 CSV-export
+  Job/Controller/Filament-page triples and 3 separate "find-or-create a
+  user across a tenant boundary" implementations, both real but scoped
+  out of a bug-fix pass.
+- `composer test`: 1407 tests, 1406 pass, 1 pre-existing unrelated
+  `CourseSlugUniquenessTest` fail (unchanged since B0), 0 new errors —
+  18 new tests across B21 alone (2 E2E + regression coverage for all 7
+  fixes above).
+- Updated `HANDOVER.md` (S15 complete entry), `docs/PROJECT-STATUS.md`
+  (new S15 section), `docs/ROADMAP.md` (S15 row → Done).

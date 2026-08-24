@@ -51,3 +51,16 @@ it('forbids a non-admin from downloading', function () {
         ->get("http://physics.lms.test/student-imports/{$this->importBatch->id}/error-report")
         ->assertForbidden();
 });
+
+it('forbids an institute_admin from a different tenant', function () {
+    Storage::disk('local')->put("student-imports/{$this->importBatch->id}-errors.csv", "Row,Error\n2,Name is required.");
+    $this->importBatch->update(['error_report_disk_path' => "student-imports/{$this->importBatch->id}-errors.csv"]);
+
+    $otherTenant = Tenant::factory()->create(['subdomain' => 'chemistry']);
+    $otherAdmin = User::factory()->create(['tenant_id' => $otherTenant->id]);
+    $otherAdmin->assignRole('institute_admin');
+
+    $this->actingAs($otherAdmin)
+        ->get("http://physics.lms.test/student-imports/{$this->importBatch->id}/error-report")
+        ->assertForbidden();
+});

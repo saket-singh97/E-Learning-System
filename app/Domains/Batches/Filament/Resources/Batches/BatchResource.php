@@ -10,6 +10,7 @@ use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\EnrolmentsRe
 use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\FeedbackRelationManager;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Content\Models\Course;
+use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -83,6 +84,26 @@ class BatchResource extends Resource
                 ->options(fn () => Course::where('status', 'published')->pluck('title', 'id'))
                 ->searchable()
                 ->required(),
+            // B21 review-pass fix: instructor_id (B0) had no reachable
+            // Admin-panel field anywhere — the only production path that
+            // ever wrote it was InstructorInvitationService::accept(),
+            // so an admin assigning/reassigning an already-active
+            // instructor (not a fresh invitation) had no way to do it,
+            // silently locking that instructor out of everything
+            // EnrolmentApprovalPolicy::canDecide() and
+            // TeacherConflictDetector gate on. Admin-only, same panel
+            // idiom canCreate()/getEloquentQuery() above already use —
+            // an instructor editing their own batch on the Teach panel
+            // shouldn't be able to reassign it away from themselves.
+            Select::make('instructor_id')
+                ->label('Instructor')
+                ->options(fn (): array => User::role('instructor')
+                    ->where('tenant_id', app(CurrentTenant::class)->id())
+                    ->pluck('name', 'id')
+                    ->all())
+                ->searchable()
+                ->nullable()
+                ->visible(fn (): bool => Filament::getCurrentPanel()?->getId() !== 'teach'),
             TextInput::make('title')
                 ->required()
                 ->maxLength(255)

@@ -136,6 +136,49 @@ it('rejects an instalment plan whose percentages do not sum to 100', function ()
     expect(Batch::where('slug', 'broken-instalment-batch')->count())->toBe(0);
 });
 
+it('lets an admin assign an already-active instructor to a batch, not just via invitation accept', function () {
+    $instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $instructor->assignRole('instructor');
+
+    Livewire::test(CreateBatch::class)
+        ->fillForm([
+            'course_id' => $this->course->id,
+            'title' => 'Assigned Batch',
+            'slug' => 'assigned-batch',
+            'starts_on' => '2026-09-01',
+            'ends_on' => '2026-12-01',
+            'instructor_id' => $instructor->id,
+            'self_enrol_mode' => 'manual_only',
+            'status' => 'published',
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $batch = Batch::where('slug', 'assigned-batch')->sole();
+    expect($batch->instructor_id)->toBe($instructor->id);
+});
+
+it('lets an admin reassign an existing batchs instructor from the edit form', function () {
+    $instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $instructor->assignRole('instructor');
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'title' => 'Reassign Batch',
+        'slug' => 'reassign-batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    Livewire::test(EditBatch::class, ['record' => $batch->id])
+        ->fillForm(['instructor_id' => $instructor->id])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($batch->refresh()->instructor_id)->toBe($instructor->id);
+});
+
 it('edits an existing batch', function () {
     $batch = Batch::create([
         'course_id' => $this->course->id,

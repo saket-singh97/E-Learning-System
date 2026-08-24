@@ -89,6 +89,55 @@ it('no-ops for a guest', function () {
     expect(ForumThread::where('batch_id', $this->batch->id)->count())->toBe(0);
 });
 
+it('hides thread titles and post bodies from a guest instead of only gating the reply form', function () {
+    $thread = ForumThread::create([
+        'batch_id' => $this->batch->id,
+        'title' => 'Private discussion title',
+        'created_by_user_id' => $this->instructor->id,
+    ]);
+    App\Domains\Comms\Models\ForumPost::create([
+        'forum_thread_id' => $thread->id,
+        'author_id' => $this->instructor->id,
+        'body' => 'Secret post body',
+        'depth' => 0,
+    ]);
+
+    Livewire::test(BatchForum::class, ['batch' => $this->batch])
+        ->assertDontSee('Private discussion title')
+        ->assertDontSee('Secret post body');
+});
+
+it('hides thread titles from a same-tenant student with no active enrolment in this batch', function () {
+    $outsider = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $outsider->assignRole('student');
+
+    ForumThread::create([
+        'batch_id' => $this->batch->id,
+        'title' => 'Private discussion title',
+        'created_by_user_id' => $this->instructor->id,
+    ]);
+
+    Livewire::actingAs($outsider)
+        ->test(BatchForum::class, ['batch' => $this->batch])
+        ->assertDontSee('Private discussion title');
+});
+
+it('refuses openThread for a non-participant even when called directly', function () {
+    $outsider = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $outsider->assignRole('student');
+
+    $thread = ForumThread::create([
+        'batch_id' => $this->batch->id,
+        'title' => 'Week 1',
+        'created_by_user_id' => $this->instructor->id,
+    ]);
+
+    Livewire::actingAs($outsider)
+        ->test(BatchForum::class, ['batch' => $this->batch])
+        ->call('openThread', $thread->id)
+        ->assertSet('openThreadId', null);
+});
+
 it('nests replies to depth 2 and refuses a depth-3 attempt with a visible error', function () {
     $component = Livewire::actingAs($this->student)
         ->test(BatchForum::class, ['batch' => $this->batch])
