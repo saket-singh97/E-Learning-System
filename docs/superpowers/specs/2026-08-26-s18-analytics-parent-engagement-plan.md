@@ -28,7 +28,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | A1 pt.1 — `EngagementMetricsService` (engagement ratio + speed profile) | ✅ done |
 | B1 | A1 pt.2 — instructor/admin-facing engagement metrics view | ✅ done |
-| B2 | A2 pt.1 — `RewatchHeatmapService` | ⬜ not started |
+| B2 | A2 pt.1 — `RewatchHeatmapService` | ✅ done |
 | B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ⬜ not started |
 | B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ⬜ not started |
 | B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ⬜ not started |
@@ -100,16 +100,24 @@ stop and report before starting the next block.
   unrelated failures as B0 (`CourseSlugUniquenessTest`,
   `BackupConfigurationTest`).
 
-### B2 — A2 pt.1: `RewatchHeatmapService` — not started
+### B2 — A2 pt.1: `RewatchHeatmapService` — done
 
-- `RewatchHeatmapService::heatmapFor(Lesson $lesson): Collection` —
-  buckets every `VideoWatchEvent` row for the lesson into fixed-width
-  time buckets (e.g. 10s), counts distinct students whose
-  `[start_s, end_s]` overlaps each bucket, returns buckets sorted by
-  replay count desc.
-- Tests: a lesson with a heavily-rewatched 90s window ranks that window's
-  buckets highest; a lesson with no watch events returns an empty
-  collection, not an error.
+- `app/Domains/Analytics/Services/RewatchHeatmapService.php` created —
+  `heatmapFor(Lesson $lesson): Collection` buckets every
+  `VideoWatchEvent` into fixed 10s windows (`BUCKET_WIDTH_S`, same width
+  as the player's own heartbeat cadence), counts distinct students whose
+  `[start_s, end_s]` overlaps each bucket (`end_s` exclusive — an event
+  ending exactly on a bucket boundary never spills into the next one),
+  sorted by `replay_count` desc.
+- Tests: `tests/Feature/Analytics/RewatchHeatmapServiceTest.php`, 5 cases
+  — a 90-100s window overlapped by 3 students ranks highest over 1-student
+  windows; one student rewatching the same window 5 times counts once,
+  not 5; boundary-exact event never spills into the adjacent bucket;
+  empty collection (not error) for no watch events; another lesson's
+  events never leak in. All 5 pass.
+- `composer test` full suite: 1584/1586 pass. Same 2 pre-existing/
+  unrelated failures as B0/B1 (`CourseSlugUniquenessTest`,
+  `BackupConfigurationTest`).
 
 ### B3 — A2 pt.2: rewatch heatmap UI — not started
 
