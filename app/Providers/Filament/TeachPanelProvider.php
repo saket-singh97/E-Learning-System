@@ -80,6 +80,10 @@ class TeachPanelProvider extends PanelProvider
             ])
             ->discoverResources(in: app_path('Domains/Assessments/Filament/Resources'), for: 'App\Domains\Assessments\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Assignments/Filament/Resources'), for: 'App\Domains\Assignments\Filament\Resources')
+            // S17 B2 — new domain, no split-visibility concern like
+            // Content's own directory (B2's own reason for that split
+            // doesn't apply here), so directory-wide discovery is safe.
+            ->discoverResources(in: app_path('Domains/AI/Filament/Resources'), for: 'App\Domains\AI\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Teach/Pages'), for: 'App\Filament\Teach\Pages')
             ->pages([
                 Dashboard::class,

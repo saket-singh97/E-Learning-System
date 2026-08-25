@@ -30,7 +30,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | `AiProvider::chatWithImage()` — new interface method, foundational for L14 | ✅ done |
 | B1 | L9 pt.1 — `course_outline_drafts` schema + `CourseOutlineGenerator` service | ✅ done |
-| B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ⬜ not started |
+| B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ✅ done |
 | B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ⬜ not started |
 | B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ⬜ not started |
 | B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ⬜ not started |
@@ -97,19 +97,45 @@ stop and report before starting the next block.
 - `composer test`: 1523/1524 pass, only failure is the pre-existing
   unrelated `CourseSlugUniquenessTest` flake.
 
-### B2 — L9 pt.2: review UI + approval → real Content records — not started
+### B2 — L9 pt.2: review UI + approval → real Content records — done
 
-- Instructor-facing Livewire/Filament view: edit generated section/lesson
-  titles and descriptions before approving.
-- Approve action: creates real `Course` (unpublished/draft state — verify
-  `Content` domain's existing draft-state convention before reusing it),
-  `CourseSection`, and `Lesson` rows directly from the draft's
-  `generated_outline` (design §4 decision 1) and sets
-  `created_course_id`.
-- Tests: approval produces the exact section/lesson count and titles from
-  the draft; a rejected draft creates nothing; re-approving an
-  already-approved draft is a no-op or blocked (decide on build, document
-  the choice).
+- `CourseOutlineDraftResource` (AI domain, Teach panel, new
+  `discoverResources()` line in `TeachPanelProvider` — new domain, no
+  split-visibility concern like `Content`'s directory, so directory-wide
+  discovery is safe). No `create` route: generation is a header
+  Action on the list page (`ListCourseOutlineDrafts::getHeaderActions()`,
+  topic + target_level fields), same "header Action with its own schema,
+  no blank create form" shape L5's `ListQuestions::getHeaderActions()`
+  ("Generate with AI") already established for `QuestionGenerator`.
+- Edit page: `generated_outline` as a nested `Repeater` (sections →
+  lessons, `section_title`/`title`/`description`), disabled once the
+  draft leaves `status=draft`. Approve/Reject as table row actions
+  (`CourseOutlineDraftResource::table()`) and mirrored as Edit-page header
+  actions — same `Action::make('approve')->visible(status===draft)`
+  shape `QuestionResource`'s own approve action already established.
+- `CourseOutlineApprovalService::approve()`/`reject()` (AI domain) —
+  approve creates `Course` (`status=draft`, `Content`'s own convention) +
+  `CourseSection` + `Lesson` (`type=text`) rows directly inside a
+  transaction, no `Content` service call (design §4 decision 1). The
+  outline's one-line lesson descriptions are **not** copied into
+  `Lesson.text_body` — doing so would blur "structure only" (design §4
+  decision 6) into real lesson content; they stay readable on the draft
+  row itself. Re-approving an already-decided draft (approved *or*
+  rejected) is a **no-op**, not blocked — decided over throwing because the
+  UI already hides the action once `status != draft`, so the only
+  realistic trigger is a double-click race, and a no-op can never leave a
+  duplicate `Course` behind.
+- Tests (`CourseOutlineApprovalServiceTest.php`): approval produces the
+  exact section/lesson count and titles from the draft; reject creates
+  nothing; re-approving an already-approved draft doesn't create a second
+  `Course`; approving an already-rejected draft stays rejected.
+- `composer test`: 1527/1528 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake. (A second flake,
+  `BackupConfigurationTest`, surfaced mid-block from stray test-artifact
+  files — OMR scans/exports/id-cards — accumulated in
+  `storage/app/private` across several consecutive full-suite runs earlier
+  today, pushing the backup zip over its 1MB test threshold; unrelated to
+  this block's code. Cleaned with the user's OK, confirmed gone on rerun.)
 
 ### B3 — L11 pt.1: revision-notes schema + generator — not started
 
