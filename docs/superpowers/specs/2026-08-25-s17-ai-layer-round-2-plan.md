@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ✅ done |
 | B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ✅ done |
 | B6 | L12 pt.2 — search UI (student portal search bar + results) | ✅ done |
-| B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ⬜ not started |
+| B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ✅ done |
 | B8 | L13 pt.2 — student-facing weak-topics view | ⬜ not started |
 | B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ⬜ not started |
 | B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ⬜ not started |
@@ -264,18 +264,37 @@ stop and report before starting the next block.
 - `composer test`: 1544/1545 pass, only failure is the pre-existing
   unrelated `CourseSlugUniquenessTest` flake.
 
-### B7 — L13 pt.1: weak-topic detection service — not started
+### B7 — L13 pt.1: weak-topic detection service — done
 
 - `WeakTopicDetectionService::weakTopicsFor(User $student, int
   $courseId): Collection` — joins the student's `quiz_answers` (via
-  `quiz_attempts`) to `questions.concept`, computes a per-concept
-  correctness ratio, cross-references against `lesson_artifacts.concepts`
-  for the course (exact-normalized match only, design §4 decision 3) to
-  attach "which lesson(s) cover this concept" for the weak ones.
-- Tests: a concept the student answers correctly is excluded; a concept
-  with no matching `lesson_artifacts` entry is still reported (just without
-  a linked lesson) rather than silently dropped; cross-tenant isolation
-  (student's own answers only, never another tenant's).
+  `quiz_attempts.user_id`, only graded answers with `is_correct` not null)
+  to `questions.concept` (`Question.course_id` used directly for the
+  course filter — no need to go through `Quiz -> Lesson -> Section ->
+  Course` since Question already carries its own `course_id`), groups by
+  exact-normalized concept name, computes a correctness ratio per group.
+  Below a **0.6 threshold** (placeholder round number, same
+  "deliberately doesn't invent a business number" posture
+  `AiSpendCap::CAPS_USD` already documents) a concept is reported weak,
+  cross-referenced against `lesson_artifacts.concepts[].name` (exact,
+  lowercased-string equality only, design §4 decision 3) to attach
+  covering lesson(s) — an unmatched concept stays in the results with an
+  empty `lessons` collection, never silently dropped.
+- No new schema (design §3.2 confirms L13 is a pure query/aggregation
+  service, same as L12/B5).
+- Tests (`WeakTopicDetectionServiceTest.php`): a concept answered
+  correctly (ratio ≥ threshold) is excluded; a weak concept with a
+  matching artifact returns its lesson, matched despite extra
+  whitespace/casing in the source data; a weak concept with no matching
+  artifact is still reported with an empty `lessons` collection; a
+  classmate's answers (same tenant) and a different tenant's answers
+  entirely never leak into the student's own report.
+- Build-time fix: `Quiz::create()` in the new fixtures needed
+  `blueprint`/`time_limit_minutes`/`max_attempts` explicitly (both NOT
+  NULL on `quizzes` — missed on the first pass, caught immediately by the
+  targeted test run).
+- `composer test`: 1548/1549 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake.
 
 ### B8 — L13 pt.2: student weak-topics view — not started
 
