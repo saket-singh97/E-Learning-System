@@ -7,6 +7,25 @@ at the source.
 
 ## Right now (2026-08-25)
 
+- **S17 — AI Layer, Round 2: DESIGNED, build not started.**
+  `docs/superpowers/specs/2026-08-25-s17-ai-layer-round-2-design.md`,
+  `...-plan.md` (14 blocks, B0-B13). Real build scope: 5 items (L9 course
+  outline generator, L11 revision notes, L12 semantic search, L13
+  weak-topic detection, L14 photo-based doubt solving) — L10 (auto-
+  subtitles) already shipped in S14, L15 (AI content-gen assist) is P3 and
+  not named in the roadmap's own S17 headline, cut for now. No new domain —
+  everything lands in the existing `AI` domain, reusing `LessonArtifact`/
+  `LessonArtifactChunk` (pgvector `nearestNeighbors`, already used by
+  `DoubtChatService`), `AiProvider` (gains one new method,
+  `chatWithImage()`, for L14 — additive, no existing call site touched),
+  and `AiSpendCap`/circuit-breaker decorators (already wrap every
+  `AiProvider` call, so new call sites are spend-capped for free). One
+  load-bearing decision to watch during build: L12's semantic search must
+  filter every result through `LessonAccess::isVisibleTo()` before
+  display — a raw vector search has no concept of enrollment and would
+  otherwise leak chunk text across courses, the same class of gap S16's
+  `GeofenceCheckIn` had before its own B17 review pass caught it.
+
 - **S16 — Assessment & Attendance Depth: COMPLETE, all 18 blocks
   (2026-08-25).** `docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md`,
   `...-plan.md` (full per-block build log + B17's own review-pass notes

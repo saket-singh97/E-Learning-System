@@ -15,8 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 16 (S1–S16) |
-| **Designed, not built** | 0 |
-| **Proposed, not yet scoped** | 10 (S17–S26) |
+| **Designed, not built** | 1 (S17) |
+| **Proposed, not yet scoped** | 9 (S18–S26) |
 
 **Phase completion:**
 
@@ -49,17 +49,24 @@ regenerate it from this file.
 
 ---
 
-## Full roadmap — S17 onward (proposed)
+## Designed, not built — S17
+
+| Slice | Scope | Size | Design | Status |
+|---|---|---|---|---|
+| S17 | AI Layer, Round 2 — course outline generator, revision notes, semantic search, weak-topic detection, photo-based doubt solving. Real scope is 5 items, not the row's headline "7": L10 (auto-subtitles) already shipped in S14, L15 (AI content-generation assist) is P3 and cut for now — same "not named in the headline, not in scope" boundary S16 drew the other way | 14 blocks | [design](superpowers/specs/2026-08-25-s17-ai-layer-round-2-design.md) / [plan](superpowers/specs/2026-08-25-s17-ai-layer-round-2-plan.md) | 🔵 Designed, build not started |
+
+---
+
+## Full roadmap — S18 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S16 were each shaped only once they
+slice's turn comes, the same way S10-S17 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S17 | AI Layer, Round 2 — course outline generator, semantic search, weak-topic detection, revision notes, photo-based doubt solving | 7 | L9-L15 |
 | S18 | Analytics & Parent Engagement — engagement ratio, rewatch heatmap, drop-off tracking, inactivity nudges, monthly report card, parent-teacher messaging | 8 | M5-M8, M14-M15, O5-O6 |
 | S19 | Communication Platform — real-time WebSockets, study planner + calendar, general forum, feedback surveys, help desk, gamification | 8 | N11-N18 |
 | S20 | Growth & Billing Extensions — affiliate codes, instructor payouts, refunds, subscription plans, multi-currency, revenue analytics (MRR/ARR) | 12 | R1-R6, P6/P8-P10, Q6-Q7 |
