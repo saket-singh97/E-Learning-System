@@ -44,7 +44,7 @@ stop and report before starting the next block.
 | B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ✅ done |
 | B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ✅ done |
 | B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ✅ done |
-| B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ⬜ not started |
+| B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ✅ done |
 | B17 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 **Test suite:** 1406/1407 at slice start (1 pre-existing, unrelated
@@ -588,17 +588,28 @@ undershot its actual by a wide margin.
 - `composer test`: 1512/1513 pass; sole failure the pre-existing
   unrelated `CourseSlugUniquenessTest`.
 
-### B16 — `TenantModelRegistry` sweep — not started
+### B16 — `TenantModelRegistry` sweep — done
 
-- Confirm all 7 new `BelongsToTenant` models (`BatchGeofence`,
-  `DeviceWebhookCredential`, `TeacherAttendanceFlag`, `QuizProctoringEvent`,
-  `TestSeries`, `OmrTemplate`, `OmrSheetScan`) present in
-  `TenantModelRegistry::MODELS` with `seedAttributes()`/`updateAttributes()`
-  entries.
-- Reverse sweep (not just the 7 named ones) — grep every
-  `app/Domains/*/Models/*.php` for real `BelongsToTenant` trait usage
-  against `MODELS`' own entries, same discipline S14 B17/S15 B20 already
-  established.
+- Reverse sweep: `grep -rlE "^\s+use (BelongsToTenant|...)"` across every
+  `app/Domains/*/Models/*.php` found exactly 69 files declaring the trait
+  as a real trait-use statement (not just mentioning it in a comment —
+  `ImpersonationAudit`'s own docblock explicitly says it deliberately
+  does *not* use it, and two Services files only mention the trait's name
+  in prose, both correctly excluded by requiring the indented `use
+  BelongsToTenant` declaration form, not a bare substring match).
+  Diffed against `TenantModelRegistry::MODELS` (69 entries): zero models
+  in the codebase missing from the registry, zero stale registry entries
+  pointing at a class that no longer declares the trait. All 7 new S16
+  models (`BatchGeofence`, `DeviceWebhookCredential`,
+  `TeacherAttendanceFlag`, `QuizProctoringEvent`, `TestSeries`,
+  `OmrTemplate`, `OmrSheetScan`) confirmed present with working
+  `seedAttributes()`/`updateAttributes()` entries — implicitly proven
+  every block already, since a missing case throws in
+  `CrossTenantTest`'s own generated suite and every B7–B15 full run
+  already passed it.
+- No code changes needed — a clean sweep. `composer test` rerun in full
+  to confirm: sole failure remains the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B17 — Full test coverage, review pass — not started
 
