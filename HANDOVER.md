@@ -5,29 +5,32 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-24)
+## Right now (2026-08-25)
 
-- **S16 — Assessment & Attendance Depth: DESIGN + PLAN DONE, build not
-  started.** `docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md`,
-  `...-plan.md`. `docs/ROADMAP.md`'s own S16 row lists I6-I11/H10-H13 (10
-  items as counted there), but **I7 (numerical/JEE-NEET questions) already
-  shipped in S6** (`Question::TYPES` includes `'numerical'`,
-  `QuizAttemptService::gradeNumerical()` tagged `(I7)` in its own docblock)
-  — the roadmap's own "9" item count already accounts for this, not a
-  miscount to fix. Real build scope is 9 items, a deliberate mixed P2/P3
-  grab-bag (unlike S9-S15's phase-boundary slices) since the roadmap's own
-  headline names every P3 item explicitly. **Verified before writing the
-  design**: H10 (low-attendance alerts) also already exists (S9 B13,
-  `SendLowAttendanceAlert`) with a hardcoded 60% threshold and parent-only
-  notification — this slice's real H10 gap is narrow (tenant-configurable
-  threshold + a staff-facing view), not a rebuild. No new domain — every
-  item extends `Assessments` (Question/Quiz-adjacent: I6/I8/I9/I10/I11),
-  `Content` (the existing `AttendanceRecord` model gains a `role` column,
-  H7, foundation for H13), `Batches` (new attendance writers: geofence
-  check-in H11, device webhook H12, teacher-attendance sweep H13), `Comms`
-  (H10's staff view), or `Tenancy` (H10's per-institute threshold setting).
-  7 new `BelongsToTenant` models. 18 blocks (B0-B17). Next step: run the
-  per-block build command in the plan doc starting at B0.
+- **S16 — Assessment & Attendance Depth: COMPLETE, all 18 blocks
+  (2026-08-25).** `docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md`,
+  `...-plan.md` (full per-block build log + B17's own review-pass notes
+  live there, not repeated here). Real build scope: 9 items (I6/I8/I9/
+  I10/I11, H10/H11/H12/H13) — I7 and H9 were already shipped pre-slice,
+  confirmed before design, not rebuilt. No new domain — every item
+  extended `Assessments` (Question/Quiz-adjacent), `Content`
+  (`AttendanceRecord` gained a `role` column, H7, foundation for H13),
+  `Batches` (3 new attendance writers: geofence check-in, device webhook,
+  teacher-attendance sweep), or `Tenancy`/`Comms` (H10's threshold +
+  staff view). 7 new `BelongsToTenant` models, all confirmed registered
+  in a B16 reverse sweep (69 models total, zero gaps either direction).
+  Two real cross-block bugs caught by tests, not assumed correct from a
+  green save: B8's `multi_select` `correct_answer` shape didn't match
+  what B7's own `gradeMultiSelect()` read; B15's `OmrTemplateGenerator`
+  constructor change broke B14's own tests that `new`'d it directly. Two
+  unrelated pre-existing test flakes chased down along the way and fixed:
+  a missing `Storage::fake()` in several Comms export-download tests let
+  real leftover CSVs accumulate across this session's many
+  migration-triggered full-suite reruns and collide on reused tenant IDs
+  (cleaned, underlying gap still open for whoever next touches those
+  tests); a security-baseline text-scan false-positive twice (B5, B13)
+  where a docblock's own prose *explaining* why raw SQL wasn't used
+  literally contained the forbidden substring.
 
 - **S15 — Batch & Institute Operations: COMPLETE, all 22 blocks
   (2026-08-24).** `docs/superpowers/specs/2026-08-22-s15-batch-institute-operations-design.md`,
@@ -1222,6 +1225,14 @@ at the source.
 
 ## Avoid
 
+- Don't write "why raw SQL wasn't used" explanatory prose in a docblock
+  under `app/Domains/` using the literal method names (`DB::raw`,
+  `whereRaw`, `DB::statement`) — `SecurityBaselineTest`'s own raw-SQL
+  guard is a plain substring scan across every file's full contents, not
+  a code-aware parser, so a comment *explaining* the absence of raw SQL
+  trips the same guard as actually using it. Bit S16 twice (B5, B13) —
+  say it without the literal names ("raw-SQL query methods", "a raw
+  window function") instead.
 - Don't hand-write per-model cross-tenant isolation tests —
   `TenantModelRegistry` generates them (see `CLAUDE.md`)
 - Don't call another domain's *service* class directly, even when it would

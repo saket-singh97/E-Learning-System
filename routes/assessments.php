@@ -1,12 +1,18 @@
 <?php
 
 use App\Domains\Assessments\Models\TestSeries;
+use App\Http\Controllers\Assessments\DownloadOmrTemplateController;
 use App\Http\Controllers\Assessments\ShowQuizController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/quizzes/{quiz}', ShowQuizController::class)
     ->name('quizzes.show');
+
+// B17 review pass — the generated OMR template PDF had no download path.
+Route::get('/omr-templates/{template}/download', DownloadOmrTemplateController::class)
+    ->middleware(['auth'])
+    ->name('omr-templates.download');
 
 // S16 B13 (I10 pt.2) — no existing student-facing page to embed
 // TestSeriesResults on, same "add a small host route" shape B3's

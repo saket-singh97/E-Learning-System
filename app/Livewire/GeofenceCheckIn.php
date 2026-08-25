@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Domains\Batches\Events\AttendanceRecorded;
 use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Batches\Models\BatchSession;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Batches\Services\GeofenceCheckInService;
 use App\Domains\Content\Models\AttendanceRecord;
 use Illuminate\Contracts\View\View;
@@ -43,6 +44,24 @@ class GeofenceCheckIn extends Component
         $viewer = auth()->user();
 
         if ($viewer === null) {
+            return;
+        }
+
+        // B17 review pass — nothing gated this on the viewer actually
+        // being enrolled: any authenticated tenant user could open this
+        // component for any BatchSession id and write themselves present,
+        // and a batch with no BatchGeofence row (geofencing off) accepted
+        // any location, so this was often no real barrier at all. Same
+        // "only an actively-enrolled student" restriction
+        // DeviceWebhookHandler::resolveLiveSession() already applies.
+        $isEnrolled = Enrolment::where('batch_id', $this->session->batch_id)
+            ->where('user_id', $viewer->id)
+            ->where('status', 'active')
+            ->exists();
+
+        if (! $isEnrolled) {
+            $this->error = "You're not enrolled in this session's batch.";
+
             return;
         }
 

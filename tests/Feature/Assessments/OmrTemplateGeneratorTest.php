@@ -73,3 +73,25 @@ it('generates a template through the real Filament action on QuizResource', func
     $template = OmrTemplate::where('quiz_id', $this->quiz->id)->sole();
     expect($template->question_count)->toBe(25);
 });
+
+// B17 review pass — the generated PDF had no download path at all.
+it('downloads the generated PDF through the real route', function () {
+    $template = app(OmrTemplateGenerator::class)->generate($this->quiz, 20, 4, 6);
+
+    $this->actingAs($this->instructor)
+        ->get("http://physics.lms.test/omr-templates/{$template->id}/download")
+        ->assertOk()
+        ->assertDownload();
+});
+
+it('never resolves another tenants template — BelongsToTenants own scope hides it, 404 not a leak', function () {
+    $template = app(OmrTemplateGenerator::class)->generate($this->quiz, 20, 4, 6);
+
+    $otherTenant = Tenant::factory()->create(['subdomain' => 'chemistry']);
+    $outsider = User::factory()->create(['tenant_id' => $otherTenant->id]);
+    $outsider->assignRole('instructor');
+
+    $this->actingAs($outsider)
+        ->get("http://chemistry.lms.test/omr-templates/{$template->id}/download")
+        ->assertNotFound();
+});

@@ -68,6 +68,22 @@ class ProcessOmrSheetScan implements ShouldQueue
             return;
         }
 
+        // B17 review pass — this bypassed max_attempts entirely (a
+        // duplicate/re-scanned sheet for the same student+quiz used to
+        // silently create an unlimited attempt), the one check every
+        // online attempt's own start() already enforces.
+        $attemptsUsed = QuizAttempt::where('quiz_id', $quiz->id)->where('user_id', $enrolment->user_id)->count();
+
+        if ($attemptsUsed >= $quiz->max_attempts) {
+            $scan->update([
+                'status' => 'failed',
+                'detected_roll_number' => $rollNumber,
+                'raw_bubble_results' => $responses,
+            ]);
+
+            return;
+        }
+
         $questionIds = $template->question_ids ?? [];
 
         $attempt = QuizAttempt::create([

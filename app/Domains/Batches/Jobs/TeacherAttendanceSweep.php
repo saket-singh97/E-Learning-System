@@ -94,11 +94,19 @@ class TeacherAttendanceSweep implements ShouldQueue
      * a stored column, and this app's security baseline forbids raw SQL
      * query methods in `app/Domains/`.
      *
+     * B17 review pass — bounded to the last 30 days: an unbounded
+     * `starts_at < now()` scan loads every tenant's entire session
+     * history into memory on every daily run, and on first deploy would
+     * flag/notify admins about years of pre-existing unmarked sessions
+     * in one pass. 30 days comfortably covers any genuinely recent gap
+     * without an unbounded, ever-growing daily cost.
+     *
      * @return Collection<int, BatchSession>
      */
     public function unmarkedSessions(): Collection
     {
         return BatchSession::where('starts_at', '<', now())
+            ->where('starts_at', '>=', now()->subDays(30))
             ->get()
             ->filter(function (BatchSession $session): bool {
                 $endsAt = $session->starts_at->clone()->addMinutes($session->duration_minutes);

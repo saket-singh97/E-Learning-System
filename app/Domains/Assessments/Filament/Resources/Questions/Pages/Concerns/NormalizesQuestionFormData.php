@@ -122,13 +122,23 @@ trait NormalizesQuestionFormData
     {
         $lefts = collect($pairRows)->pluck('left')->map(fn (mixed $v): string => (string) $v)->values();
         $rights = collect($pairRows)->pluck('right')->map(fn (mixed $v): string => (string) $v)->values();
-        $shuffledRights = $rights->shuffle()->values();
 
-        $pairs = $lefts->map(function (string $left, int $leftIndex) use ($rights, $shuffledRights): array {
-            $rightText = $rights->get($leftIndex);
-            $rightIndex = $shuffledRights->search($rightText);
+        // B17 review pass — shuffles a permutation of *indices*, not the
+        // text values themselves: searching the shuffled result by value
+        // (the original approach) silently resolved two identical
+        // right-hand labels (e.g. "None of the above" used twice) to the
+        // same shuffled slot, corrupting correct_answer for one of the
+        // pairs. An index permutation is unique by construction, so this
+        // can't collide regardless of duplicate label text.
+        $permutation = $rights->isEmpty() ? [] : range(0, $rights->count() - 1);
+        shuffle($permutation);
 
-            return [$leftIndex, $rightIndex === false ? 0 : $rightIndex];
+        $shuffledRights = collect($permutation)->map(fn (int $originalIndex): string => $rights->get($originalIndex));
+
+        $pairs = $lefts->map(function (string $left, int $leftIndex) use ($permutation): array {
+            $shuffledIndex = array_search($leftIndex, $permutation, true);
+
+            return [$leftIndex, $shuffledIndex === false ? 0 : $shuffledIndex];
         })->values()->all();
 
         return [
@@ -163,13 +173,21 @@ trait NormalizesQuestionFormData
     protected function buildOrderingShape(array $itemRows): array
     {
         $itemsInCorrectOrder = collect($itemRows)->pluck('label')->map(fn (mixed $v): string => (string) $v)->values();
-        $shuffledOptions = $itemsInCorrectOrder->shuffle()->values();
 
-        $correctSequence = $itemsInCorrectOrder
-            ->map(function (string $label) use ($shuffledOptions): int {
-                $index = $shuffledOptions->search($label);
+        // B17 review pass — same index-permutation fix as
+        // buildMatchingShape() above: a value search after shuffling
+        // silently mis-resolved two identical item labels to the same
+        // shuffled slot.
+        $permutation = $itemsInCorrectOrder->isEmpty() ? [] : range(0, $itemsInCorrectOrder->count() - 1);
+        shuffle($permutation);
 
-                return $index === false ? 0 : $index;
+        $shuffledOptions = collect($permutation)->map(fn (int $originalIndex): string => $itemsInCorrectOrder->get($originalIndex));
+
+        $correctSequence = collect($permutation === [] ? [] : range(0, $itemsInCorrectOrder->count() - 1))
+            ->map(function (int $correctOrderIndex) use ($permutation): int {
+                $shuffledIndex = array_search($correctOrderIndex, $permutation, true);
+
+                return $shuffledIndex === false ? 0 : $shuffledIndex;
             })
             ->values()
             ->all();

@@ -1756,3 +1756,106 @@ admission CRM stops at "convert to enrolment" — no marketing attribution,
 ad-spend tracking, or lead-source analytics.
 
 **All 22 S15 blocks are now built, tested, and reviewed.****
+
+## S16 — Assessment & Attendance Depth: COMPLETE (all 18 blocks, 2026-08-25)
+
+Eighth P2/P3-mixed backlog slice (after S9 hardening, S10 assignments/
+gradebook/certificates, S11 billing, S12 security/resilience, S13
+discovery/engagement, S14 video/live-class depth, S15 batch/institute
+operations). `docs/ROADMAP.md`'s own S16 row lists I6-I11/H10-H13 (10
+items as counted there), but I7 (numerical/JEE-NEET questions) already
+shipped in S6 and H9 (WhatsApp-on-absence) already shipped in S8/S9 —
+both verified before writing the design, not assumed from the roadmap's
+own wording. Real build scope was 9 items, 18 finer-grained build blocks.
+`docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md`
+and `...-plan.md` cover B0-B17 in full per-block detail — not repeated
+here. Unlike S9-S15, a deliberate mixed P2/P3 grab-bag, not a
+phase-boundary slice (I6/I10/H10 are P2; I8/I9/I11/H11/H12/H13 are P3,
+all named explicitly in the roadmap's own S16 headline, so none cut for
+being P3-tier). No new domain — every item extended `Assessments`
+(Question/Quiz-adjacent: I6/I8/I9/I10/I11), `Content` (`AttendanceRecord`
+gained a `role` column, H7, foundation for H13), `Batches` (3 new
+attendance writers: geofenced check-in H11, generic device webhook H12,
+teacher-attendance sweep H13), or `Tenancy`/`Comms` (H10's per-institute
+threshold + staff-facing at-risk view). 7 new `BelongsToTenant` models
+(`BatchGeofence`, `DeviceWebhookCredential`, `TeacherAttendanceFlag`,
+`QuizProctoringEvent`, `TestSeries`, `OmrTemplate`, `OmrSheetScan`), all
+registered in `TenantModelRegistry`, confirmed exact-complete in B16 by a
+reverse sweep (69-for-69 against every real `BelongsToTenant` usage in
+`app/Domains/*/Models/*.php`).
+
+- **B0** — `attendance_records.role` column (student/instructor), the H7
+  foundation H13 needs. Zero-risk: every existing writer omits the new
+  column, defaulting to `'student'` for free.
+- **B1** — H10: `tenants.at_risk_threshold_percent` (nullable, falls back
+  to `StudentMetrics`'s existing hardcoded 60%) + a new Admin settings
+  page + staff-facing at-risk roster on both Admin (tenant-wide) and
+  Teach (own-batches) panels — the real gap was narrow, `SendLowAttendanceAlert`
+  already existed but was parent-only with no staff view at all.
+- **B2/B3** — H11: `batch_geofences` (opt-in per batch) + `GeofenceCheckInService`
+  reusing `ImpossibleTravelDetector`'s own haversine formula (extracted to
+  shared `Support\Geo\HaversineDistance` rather than a cross-domain
+  service call) + a student-facing `GeofenceCheckIn` Livewire component on
+  a new host route.
+- **B4** — H12: a generic, vendor-agnostic HMAC-signed device webhook
+  (`DeviceWebhookCredential` + `DeviceWebhookController`), same signature
+  scheme `ZoomRecordingWebhookHandler` already established. The payload
+  carries no session reference, so the target session is resolved as the
+  credential's own currently-live one for the identified user.
+- **B5/B6** — H13: instructor self-marks their own attendance
+  (Teach-panel-only action) + `TeacherAttendanceSweep` (daily, unscoped)
+  detects an unmarked-past-end session, raises a `TeacherAttendanceFlag`,
+  notifies every institute_admin, and a new `TeacherAttendanceFlagResource`
+  lets an admin resolve it with an optional instructor reassignment — no
+  automatic substitute matching, by design.
+- **B7/B8** — I6: 4 new question types (`multi_select`, `fill_in_blank`,
+  `matching`, `ordering`) with partial-credit grading, plus the Filament
+  authoring UI and `QuizRunner` student-facing rendering. `matching`/
+  `ordering` shuffle their display order once at authoring time so the
+  correct answer isn't readable straight off the stored data.
+- **B9/B10** — I8: opt-in-per-quiz proctoring (`quizzes.proctoring_enabled`)
+  logging tab-switch/fullscreen-exit/copy/paste events, detection/evidence
+  only, no lockdown; plus per-question `time_spent_seconds`, accumulated
+  across autosaves via the existing S9 autosave path.
+- **B11** — I9: a configurable violation threshold auto-submits an
+  in-progress attempt (reusing the exact same `auto_submitted` call
+  `AutoSubmitExpiredQuizAttempts` already makes for time-expiry) and sets
+  `flagged_for_review`; a new `FlaggedQuizAttemptResource` review queue
+  surfaces both the responses and the event log.
+- **B12/B13** — I10: `test_series` bundles quizzes via a nullable FK
+  (mirrors `Program`'s own bundle-via-FK shape); `TestSeriesRankingService`
+  computes per-tenant rank/percentile/topper-comparison on demand
+  (PHP-side sort, no raw-SQL window function) from each student's best
+  attempt per quiz in the series; a student-facing results view shows only
+  their own standing, never the full roster.
+- **B14/B15** — I11: `OmrTemplate::generateLayout()` deterministically
+  computes a bubble-grid coordinate layout (no freeform designer); the
+  question set is drawn once at template-generation time via the same
+  `QuizAttemptService::draw()` an online attempt's own `start()` uses, so
+  a later scan grades against the exact sheet that was printed.
+  `OmrScanner` reads bubble darkness via GD (no skew/rotation correction —
+  a real, flagged production-accuracy limit); `ProcessOmrSheetScan`
+  resolves the bubbled roll number against a real `Enrolment` scoped to
+  the quiz's own course, queuing a non-match `failed` for manual
+  resolution rather than dropping it, and grades a match through the
+  existing `QuizAttemptService::submit()` path — no parallel
+  "offline score" concept.
+- **B16** — `TenantModelRegistry` reverse sweep, zero gaps found, no code
+  changes needed.
+- **B17** — lifecycle E2E tests (unmarked teacher session → flag → admin
+  reassignment, chained in one run; a full test-series lifecycle — two
+  quizzes bundled, two students, rank/percentile computed correctly for
+  both) + this review pass + doc updates.
+
+**What's still rough, on purpose:** `OmrScanner` has no skew/rotation
+correction — only a flat, upright scan against the known coordinate grid
+is supported (design doc §5's own flagged limitation, not discovered
+late). H13's substitute-teacher workflow stops at flag + admin
+notification, no automatic substitute matching. I10's "All-India Rank" is
+computed per-tenant, not a literal cross-institute leaderboard (would
+require a shared cross-tenant students table, directly contradicting this
+app's own isolation guarantees). H12's device webhook is a generic,
+vendor-agnostic contract — no relationship with any specific
+biometric/RFID vendor to build a real SDK client against.
+
+**All 18 S16 blocks are now built, tested, and reviewed.**

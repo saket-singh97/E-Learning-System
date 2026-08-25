@@ -45,7 +45,7 @@ stop and report before starting the next block.
 | B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ✅ done |
 | B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ✅ done |
 | B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ✅ done |
-| B17 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B17 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite:** 1406/1407 at slice start (1 pre-existing, unrelated
 `CourseSlugUniquenessTest` failure carried since S1/S2, out of scope here
@@ -611,16 +611,63 @@ undershot its actual by a wide margin.
   to confirm: sole failure remains the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B17 — Full test coverage, review pass — not started
+### B17 — Full test coverage, review pass — done
 
-- Lifecycle E2E test(s) mirroring S11 B16/S12 B14/S13 B17/S14 B18/S15 B21's
-  own posture — at minimum: a teacher's session goes unmarked past its end
-  time → flagged → admin resolves by reassigning the instructor, chained in
-  one run; plus a full test-series lifecycle — two quizzes bundled → two
-  students attempt both → rank/percentile computed correctly for both.
-- Explicit review pass across every B0-B16 file for real bugs, not just a
-  green suite — same discipline S9 B14/S10 B15/S11 B16/S12 B14/S13 B17/S14
-  B18/S15 B21 each already established (each found real bugs this way).
-- Update `HANDOVER.md` (S16 complete entry + any new `## Avoid` entries),
+- Lifecycle E2E (`tests/Feature/S16AssessmentAttendanceDepthE2ETest.php`):
+  unmarked teacher session → sweep → `TeacherAttendanceFlag` → admin
+  reassigns instructor via the real Filament action, chained in one run;
+  full test-series lifecycle — two quizzes bundled through the real
+  Admin form, two students attempt both via `QuizAttemptService`,
+  rank/percentile correct for both, the runner-up's own results view
+  shows only their own standing.
+- Dispatched a background review agent over `git diff` for the whole
+  slice (B0-B16, 108 files). Found and fixed 6 real bugs, same
+  discipline every prior slice's own final block established:
+  1. **HIGH** — `GeofenceCheckIn::checkIn()` had no enrolment check at
+     all; any authenticated tenant user could mark themselves present
+     for any `BatchSession`. Added the same active-enrolment restriction
+     `DeviceWebhookHandler` already applies.
+  2. **MEDIUM-HIGH** — the generated OMR template PDF had no download
+     route anywhere — `OmrTemplateGenerator` wrote it to disk with no
+     way to retrieve it, breaking I11's own first step. Added
+     `DownloadOmrTemplateController` + a `downloadOmrTemplate` action on
+     `QuizResource`.
+  3. **MEDIUM** — `ProcessOmrSheetScan` created `QuizAttempt` rows
+     directly, bypassing `max_attempts` entirely; a duplicate/re-scanned
+     sheet could silently produce unlimited attempts. Added the same
+     count check `start()` already enforces.
+  4. **LOW-MEDIUM** — `buildMatchingShape()`/`buildOrderingShape()`
+     resolved shuffled positions via `Collection::search($value)`, which
+     silently mis-graded a question with two identical
+     right-hand/item labels (only the first match found). Switched to
+     shuffling an index permutation instead of searching by value —
+     collision-proof regardless of duplicate text.
+  5. **LOW** — `TeacherAttendanceSweep::unmarkedSessions()` had no lower
+     time bound, scanning a tenant's entire session history every day.
+     Bounded to the last 30 days.
+  6. **LOW** — `QuizRunner::logProctoringEvent()`'s `submit()` call could
+     throw `QuizAttemptAlreadySubmittedException` uncaught if two
+     violation events crossed the threshold near-simultaneously.
+     Wrapped in a try/catch, same "already handled" no-op posture used
+     elsewhere in this slice.
+  No findings on tenant isolation, cross-domain violations, or raw SQL —
+  all clean.
+- Chased down two more instances of the same accumulated-stray-file flake
+  hit repeatedly through this slice (B7, B11) — this time a
+  `DownloadCompletionExportControllerTest` 404-before-generated failure
+  and a `BackupConfigurationTest` archive-size assertion, both traced to
+  the same root cause: `storage/app/private` had grown to 4.4MB/333 files
+  from today's many `migrate:fresh`-triggered full-suite reruns writing
+  real, un-faked export CSVs/PDFs/images that never get cleaned between
+  runs. Deleted everything under it (gitignored, nothing tracked) —
+  confirmed both tests pass clean afterward. The underlying missing-
+  `Storage::fake()` gap itself stays open for whoever next touches those
+  export tests.
+- Updated `HANDOVER.md` (S16 complete entry + a new `## Avoid` entry for
+  the security-baseline text-scan gotcha hit twice this slice),
   `docs/PROJECT-STATUS.md` (new S16 section), `docs/ROADMAP.md` (S16 row
-  → Done, next proposed slice's own row unaffected).
+  → Done, shipped-count 15→16).
+- `composer test`: 1517/1518 pass; sole failure the pre-existing
+  unrelated `CourseSlugUniquenessTest`. **S16 — Assessment & Attendance
+  Depth is complete, all 18 blocks.**
+

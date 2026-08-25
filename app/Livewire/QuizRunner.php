@@ -8,6 +8,7 @@ use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Models\QuizProctoringEvent;
 use App\Domains\Assessments\Services\QuizAttemptService;
+use App\Exceptions\QuizAttemptAlreadySubmittedException;
 use App\Exceptions\QuizAttemptLimitExceededException;
 use App\Exceptions\QuizNotAvailableException;
 use Illuminate\Contracts\View\View;
@@ -161,8 +162,20 @@ class QuizRunner extends Component
         $violationCount = QuizProctoringEvent::where('quiz_attempt_id', $attempt->id)->count();
 
         if ($violationCount >= config('assessments.proctoring_violation_threshold')) {
-            $submitted = app(QuizAttemptService::class)->submit($attempt, [], 'auto_submitted');
-            $submitted->update(['flagged_for_review' => true]);
+            // B17 review pass — two violation events crossing the
+            // threshold in close succession (e.g. a tab-switch and a
+            // copy firing near-simultaneously) could both reach here
+            // before either write lands; submit() throws once the first
+            // one has already flipped the attempt out of in_progress.
+            // Same "already handled, not a real failure" no-op posture
+            // this slice already takes elsewhere for a duplicate trigger.
+            try {
+                $submitted = app(QuizAttemptService::class)->submit($attempt, [], 'auto_submitted');
+                $submitted->update(['flagged_for_review' => true]);
+            } catch (QuizAttemptAlreadySubmittedException) {
+                // Already auto-submitted by the other near-simultaneous
+                // violation event — nothing left to do.
+            }
         }
     }
 

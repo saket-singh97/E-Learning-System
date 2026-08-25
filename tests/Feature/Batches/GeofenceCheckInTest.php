@@ -3,6 +3,7 @@
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Batches\Models\BatchSession;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
@@ -49,6 +50,13 @@ beforeEach(function () {
 
     $this->student = User::factory()->create(['tenant_id' => $this->tenant->id]);
     $this->student->assignRole('student');
+    Enrolment::create([
+        'batch_id' => $this->batch->id,
+        'user_id' => $this->student->id,
+        'status' => 'active',
+        'source' => 'manual_add',
+        'requested_at' => now(),
+    ]);
 });
 
 it('writes a present record for an inside-radius check-in', function () {
@@ -98,4 +106,19 @@ it('is idempotent — a duplicate check-in for the same session updates the exis
         ->call('checkIn', 0.0, 0.0);
 
     expect(AttendanceRecord::where('attendable_id', $this->session->id)->where('user_id', $this->student->id)->count())->toBe(1);
+});
+
+// B17 review pass — closes a real gap: nothing previously verified the
+// viewer was actually enrolled in the session's own batch.
+it('refuses a check-in from a user not enrolled in this sessions batch, without writing a record', function () {
+    $outsider = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $outsider->assignRole('student');
+
+    Livewire::actingAs($outsider)
+        ->test(GeofenceCheckIn::class, ['session' => $this->session])
+        ->call('checkIn', 0.0, 0.0)
+        ->assertSet('checkedIn', false)
+        ->assertSet('error', "You're not enrolled in this session's batch.");
+
+    expect(AttendanceRecord::where('attendable_id', $this->session->id)->where('user_id', $outsider->id)->count())->toBe(0);
 });

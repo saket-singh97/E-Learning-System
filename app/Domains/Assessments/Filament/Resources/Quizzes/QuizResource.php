@@ -155,6 +155,17 @@ class QuizResource extends Resource
                         (int) $data['options_per_question'],
                         (int) $data['roll_number_digits'],
                     )),
+                // B17 review pass — the generated PDF had no download
+                // path at all; the action above created a file nobody
+                // could actually retrieve.
+                Action::make('downloadOmrTemplate')
+                    ->label('Download OMR template')
+                    ->url(fn (Quiz $record): string => route('omr-templates.download', [
+                        'template' => $record->omrTemplate->id,
+                        'subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain,
+                    ]))
+                    ->visible(fn (Quiz $record): bool => $record->omrTemplate !== null)
+                    ->openUrlInNewTab(),
                 // Quiz (unlike Question) has no soft-deletes — a plain
                 // DeleteAction is a real, cascading DB delete
                 // (quiz_attempts.quiz_id is cascadeOnDelete). Once a quiz
