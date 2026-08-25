@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ✅ done |
 | B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ✅ done |
 | B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ✅ done |
-| B12 | `TenantModelRegistry` sweep — 3 new models registered | ⬜ not started |
+| B12 | `TenantModelRegistry` sweep — 3 new models registered | ✅ done |
 | B13 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 ---
@@ -413,14 +413,30 @@ stop and report before starting the next block.
   shipped** (L9, L11, L12, L13, L14) — B12 (registry sweep) and B13
   (final review pass) remain.
 
-### B12 — `TenantModelRegistry` sweep — not started
+### B12 — `TenantModelRegistry` sweep — done
 
-- Register `CourseOutlineDraft`, `LessonRevisionNote`, `PhotoDoubtQuery` in
-  `TenantModelRegistry::MODELS` with `seedAttributes()`/`updateAttributes()`
-  entries. `CrossTenantTest` picks up the generated isolation suite
-  automatically — no hand-written per-model isolation tests.
-- Grep sweep for any `BelongsToTenant` usage not yet in the registry
-  (same reverse-check shape S16 B16 ran).
+- Registration already complete: `CourseOutlineDraft` (B1),
+  `LessonRevisionNote` (B3), `PhotoDoubtQuery` (B10) were each registered
+  in `TenantModelRegistry::MODELS` with `seedAttributes()`/
+  `updateAttributes()` entries immediately when built, not deferred here —
+  the registry's own guard test runs on every `composer test`, so leaving
+  a gap open between blocks isn't safe (documented explicitly in each of
+  those blocks' own plan entries).
+- Reverse-check sweep run now, same shape S16 B16's own precedent:
+  precise trait-usage grep (`^    use.*BelongsToTenant`, actual PHP `use`
+  statements only) across `app/Domains` found **72 real usages**, exactly
+  matching `TenantModelRegistry::MODELS`'s own 72 entries — zero gaps.
+  A looser first-pass grep (`grep -rl "use BelongsToTenant"`) initially
+  flagged `ImpersonationAudit` as unregistered; its own docblock reads
+  "Deliberately does NOT use BelongsToTenant... unlike every other model
+  in TenantModelRegistry," so the loose grep matched that *prose*, not a
+  real trait statement — same "docblock-prose false-positive" class this
+  plan's own §5 testing-strategy note already warned about (the one that
+  tripped S16 B5/B13). No code change needed once the precise grep
+  confirmed it.
+- `composer test`: full suite green modulo the pre-existing
+  `CourseSlugUniquenessTest` flake (no code changed this block, run for
+  compliance with the per-block verification bar).
 
 ### B13 — Full test coverage, review pass — not started
 
