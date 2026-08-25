@@ -85,6 +85,17 @@ class FakeAiDriver implements AiProvider
         return $vector;
     }
 
+    public function chatWithImage(array $messages, string $imageDiskPath): ChatResult
+    {
+        $seed = self::seedFor(json_encode($messages).'#'.$imageDiskPath);
+        $usage = self::fakeUsageFor($seed);
+
+        return new ChatResult(
+            text: self::fakeSentence($seed).' '.self::fakeSentence($seed + 1),
+            usage: $usage,
+        );
+    }
+
     private static function seedFor(string $input): int
     {
         return crc32($input);

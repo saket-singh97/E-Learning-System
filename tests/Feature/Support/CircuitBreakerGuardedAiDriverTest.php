@@ -34,6 +34,11 @@ function failingAiProvider(): AiProvider
         {
             throw new RuntimeException('provider down');
         }
+
+        public function chatWithImage(array $messages, string $imageDiskPath): ChatResult
+        {
+            throw new RuntimeException('provider down');
+        }
     };
 }
 

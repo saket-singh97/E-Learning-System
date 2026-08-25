@@ -83,3 +83,27 @@ it('embeds different text into different vectors', function () {
 
     expect($a)->not->toBe($b);
 });
+
+it('returns a deterministic canned response from chatWithImage, same input same output', function () {
+    $driver = new FakeAiDriver;
+    $messages = [['role' => 'user', 'content' => 'Solve the question in this photo.']];
+
+    $first = $driver->chatWithImage($messages, 'photo-doubts/1/question.jpg');
+    $second = $driver->chatWithImage($messages, 'photo-doubts/1/question.jpg');
+
+    expect($first)->toBeInstanceOf(ChatResult::class)
+        ->and($first->text)->toBeString()->not->toBeEmpty()
+        ->and($first->structured)->toBeNull()
+        ->and($first->usage)->toHaveKeys(['in', 'out', 'usd'])
+        ->and($first->text)->toBe($second->text);
+});
+
+it('returns a different chatWithImage response for a different image path', function () {
+    $driver = new FakeAiDriver;
+    $messages = [['role' => 'user', 'content' => 'Solve the question in this photo.']];
+
+    $a = $driver->chatWithImage($messages, 'photo-doubts/1/question-a.jpg');
+    $b = $driver->chatWithImage($messages, 'photo-doubts/999/question-far-apart.jpg');
+
+    expect($a->text)->not->toBe($b->text);
+});

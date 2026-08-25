@@ -28,7 +28,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | `AiProvider::chatWithImage()` — new interface method, foundational for L14 | ⬜ not started |
+| B0 | `AiProvider::chatWithImage()` — new interface method, foundational for L14 | ✅ done |
 | B1 | L9 pt.1 — `course_outline_drafts` schema + `CourseOutlineGenerator` service | ⬜ not started |
 | B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ⬜ not started |
 | B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ⬜ not started |
@@ -47,16 +47,27 @@ stop and report before starting the next block.
 
 ## Block detail (expand as each block builds; stubs below are the starting checklist)
 
-### B0 — `AiProvider::chatWithImage()` — not started
+### B0 — `AiProvider::chatWithImage()` — done
 
-- Add `chatWithImage(array $messages, string $imageDiskPath): ChatResult` to
-  `App\Integrations\AiProvider`.
-- Implement in `FakeAiDriver` (deterministic canned response for tests),
+- Added `chatWithImage(array $messages, string $imageDiskPath): ChatResult`
+  to `App\Integrations\AiProvider`.
+- Implemented in `FakeAiDriver` (deterministic, hash-seeded off
+  messages+imageDiskPath — same shape `chat()`/`embed()` already use),
   `SpendCapGuardedAiDriver` and `CircuitBreakerGuardedAiDriver` (both
-  pass-through decorators, same shape their existing `chat()`/`embed()`
-  wrappers use), and the real driver.
-- No user-facing feature yet — this block only adds the capability B10/B11
-  build on. Unit test: fake driver returns the canned `ChatResult`.
+  plain pass-through decorators). No real driver exists yet (confirmed —
+  only `FakeAiDriver` is bound in `AppServiceProvider`), so no fourth
+  implementation was needed.
+- `tests/Feature/Support/CircuitBreakerGuardedAiDriverTest.php`'s inline
+  anonymous `AiProvider` implementation also needed the new method (PHP
+  fatals on an incomplete interface implementation) — added a
+  throwing stub matching its existing three methods.
+- Tests added to `FakeAiDriverTest.php`: canned response is deterministic
+  for the same input, and differs for a different image path. No
+  user-facing feature yet — this block only adds the capability B10/B11
+  build on.
+- `composer test`: 1519/1520 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake (tolerated per this plan's
+  own B13 note).
 
 ### B1 — L9 pt.1: outline schema + generator service — not started
 

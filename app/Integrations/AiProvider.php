@@ -25,4 +25,13 @@ interface AiProvider
      * @return array<int, float>
      */
     public function embed(string $text): array;
+
+    /**
+     * Send a chat/completion request that includes an image (vision input) —
+     * a new, additive capability alongside chat(), not an overload of it, so
+     * every existing chat() call site is untouched (S17 design §4 decision 2).
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     */
+    public function chatWithImage(array $messages, string $imageDiskPath): ChatResult;
 }

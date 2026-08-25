@@ -55,6 +55,13 @@ class SpendCapGuardedAiDriver implements AiProvider
         return $this->inner->embed($text);
     }
 
+    public function chatWithImage(array $messages, string $imageDiskPath): ChatResult
+    {
+        $this->assertWithinCap();
+
+        return $this->inner->chatWithImage($messages, $imageDiskPath);
+    }
+
     protected function assertWithinCap(): void
     {
         $tenant = app(CurrentTenant::class)->get();

@@ -39,4 +39,9 @@ class CircuitBreakerGuardedAiDriver implements AiProvider
     {
         return $this->breaker->call(self::BREAKER_KEY, fn (): array => $this->inner->embed($text));
     }
+
+    public function chatWithImage(array $messages, string $imageDiskPath): ChatResult
+    {
+        return $this->breaker->call(self::BREAKER_KEY, fn (): ChatResult => $this->inner->chatWithImage($messages, $imageDiskPath));
+    }
 }
