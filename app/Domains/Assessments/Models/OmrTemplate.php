@@ -25,6 +25,7 @@ class OmrTemplate extends Model
         'options_per_question',
         'roll_number_digits',
         'layout',
+        'question_ids',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class OmrTemplate extends Model
             'options_per_question' => 'integer',
             'roll_number_digits' => 'integer',
             'layout' => 'array',
+            'question_ids' => 'array',
         ];
     }
 

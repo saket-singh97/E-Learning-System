@@ -43,7 +43,7 @@ stop and report before starting the next block.
 | B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ✅ done |
 | B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ✅ done |
 | B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ✅ done |
-| B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ⬜ not started |
+| B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ✅ done |
 | B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ⬜ not started |
 | B17 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -554,28 +554,39 @@ undershot its actual by a wide margin.
   1506/1507 pass; sole failure the pre-existing unrelated
   `CourseSlugUniquenessTest`.
 
-### B15 — I11 pt.2: scanner + auto-grade — not started
+### B15 — I11 pt.2: scanner + auto-grade — done
 
-- `OmrScanner::scan(OmrSheetScan): array` — GD-based: loads the uploaded
-  image, samples pixel darkness at each of the template's own known
-  coordinates, resolves the darkest-bubble-per-question/per-roll-number-
-  digit (design doc §4 decision 8/9). No skew/rotation correction (flagged
-  limitation, design doc §5).
-- Roll-number digits resolve to an `Enrolment.id` within the quiz's own
-  batch; a non-matching roll number sets `status = 'failed'` for manual
-  admin resolution (§4 decision 9), never silently dropped.
-- On a successful match, writes a real `QuizAttempt` + `QuizAnswer` rows
-  (reusing `QuizAttemptService`'s existing grade methods per question type)
-  so an OMR-graded offline test appears in the exact same Gradebook/
-  reports every online attempt already does — no parallel "offline score"
-  concept.
-- Admin-panel upload action + status list (mirrors `StudentImportBatchResource`'s
-  own upload-then-status-list shape, S15 B9/B10).
-- New tests: `OmrScannerTest` — a synthetically-generated bubble-sheet
-  image (drawn by the test at the template's own coordinates) round-trips
-  to the exact expected answers and roll number; a failed roll-number match
-  queues for manual resolution instead of crashing; a successful scan
-  produces a real gradeable `QuizAttempt`.
+- Added `omr_templates.question_ids` (a build-time gap the plan itself didn't
+  spell out): the printed sheet needs a *fixed* question set to scan
+  against, so `OmrTemplateGenerator` now draws it once via
+  `QuizAttemptService::draw()` (widened `protected`→`public`, same draw an
+  online attempt's own `start()` uses) and stores it at generation time.
+- `OmrScanner::scan()` — pure GD image reading, no DB writes. Samples a
+  small pixel box per known coordinate, picks the darkest bubble per
+  roll-number column and per question. No skew/rotation correction
+  (design doc §5's own flagged limitation).
+- `ProcessOmrSheetScan` job — resolves the roll number against
+  `Enrolment::id` scoped to the quiz's own course; no match queues
+  `status=failed` for manual resolution, never dropped. On a match,
+  creates a real `QuizAttempt` and hands responses to
+  `QuizAttemptService::submit()`, reusing every existing per-type grading
+  path — no parallel offline-score concept. Rebinds `CurrentTenant` to the
+  scan's own tenant per-row, same shape `ZoomRecordingWebhookHandler`
+  already established.
+- `OmrSheetScanResource` (Admin panel) — upload-then-status-list shape
+  mirroring `StudentImportBatchResource`.
+- Tests (14 total incl. resource): synthetic bubble-sheet images
+  round-trip through `OmrScanner` to the exact expected roll number and
+  per-question answers (two independent digit/answer combinations, not
+  just zeros); a real `Enrolment` match produces a graded `QuizAttempt`;
+  a non-existent roll number and a roll number from a different course
+  both queue `failed` without crashing; the real Admin-panel upload form
+  creates a pending row and dispatches the job.
+- Caught one real regression before it shipped: adding a constructor
+  dependency to `OmrTemplateGenerator` broke B14's own tests that
+  `new`'d it directly — fixed to resolve via the container.
+- `composer test`: 1512/1513 pass; sole failure the pre-existing
+  unrelated `CourseSlugUniquenessTest`.
 
 ### B16 — `TenantModelRegistry` sweep — not started
 

@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Domains\Assessments\Filament\Resources\OmrSheetScans\OmrSheetScanResource;
 use App\Domains\Assessments\Filament\Resources\TestSeries\TestSeriesResource;
 use App\Domains\Content\Filament\Resources\Categories\CategoryResource;
 use App\Domains\Content\Filament\Resources\CourseReviews\CourseReviewResource;
@@ -74,6 +75,9 @@ class AdminPanelProvider extends PanelProvider
                 // series bundles quizzes across the institute, an
                 // institute_admin concern.
                 TestSeriesResource::class,
+                // S16 B15 — same explicit-registration reasoning as
+                // TestSeriesResource above.
+                OmrSheetScanResource::class,
             ])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\Filament\Admin\Pages')
             ->pages([

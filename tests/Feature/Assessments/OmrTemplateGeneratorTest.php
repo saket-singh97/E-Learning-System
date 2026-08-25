@@ -40,7 +40,7 @@ beforeEach(function () {
 });
 
 it('creates a template row and a printable PDF', function () {
-    $template = (new OmrTemplateGenerator)->generate($this->quiz, 20, 4, 6);
+    $template = app(OmrTemplateGenerator::class)->generate($this->quiz, 20, 4, 6);
 
     expect($template->quiz_id)->toBe($this->quiz->id);
     expect($template->question_count)->toBe(20);
@@ -49,7 +49,7 @@ it('creates a template row and a printable PDF', function () {
 });
 
 it('regenerates in place instead of duplicating a row for the same quiz', function () {
-    $generator = new OmrTemplateGenerator;
+    $generator = app(OmrTemplateGenerator::class);
     $first = $generator->generate($this->quiz, 20, 4, 6);
     $second = $generator->generate($this->quiz, 30, 5, 8);
 

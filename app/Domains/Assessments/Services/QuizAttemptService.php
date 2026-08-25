@@ -432,10 +432,15 @@ class QuizAttemptService
      * not left implicit — see design doc §2.4 decision 3 and this block's
      * own plan note).
      *
+     * Public, not protected — S16 B15 (I11 pt.2) reuses this directly to
+     * fix an offline OMR template's own question set once at generation
+     * time, the same draw an online attempt's own `start()` already makes
+     * (design doc §3.2's own "reused not duplicated" framing).
+     *
      * @param  array<int, int>  $previousQuestionIds
      * @return array<int, int>
      */
-    protected function draw(Quiz $quiz, array $previousQuestionIds): array
+    public function draw(Quiz $quiz, array $previousQuestionIds): array
     {
         $courseId = $quiz->lesson->section->course_id;
         $drawn = [];
