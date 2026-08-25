@@ -6,6 +6,7 @@ use App\Domains\AI\Models\CourseOutlineDraft;
 use App\Domains\AI\Models\DoubtChatMessage;
 use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
+use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
@@ -155,6 +156,7 @@ class TenantModelRegistry
         OmrTemplate::class,
         OmrSheetScan::class,
         CourseOutlineDraft::class,
+        LessonRevisionNote::class,
     ];
 
     /**
@@ -1009,6 +1011,11 @@ class TenantModelRegistry
                 'topic' => 'Row',
                 'status' => 'draft',
             ],
+            LessonRevisionNote::class => [
+                'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
+                'source_artifact_version' => 1,
+                'status' => 'ready',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1092,6 +1099,7 @@ class TenantModelRegistry
             OmrTemplate::class => ['question_count' => 20],
             OmrSheetScan::class => ['status' => 'failed'],
             CourseOutlineDraft::class => ['status' => 'approved'],
+            LessonRevisionNote::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

@@ -156,6 +156,13 @@ class FakeAiDriver implements AiProvider
                 'concept' => self::fakeSentence($fieldSeed),
                 'difficulty' => $levels[$fieldSeed % 3],
             ]],
+            // S17 B3 — RevisionNotesGenerator's own responseSchema=['notes']
+            // contract: an array of key-point strings.
+            'notes' => [
+                self::fakeSentence($fieldSeed),
+                self::fakeSentence($fieldSeed + 1),
+                self::fakeSentence($fieldSeed + 2),
+            ],
             // S17 B1 — CourseOutlineGenerator's own responseSchema=['outline']
             // contract: an array of sections, each with a section_title and
             // a lessons array of {title, description}.

@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B0 | `AiProvider::chatWithImage()` — new interface method, foundational for L14 | ✅ done |
 | B1 | L9 pt.1 — `course_outline_drafts` schema + `CourseOutlineGenerator` service | ✅ done |
 | B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ✅ done |
-| B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ⬜ not started |
+| B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ✅ done |
 | B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ⬜ not started |
 | B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ⬜ not started |
 | B6 | L12 pt.2 — search UI (student portal search bar + results) | ⬜ not started |
@@ -137,18 +137,42 @@ stop and report before starting the next block.
   today, pushing the backup zip over its 1MB test threshold; unrelated to
   this block's code. Cleaned with the user's OK, confirmed gone on rerun.)
 
-### B3 — L11 pt.1: revision-notes schema + generator — not started
+### B3 — L11 pt.1: revision-notes schema + generator — done
 
-- `lesson_revision_notes` migration (see design §3.2, versioned by
-  `source_artifact_version`) + `LessonRevisionNote` model.
+- `lesson_revision_notes` migration (design §3.2: `source_artifact_version`,
+  `status` pending/ready/failed, `notes` jsonb, `token_cost` jsonb, unique
+  on `[lesson_id, source_artifact_version]`) + `LessonRevisionNote` model
+  (AI domain, `BelongsToTenant`, own `latestReadyFor()` mirroring
+  `LessonArtifact`'s).
 - `RevisionNotesGenerator::generateFor(Lesson $lesson): LessonRevisionNote`
   — reads `LessonArtifact::latestReadyFor($lesson->id)`, calls
-  `AiProvider::chat()` to summarize `transcript`/`concepts` into a notes
-  array. Guards the "no ready artifact yet" case same as
-  `DoubtChatService::ask()` already does.
-- Tests: generates notes from a ready artifact; refuses/queues gracefully
-  when no ready artifact exists; regenerating after a new artifact version
-  creates a new row, not an overwrite (design §4 decision 9).
+  `AiProvider::chat(responseSchema: ['notes'])` to summarize
+  `transcript`/`concepts` into a key-points array, writes a `status=ready`
+  row pinned to that artifact's `version`.
+- **No-ready-artifact guard throws `LessonArtifactNotReadyException`
+  (new, 409) rather than writing a placeholder row** — deviates from a
+  literal reading of "guard it the way `DoubtChatService::ask()` does"
+  (which writes a placeholder chat message): `source_artifact_version` is
+  the column the table's own unique constraint is built around, so a
+  placeholder row would need a fake version number, colliding with the
+  unique index on a second call, or `NULL`, breaking the "pin the version"
+  contract design §3.2 sets up on purpose. A clean, catchable exception
+  is the actual "refuses gracefully" this case needs — the method's own
+  declared return type is non-nullable `LessonRevisionNote`, never `null`.
+- `FakeAiDriver::fakeValueFor()` gained a `'notes'` case (3 fake key-point
+  strings) — same "add a case when a real caller needs a structured
+  shape" precedent as B1's own `'outline'` case.
+- Registered `LessonRevisionNote` in `TenantModelRegistry` immediately
+  (same B1 precedent — the registry guard test runs on every
+  `composer test`, not deferrable to B12).
+- Tests (`RevisionNotesGeneratorTest.php`): generates notes pinned to the
+  ready artifact's version; throws cleanly (no row written) when no
+  artifact is ready yet, and also when the only artifact is still
+  `processing`; regenerating after a newer artifact version creates a
+  second row rather than overwriting the first, and the first row's own
+  status stays untouched.
+- `composer test`: 1532/1533 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake.
 
 ### B4 — L11 pt.2: trigger action + student view — not started
 
