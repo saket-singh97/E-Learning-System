@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Domains\Assessments\Filament\Resources\TestSeries\TestSeriesResource;
 use App\Domains\Content\Filament\Resources\Categories\CategoryResource;
 use App\Domains\Content\Filament\Resources\CourseReviews\CourseReviewResource;
 use App\Domains\Content\Filament\Resources\Programs\ProgramResource;
@@ -66,6 +67,13 @@ class AdminPanelProvider extends PanelProvider
                 TagResource::class,
                 ProgramResource::class,
                 CourseReviewResource::class,
+                // S16 B12 — same explicit-registration reasoning as
+                // Program/Category/Tag above: the Assessments resource
+                // directory is otherwise Teach-panel-only
+                // (Question/Quiz/QuizAnswer/FlaggedQuizAttempt), but a test
+                // series bundles quizzes across the institute, an
+                // institute_admin concern.
+                TestSeriesResource::class,
             ])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\Filament\Admin\Pages')
             ->pages([

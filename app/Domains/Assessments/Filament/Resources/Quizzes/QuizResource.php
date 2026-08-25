@@ -7,6 +7,7 @@ use App\Domains\Assessments\Filament\Resources\Quizzes\Pages\EditQuiz;
 use App\Domains\Assessments\Filament\Resources\Quizzes\Pages\ListQuizzes;
 use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
+use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Content\Models\Lesson;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -83,6 +84,12 @@ class QuizResource extends Resource
                 ->default('draft')
                 ->required()
                 ->native(false),
+            Select::make('test_series_id')
+                ->label('Test series (optional)')
+                ->helperText('Bundles this quiz for All-India Rank/percentile comparison against every other quiz in the same series.')
+                ->options(fn (): array => TestSeries::pluck('title', 'id')->all())
+                ->searchable()
+                ->nullable(),
             Toggle::make('proctoring_enabled')
                 ->label('Enable proctoring')
                 // Detection/evidence only, not prevention (design doc §4

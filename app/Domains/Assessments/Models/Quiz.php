@@ -24,6 +24,7 @@ class Quiz extends Model
         'max_attempts',
         'status',
         'proctoring_enabled',
+        'test_series_id',
     ];
 
     protected function casts(): array
@@ -49,6 +50,11 @@ class Quiz extends Model
     public function attempts(): HasMany
     {
         return $this->hasMany(QuizAttempt::class);
+    }
+
+    public function testSeries(): BelongsTo
+    {
+        return $this->belongsTo(TestSeries::class);
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Models\QuizProctoringEvent;
+use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Assignments\Models\Certificate;
@@ -147,6 +148,7 @@ class TenantModelRegistry
         DeviceWebhookCredential::class,
         TeacherAttendanceFlag::class,
         QuizProctoringEvent::class,
+        TestSeries::class,
     ];
 
     /**
@@ -941,6 +943,7 @@ class TenantModelRegistry
                 'event_type' => 'tab_switch',
                 'occurred_at' => now(),
             ],
+            TestSeries::class => ['title' => 'Row Series'],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1020,6 +1023,7 @@ class TenantModelRegistry
             DeviceWebhookCredential::class => ['device_label' => 'tampered'],
             TeacherAttendanceFlag::class => ['status' => 'resolved'],
             QuizProctoringEvent::class => ['event_type' => 'copy'],
+            TestSeries::class => ['title' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

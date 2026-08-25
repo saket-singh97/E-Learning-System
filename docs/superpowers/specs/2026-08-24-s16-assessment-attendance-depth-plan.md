@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B9 | I8 pt.1 — `quiz_proctoring_events` schema + client-side tab-switch/fullscreen/copy-paste detection wired into `QuizRunner` | ✅ done |
 | B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ✅ done |
 | B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ✅ done |
-| B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ⬜ not started |
+| B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ✅ done |
 | B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ⬜ not started |
 | B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ⬜ not started |
 | B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ⬜ not started |
@@ -470,16 +470,26 @@ undershot its actual by a wide margin.
   CSVs again, reran clean. `composer test`: 1484/1485 pass; sole failure
   the pre-existing unrelated `CourseSlugUniquenessTest`.
 
-### B12 — I10 pt.1: test series schema + bundling — not started
+### B12 — I10 pt.1: test series schema + bundling — done
 
-- `test_series` migration + model, registered in `TenantModelRegistry`.
-  `quizzes.test_series_id` nullable FK migration.
-- Admin-panel `TestSeriesResource` CRUD; `QuizResource`'s form gains an
-  optional `test_series_id` select, same "bundle via an FK on the bundled
-  thing" shape `Program`/`fee_invoices.program_id` (S13) already
-  established.
-- New tests: creating a series, assigning quizzes to it, a quiz with no
-  series stays unaffected by every existing Quiz test.
+- `test_series` migration (`title`, nullable `starts_at`/`ends_at`) +
+  `TestSeries` model (Assessments), registered in `TenantModelRegistry`.
+  `quizzes.test_series_id` nullable FK migration, `nullOnDelete()` same
+  as `fee_invoices.program_id` (S13) — deleting a series unlinks its
+  quizzes rather than deleting them.
+- `TestSeriesResource` — same institute-authored-bundle-CRUD shape
+  `ProgramResource` established, registered via an explicit
+  `->resources()` entry on `AdminPanelProvider` (the Assessments resource
+  directory is otherwise Teach-panel-only). `QuizResource`'s form
+  (Teach panel) gains an optional `test_series_id` `Select` sourced from
+  the tenant's own series list.
+- New tests (3): creates a series from the Admin panel, an instructor
+  assigns a quiz to a series through the real Teach-panel `QuizResource`
+  form, a quiz created with no series stays `null`. Reran the full
+  existing `QuizAttemptService`/`QuizRunner`/`CrossTenantTest`/
+  `SecurityBaselineTest` suites first to confirm the new nullable column
+  didn't disturb anything already passing. `composer test`: 1488/1489
+  pass; sole failure the pre-existing unrelated `CourseSlugUniquenessTest`.
 
 ### B13 — I10 pt.2: ranking + student results view — not started
 
