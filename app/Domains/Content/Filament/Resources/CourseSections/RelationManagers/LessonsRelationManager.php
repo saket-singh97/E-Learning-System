@@ -3,6 +3,7 @@
 namespace App\Domains\Content\Filament\Resources\CourseSections\RelationManagers;
 
 use App\Domains\AI\Models\LessonArtifact;
+use App\Domains\AI\Services\RevisionNotesGenerator;
 use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Filament\Resources\Lessons\LessonResource;
 use App\Domains\Content\Models\Lesson;
@@ -17,6 +18,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -123,6 +125,21 @@ class LessonsRelationManager extends RelationManager
                     ->requiresConfirmation()
                     ->visible(fn (Lesson $record): bool => LessonArtifact::latestFor($record->id)?->status === 'failed')
                     ->action(fn (Lesson $record) => event(new LessonIngestionRetryRequested($record->id, $record->tenant_id))),
+                // S17 B4 (L11) — instructor-triggered, per-lesson, never an
+                // automatic sweep (design §4 decision 4). Only enabled once
+                // a ready artifact actually exists to summarize.
+                Action::make('generateRevisionNotes')
+                    ->label('Generate revision notes')
+                    ->requiresConfirmation()
+                    ->visible(fn (Lesson $record): bool => LessonArtifact::latestReadyFor($record->id) !== null)
+                    ->action(function (Lesson $record): void {
+                        app(RevisionNotesGenerator::class)->generateFor($record);
+
+                        Notification::make()
+                            ->title('Revision notes generated.')
+                            ->success()
+                            ->send();
+                    }),
                 DeleteAction::make(),
                 ForceDeleteAction::make(),
                 RestoreAction::make(),

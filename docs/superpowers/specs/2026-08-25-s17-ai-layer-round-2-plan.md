@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B1 | L9 pt.1 — `course_outline_drafts` schema + `CourseOutlineGenerator` service | ✅ done |
 | B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ✅ done |
 | B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ✅ done |
-| B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ⬜ not started |
+| B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ✅ done |
 | B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ⬜ not started |
 | B6 | L12 pt.2 — search UI (student portal search bar + results) | ⬜ not started |
 | B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ⬜ not started |
@@ -174,17 +174,48 @@ stop and report before starting the next block.
 - `composer test`: 1532/1533 pass, only failure is the pre-existing
   unrelated `CourseSlugUniquenessTest` flake.
 
-### B4 — L11 pt.2: trigger action + student view — not started
+### B4 — L11 pt.2: trigger action + student view — done
 
-- Instructor-facing "Generate revision notes" action on the lesson (button,
-  not automatic — design §4 decision 4).
-- Student-facing view: reuse `LessonPlayer`'s existing embed point or add a
-  small host route, same "no existing embed point → add a small host
-  route" shape S16 B3's `GeofenceCheckIn` took. Gated through
-  `LessonAccess` (must be visible to view notes — never expose notes for a
-  lesson the student can't already see).
-- Tests: only a viewer who can see the lesson can see its notes; a
-  not-yet-generated lesson shows an appropriate empty state.
+- Instructor-facing "Generate revision notes" row action on
+  `LessonsRelationManager` (same table `viewAiContent`/`retryIngestion`
+  already live on) — visible only once `LessonArtifact::latestReadyFor()`
+  exists, so it's never enabled before a lesson finishes ingesting.
+- Student-facing `App\Domains\AI\Livewire\LessonRevisionNotes` component
+  (same "AI-domain component embedded on Content's watch page" placement
+  `DoubtChat` already established), registered as `ai.lesson-revision-notes`
+  and embedded on `resources/views/content/watch.blade.php`'s existing
+  video/live_session branch — **reused the existing embed point**, no new
+  host route needed (unlike `GeofenceCheckIn`, which had no page to embed
+  on at all).
+- Gated through `LessonAccess::isVisibleTo()` directly inside the
+  component's own `mount()` (`abort_unless(...)`) — not left to the host
+  page's controller alone, since `Livewire::test()` exercises the
+  component in isolation (CLAUDE.md's own warning about this exact gap).
+- **Test-writing gotcha hit and fixed**: `Livewire::test()`'s initial mount
+  runs through a real (temporary) route via `RequestBroker::
+  temporarilyDisableExceptionHandlingAndMiddleware()`, which disables
+  exception handling for everything *except* `HttpException`/
+  `AuthorizationException` — so `abort_unless(..., 404)` surfaces as a
+  normal 404 response (`->assertNotFound()`), not a thrown PHP exception
+  the way a plain service-method gate (`DoubtChatService::ask()`,
+  `abortStatus()` in `DoubtChatTest.php`) does. First draft of this
+  block's tests assumed the latter and silently passed with no gate ever
+  exercised; caught by chasing down why two tests reported "no exception
+  thrown."
+- Tests (`LessonRevisionNotesTest.php`): empty state before generation;
+  generated notes render once ready; a non-staff viewer on a draft-course
+  lesson gets 404 with the notes never appearing in the response; a guest
+  on a future-scheduled lesson gets 404; staff can preview notes on their
+  own tenant's unreleased lesson.
+- `composer test`: 1537/1538 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake. (Two more storage-debris
+  flakes — `DownloadCompletionExportControllerTest`/
+  `DownloadEnrolmentExportControllerTest`, same root cause as B2's
+  `BackupConfigurationTest` — surfaced mid-block from repeated full-suite
+  runs; cleaned `storage/app/private` again, same already-approved
+  cleanup as B2, confirmed gone on rerun. A third, one-off Postgres
+  connection-timeout error on an unrelated Batches test also appeared on
+  one run and did not recur — transient, not investigated further.)
 
 ### B5 — L12 pt.1: semantic search service — not started
 

@@ -14,6 +14,10 @@
              video timeline (design doc §3.1) — text/pdf/embed lessons have
              no timestamp_s to attach a marker to. --}}
         <livewire:content.lesson-notes :lesson="$lesson" />
+        {{-- S17 B4 — revision notes summarize a transcript, so only
+             meaningful where LessonArtifact ingestion actually runs
+             (video/live_session), same scoping as doubt-chat above. --}}
+        <livewire:ai.lesson-revision-notes :lesson="$lesson" />
     @elseif ($lesson->type === 'pdf')
         @if ($lesson->print_disabled)
             {{--
