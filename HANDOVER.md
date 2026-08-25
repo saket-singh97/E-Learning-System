@@ -7,6 +7,28 @@ at the source.
 
 ## Right now (2026-08-26)
 
+- **S18 — Analytics & Parent Engagement: DESIGNED, build not started.**
+  `docs/superpowers/specs/2026-08-26-s18-analytics-parent-engagement-design.md`,
+  `...-plan.md` (13 blocks, B0-B12). Real build scope: 5 items — A1
+  engagement ratio + speed profile, A2 rewatch heatmap, A3 drop-off point,
+  A4 two new nudge types (missed-class-replay, weak-topic-practice —
+  reuses S17's `WeakTopicDetectionService` directly), A5 monthly parent
+  report card (PDF, WhatsApp delivery via a signed download link, no new
+  `CommsProvider` method). `docs/ROADMAP.md`'s own S18 row nominally spans
+  8 items (M5-M8/M14-M15/O5-O6), but M15's 3-day-inactivity nudge already
+  shipped in S9 B13, M14 and O5 are the same report-card feature counted
+  twice, and O6 (parent-teacher thread) is P3-tier and largely already
+  covered by the existing generic `DirectMessage` — cut for now, same
+  "not named, not in scope yet" boundary S16/S17 both drew. One new
+  domain (`Analytics`) — A1-A3 are pure query services over the
+  already-existing `video_watch_events` table (S2), no new schema; A5
+  needs the slice's only new table, `monthly_report_cards`, versioned by
+  `period_month` so a scheduler retry can never double-send a parent the
+  same month's report. Load-bearing decision to watch during build: A5's
+  monthly sweep must be idempotent on `[student_id, period_month]` before
+  any WhatsApp send happens — the same "verify before send" discipline
+  every prior slice's own notification job needed.
+
 - **S17 — AI Layer, Round 2: COMPLETE, all 14 blocks (2026-08-26).**
   `docs/superpowers/specs/2026-08-25-s17-ai-layer-round-2-design.md`,
   `...-plan.md` (full per-block build log lives there, not repeated here).

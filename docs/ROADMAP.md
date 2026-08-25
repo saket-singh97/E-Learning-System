@@ -15,7 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 17 (S1–S17) |
-| **Proposed, not yet scoped** | 9 (S18–S26) |
+| **Designed, not built** | 1 (S18) |
+| **Proposed, not yet scoped** | 8 (S19–S26) |
 
 **Phase completion:**
 
@@ -49,17 +50,24 @@ regenerate it from this file.
 
 ---
 
-## Full roadmap — S18 onward (proposed)
+## Designed, not built — S18
+
+| Slice | Scope | Size | Design | Status |
+|---|---|---|---|---|
+| S18 | Analytics & Parent Engagement — engagement ratio + speed profile, rewatch heatmap, drop-off tracking, missed-class-replay + weak-topic-practice nudges, monthly parent report card on WhatsApp. Real scope is 5 items, not the row's headline "8": M15's 3-day-inactivity nudge already shipped in S9, M14/O5 are the same report-card feature counted twice, O6 (parent-teacher thread) is P3 and largely already covered by the existing generic `DirectMessage` — cut for now | 13 blocks | [design](superpowers/specs/2026-08-26-s18-analytics-parent-engagement-design.md) / [plan](superpowers/specs/2026-08-26-s18-analytics-parent-engagement-plan.md) | 🔵 Designed, build not started |
+
+---
+
+## Full roadmap — S19 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S17 were each shaped only once they
+slice's turn comes, the same way S10-S18 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S18 | Analytics & Parent Engagement — engagement ratio, rewatch heatmap, drop-off tracking, inactivity nudges, monthly report card, parent-teacher messaging | 8 | M5-M8, M14-M15, O5-O6 |
 | S19 | Communication Platform — real-time WebSockets, study planner + calendar, general forum, feedback surveys, help desk, gamification | 8 | N11-N18 |
 | S20 | Growth & Billing Extensions — affiliate codes, instructor payouts, refunds, subscription plans, multi-currency, revenue analytics (MRR/ARR) | 12 | R1-R6, P6/P8-P10, Q6-Q7 |
 | S21 | Platform Scale & Migration — read replicas, horizontal scaling, per-tenant feature flags, org SSO, data-import tooling from an existing LMS | 10 | V6-V15 |
