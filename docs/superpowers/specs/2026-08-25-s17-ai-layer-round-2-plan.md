@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B8 | L13 pt.2 — student-facing weak-topics view | ✅ done |
 | B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ✅ done |
 | B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ✅ done |
-| B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ⬜ not started |
+| B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ✅ done |
 | B12 | `TenantModelRegistry` sweep — 3 new models registered | ⬜ not started |
 | B13 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -386,15 +386,32 @@ stop and report before starting the next block.
   `BackupConfigurationTest` flake as B2/B4/B8 surfaced on the first run —
   cleaned `storage/app/private` again, confirmed gone on rerun.)
 
-### B11 — L14 pt.2: upload UI + result display — not started
+### B11 — L14 pt.2: upload UI + result display — done
 
-- Student-facing upload component: plain file input (design §4 decision
-  7 — no native camera capture), shows pending/processing/ready states,
-  polls or re-renders on completion (reuse whatever polling shape an
-  existing async-result view in this app already uses, if one exists —
-  check before inventing a new one).
-- Tests: a student sees only their own queries, never another student's;
-  the UI reflects each of the three terminal-ish states correctly.
+- `App\Domains\AI\Livewire\PhotoDoubtUpload` — plain `WithFileUploads`
+  file input (design §4 decision 7), same shape `AssignmentSubmit`
+  already established (server-side `mimes:` validate, try/catch mapping
+  service exceptions to friendly `addError()` messages). `render()`
+  recomputes the viewer's own queries fresh every call, so a poll cycle
+  always sees current DB state with no separate refresh action needed.
+- Polling: reused the existing `wire:poll.3s` shape `FeeCheckout`'s own
+  payment-status poll already established (S9 B8 — no broadcasting
+  infrastructure exists) rather than inventing a new mechanism — the poll
+  element only renders while a row is `pending`/`processing`, so it stops
+  the moment the job finishes, whichever way.
+- Wired into the student dashboard (same page as B6's search, B8's own
+  reasoning: photo-doubt is course-optional/standalone, so the tenant-wide
+  dashboard is the natural fit, not a new page).
+- Tests (`PhotoDoubtUploadTest.php`): a classmate's solution text never
+  appears in the viewer's own list; all three terminal-ish states render
+  correctly (pending shows "Processing...", ready shows
+  question+solution, failed shows an error message); submitting a valid
+  image creates a `pending` row; an invalid file type surfaces as a form
+  error, not a crash.
+- `composer test`: 1564/1565 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake. **All 5 S17 items now
+  shipped** (L9, L11, L12, L13, L14) — B12 (registry sweep) and B13
+  (final review pass) remain.
 
 ### B12 — `TenantModelRegistry` sweep — not started
 

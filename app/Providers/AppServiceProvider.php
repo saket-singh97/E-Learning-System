@@ -6,6 +6,7 @@ use App\Domains\AI\Listeners\RetryIngestion;
 use App\Domains\AI\Listeners\StartIngestion;
 use App\Domains\AI\Livewire\DoubtChat;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
+use App\Domains\AI\Livewire\PhotoDoubtUpload;
 use App\Domains\AI\Livewire\SemanticSearch;
 use App\Domains\AI\Livewire\WeakTopics;
 use App\Domains\Batches\Events\AttendanceRecorded;
@@ -196,6 +197,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('ai.lesson-revision-notes', LessonRevisionNotes::class);
         Livewire::component('ai.semantic-search', SemanticSearch::class);
         Livewire::component('ai.weak-topics', WeakTopics::class);
+        Livewire::component('ai.photo-doubt-upload', PhotoDoubtUpload::class);
         Livewire::component('batches.batch-catalog', BatchCatalog::class);
         Livewire::component('content.lesson-questions', LessonQuestions::class);
         Livewire::component('content.lesson-notes', LessonNotes::class);

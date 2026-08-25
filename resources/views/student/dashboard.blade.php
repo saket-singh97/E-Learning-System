@@ -25,6 +25,11 @@
          wired into the existing student dashboard rather than a new page. --}}
     <livewire:ai.semantic-search />
 
+    {{-- S17 B11 — photo-doubt is course-optional (standalone if asked
+         outside a course), so the tenant-wide dashboard is the natural
+         embed point, same reasoning as semantic search above. --}}
+    <livewire:ai.photo-doubt-upload />
+
     <livewire:comms.notice-board />
     <livewire:notification-centre />
     <livewire:impersonation-banner />
