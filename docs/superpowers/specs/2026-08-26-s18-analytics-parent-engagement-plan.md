@@ -26,7 +26,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | A1 pt.1 — `EngagementMetricsService` (engagement ratio + speed profile) | ⬜ not started |
+| B0 | A1 pt.1 — `EngagementMetricsService` (engagement ratio + speed profile) | ✅ done |
 | B1 | A1 pt.2 — instructor/admin-facing engagement metrics view | ⬜ not started |
 | B2 | A2 pt.1 — `RewatchHeatmapService` | ⬜ not started |
 | B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ⬜ not started |
@@ -44,21 +44,39 @@ stop and report before starting the next block.
 
 ## Block detail (expand as each block builds; stubs below are the starting checklist)
 
-### B0 — A1 pt.1: `EngagementMetricsService` — not started
+### B0 — A1 pt.1: `EngagementMetricsService` — done
 
-- `EngagementMetricsService::ratioFor(User $student, Lesson $lesson): float`
-  — sums watched seconds from `VideoWatchEvent` rows for that
-  student+lesson, divides by the lesson's own `video_duration_seconds`
-  (capped at 1.0 — rewatching doesn't push ratio past "fully watched").
-- `EngagementMetricsService::speedProfileFor(User $student, Lesson
-  $lesson): array{sustained_2x: bool, ...}` — reuses
-  `RecordVideoCoverageAttendance`'s own wall-clock-vs-video-time inference
-  logic (S16 B2), not a second implementation of the same math.
-- No new schema — pure query service over `video_watch_events` (design
-  §2.2/§4 decision 2).
-- Tests: a background-tab session (long wall-clock, near-zero real
-  watched seconds) scores near-0 engagement ratio; a normal full watch
-  scores ~1.0; sustained 2x playback flags `sustained_2x = true`.
+- `app/Domains/Analytics/Services/EngagementMetricsService.php` created —
+  new `Analytics` domain, `Services/` only so far (design §3.1).
+- `ratioFor(User $student, Lesson $lesson): float` — merges overlapping
+  `VideoWatchEvent` intervals (same merge shape as
+  `RecordVideoCoverageAttendance::mergedCoveredSeconds`, duplicated
+  locally rather than cross-domain-called since that method lives on a
+  Batches Job class, not a shared service), divides by
+  `video_duration_seconds`, capped at 1.0.
+- `speedProfileFor(User $student, Lesson $lesson): array{sustained_2x,
+  fast_heartbeat_count, total_heartbeats}` — **correction found during
+  build**: there is no wall-clock column to reuse from
+  `RecordVideoCoverageAttendance` (it only merges video-time intervals,
+  no speed logic exists there). Real signal used instead: the lesson
+  player heartbeats on a fixed `setInterval(10000)` cadence
+  (`lesson-player.blade.php`), so each `VideoWatchEvent`'s own
+  `(end_s - start_s) / 10` is that heartbeat's implied playback speed.
+  `sustained_2x` requires >= 3 heartbeats at >= 1.75x, filtering out a
+  one-off forward-skip (indistinguishable from a speed change on a
+  single event).
+- No new schema (confirmed, design §2.2/§4 decision 2).
+- Tests: `tests/Feature/Analytics/EngagementMetricsServiceTest.php`, 8
+  cases — full watch ~1.0, background-tab session <0.05, rewatch capped
+  at 1.0, no-duration-yet returns 0.0 not error, sustained 2x true/false,
+  single fast heartbeat not flagged as sustained, cross-student isolation
+  (own events only, no tenant scope needed beyond `BelongsToTenant`
+  default). All 8 pass.
+- `composer test` (full `php artisan test`, config cache cleared first):
+  1573/1575 pass. 2 failures, both pre-existing/unrelated to this block
+  — `CourseSlugUniquenessTest` (known flake, tolerated per this plan's own
+  B12 note) and `BackupConfigurationTest` (zip-size assertion, untouched
+  by Analytics work).
 
 ### B1 — A1 pt.2: engagement metrics view — not started
 
