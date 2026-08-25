@@ -2,6 +2,7 @@
 
 namespace App\Support\Tenancy;
 
+use App\Domains\AI\Models\CourseOutlineDraft;
 use App\Domains\AI\Models\DoubtChatMessage;
 use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
@@ -153,6 +154,7 @@ class TenantModelRegistry
         TestSeries::class,
         OmrTemplate::class,
         OmrSheetScan::class,
+        CourseOutlineDraft::class,
     ];
 
     /**
@@ -1002,6 +1004,11 @@ class TenantModelRegistry
                     'status' => 'pending',
                 ];
             })(),
+            CourseOutlineDraft::class => [
+                'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'topic' => 'Row',
+                'status' => 'draft',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1084,6 +1091,7 @@ class TenantModelRegistry
             TestSeries::class => ['title' => 'tampered'],
             OmrTemplate::class => ['question_count' => 20],
             OmrSheetScan::class => ['status' => 'failed'],
+            CourseOutlineDraft::class => ['status' => 'approved'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

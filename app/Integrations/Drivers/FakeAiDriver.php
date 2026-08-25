@@ -156,6 +156,24 @@ class FakeAiDriver implements AiProvider
                 'concept' => self::fakeSentence($fieldSeed),
                 'difficulty' => $levels[$fieldSeed % 3],
             ]],
+            // S17 B1 — CourseOutlineGenerator's own responseSchema=['outline']
+            // contract: an array of sections, each with a section_title and
+            // a lessons array of {title, description}.
+            'outline' => [
+                [
+                    'section_title' => self::fakeSentence($fieldSeed),
+                    'lessons' => [
+                        ['title' => self::fakeSentence($fieldSeed + 1), 'description' => self::fakeSentence($fieldSeed + 2)],
+                        ['title' => self::fakeSentence($fieldSeed + 3), 'description' => self::fakeSentence($fieldSeed + 4)],
+                    ],
+                ],
+                [
+                    'section_title' => self::fakeSentence($fieldSeed + 5),
+                    'lessons' => [
+                        ['title' => self::fakeSentence($fieldSeed + 6), 'description' => self::fakeSentence($fieldSeed + 7)],
+                    ],
+                ],
+            ],
             default => str_ends_with($field, '_s')
                 || str_contains($field, 'cost')
                 || str_contains($field, 'count')

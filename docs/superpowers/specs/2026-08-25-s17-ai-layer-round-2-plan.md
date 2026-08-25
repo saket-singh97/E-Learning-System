@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | `AiProvider::chatWithImage()` — new interface method, foundational for L14 | ✅ done |
-| B1 | L9 pt.1 — `course_outline_drafts` schema + `CourseOutlineGenerator` service | ⬜ not started |
+| B1 | L9 pt.1 — `course_outline_drafts` schema + `CourseOutlineGenerator` service | ✅ done |
 | B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ⬜ not started |
 | B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ⬜ not started |
 | B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ⬜ not started |
@@ -69,17 +69,33 @@ stop and report before starting the next block.
   unrelated `CourseSlugUniquenessTest` flake (tolerated per this plan's
   own B13 note).
 
-### B1 — L9 pt.1: outline schema + generator service — not started
+### B1 — L9 pt.1: outline schema + generator service — done
 
 - `course_outline_drafts` migration (see design §3.2) + `CourseOutlineDraft`
-  model (AI domain).
+  model (AI domain, `BelongsToTenant`).
 - `CourseOutlineGenerator::generate(string $topic, ?string $targetLevel,
-  User $creator): CourseOutlineDraft` — calls `AiProvider::chat()` with a
-  `$responseSchema` (structured-output mode, same pattern
-  `ExtractLessonConcepts` already uses) requesting an array of
-  `{section_title, lessons: [{title, description}]}`.
-- Tests: generator produces a well-formed draft, spend-cap denial surfaces
-  cleanly (reuses existing `AiSpendCap` behavior, no new spend-cap code).
+  User $creator): CourseOutlineDraft` — calls `AiProvider::chat()` with
+  `responseSchema: ['outline']` (structured-output mode, same pattern
+  `ExtractLessonConcepts` already uses), requesting an array of
+  `{section_title, lessons: [{title, description}]}`. Constructor-injects
+  `AiProvider` (`DoubtChatService`'s own shape), not the `app()` helper.
+- `FakeAiDriver::fakeValueFor()` gained an `'outline'` case (2 fake
+  sections, contract-shaped) — the same "add a case when a real caller
+  needs a structured shape" precedent `concepts`/`seed_questions` already
+  set; no existing case could fake this nested shape.
+- Registered `CourseOutlineDraft` in `TenantModelRegistry` now rather than
+  deferring to B12 — CLAUDE.md's registry rule is a hard invariant enforced
+  by a guard test in `CrossTenantTest.php` on every `composer test` run,
+  not something a later block can safely leave failing in between; B12's
+  sweep will simply reconfirm zero gaps, same outcome S16 B16 found.
+- Tests: `CourseOutlineGeneratorTest.php` — well-formed draft shape
+  (topic/status/target_level/generated_outline/token_cost), null
+  `target_level` when omitted, and an `AiSpendCapExceededException`
+  bubbling up uncaught from a real `LessonArtifact` spend-cap breach (no
+  new spend-cap code — reuses the existing container-level decorator, same
+  as `DoubtChatServiceTest`'s own equivalent case).
+- `composer test`: 1523/1524 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake.
 
 ### B2 — L9 pt.2: review UI + approval → real Content records — not started
 
