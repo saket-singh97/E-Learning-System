@@ -41,7 +41,7 @@ stop and report before starting the next block.
 | B10 | I8 pt.2 — per-question timing (`quiz_answers.time_spent_seconds`) | ✅ done |
 | B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ✅ done |
 | B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ✅ done |
-| B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ⬜ not started |
+| B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ✅ done |
 | B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ⬜ not started |
 | B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ⬜ not started |
 | B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ⬜ not started |
@@ -491,25 +491,40 @@ undershot its actual by a wide margin.
   didn't disturb anything already passing. `composer test`: 1488/1489
   pass; sole failure the pre-existing unrelated `CourseSlugUniquenessTest`.
 
-### B13 — I10 pt.2: ranking + student results view — not started
+### B13 — I10 pt.2: ranking + student results view — done
 
 - `TestSeriesRankingService::rankingsFor(TestSeries, User $viewer): Collection`
-  — per student in the series's own tenant, sums best-attempt score per
-  quiz in the series, sorts descending in PHP (design doc §4 decision 6 —
-  no `DB::raw` window function), computes rank + percentile + the top
-  scorer's own score for comparison.
-- Student-facing results view (a bare host route/Livewire component, same
-  "no existing page to embed on, add a small host route" shape B6/B7 of
-  S15 already established) showing the viewer's own rank/percentile/gap-
-  to-topper, not the full roster (privacy — a student sees their own
-  standing, not classmates' names, matching this app's existing "no
-  cross-student data exposure" posture).
-- New tests: two students across two quizzes in one series rank/percentile
-  correctly, a student who attempted only one of the two quizzes in the
-  series is scored fairly (best-effort partial participation, exact rule
-  decided at build time and documented), cross-tenant students in a
-  same-named series never mix (belt-and-suspenders on top of the generated
-  `CrossTenantTest`).
+  — scoped to `$viewer->tenant_id` explicitly (not trusted to
+  `CurrentTenant`'s own binding), sums each student's best attempt per
+  quiz in the series (no zero-fill penalty for a quiz never attempted —
+  build-time call, "best-effort partial participation"), sorts
+  descending in PHP (design doc §4 decision 6 — no raw-SQL window
+  function). Rank = standard competition ranking (ties share a rank);
+  percentile = "beat X% of participants" using a strictly-lower-score
+  comparison (a documented judgment call, not pinned anywhere else in
+  this app).
+- `App\Livewire\TestSeriesResults` — no existing student-facing page to
+  embed this on, same "add a small host route" shape B3's
+  `GeofenceCheckIn` already took (`GET /test-series/{series}/results`,
+  auth-required). Shows only the viewer's own rank/percentile/gap-to-
+  topper, never the full roster or classmates' names (privacy — this
+  app's existing "no cross-student data exposure" posture) — the service
+  itself returns every participant's row, and the component picks out
+  just the viewer's own before rendering.
+- New tests (8): two students across two quizzes rank/percentile
+  correctly, a partial-participation student is scored on just their one
+  attempted quiz, the best of multiple attempts on the same quiz counts
+  (not the sum), a same-named series in a different tenant never mixes
+  in, a quiz misconfigured to point at another tenant's series is still
+  excluded by the service's own tenant filter (belt-and-suspenders beyond
+  the Admin form's own good behavior); the Livewire component shows the
+  viewer's own rank, never a classmate's name, and a not-yet-attempted
+  message instead of a rank.
+- Same false-positive class as B5: this service's own docblock explaining
+  *why* no raw-SQL window function was used literally contained the
+  forbidden substring, tripping the security-baseline text scan on
+  prose, not code. Reworded. `composer test`: 1496/1497 pass; sole
+  failure the pre-existing unrelated `CourseSlugUniquenessTest`.
 
 ### B14 — I11 pt.1: OMR schema + template layout — not started
 
