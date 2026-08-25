@@ -42,7 +42,7 @@ stop and report before starting the next block.
 | B11 | I9 — violation threshold → auto-submit (reuses existing `auto_submitted` path) + `flagged_for_review` + instructor review queue | ✅ done |
 | B12 | I10 pt.1 — `test_series` schema + Admin-panel CRUD, `quizzes.test_series_id` bundling (mirrors `Program`/`Batch`) | ✅ done |
 | B13 | I10 pt.2 — `TestSeriesRankingService` (rank/percentile/topper, per-tenant) + student-facing results view | ✅ done |
-| B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ⬜ not started |
+| B14 | I11 pt.1 — `omr_templates`/`omr_sheet_scans` schema + app-generated bubble-grid layout (no freeform designer) | ✅ done |
 | B15 | I11 pt.2 — `OmrScanner` (GD bubble-darkness reader) + roll-number-block matching + auto-grade into a real `QuizAttempt` | ⬜ not started |
 | B16 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ⬜ not started |
 | B17 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -526,19 +526,33 @@ undershot its actual by a wide margin.
   prose, not code. Reworded. `composer test`: 1496/1497 pass; sole
   failure the pre-existing unrelated `CourseSlugUniquenessTest`.
 
-### B14 — I11 pt.1: OMR schema + template layout — not started
+### B14 — I11 pt.1: OMR schema + template layout — done
 
-- `omr_templates`/`omr_sheet_scans` migrations + models, registered in
-  `TenantModelRegistry`.
-- `OmrTemplate::generateLayout()` — deterministic bubble-grid coordinate
-  computation from `question_count`/`options_per_question`/
-  `roll_number_digits` (design doc §4 decision 8 — no freeform designer),
-  stored in `layout` jsonb.
-- Admin-panel action on `QuizResource` — "Generate OMR template" (creates
-  the template + a printable PDF via the existing `dompdf` dependency, same
-  reuse posture `IdCardGenerator` (S15) already took).
-- New tests: template layout generation is deterministic and covers every
-  question/option/roll-number-digit position with no overlaps.
+- `omr_templates` (unique `quiz_id` — one fixed template per quiz,
+  regenerated in place) / `omr_sheet_scans` migrations + `OmrTemplate`/
+  `OmrSheetScan` models, registered in `TenantModelRegistry`.
+- `OmrTemplate::generateLayout()` — pure function of the three counts.
+  Roll-number digit bubbles sit above the question grid; the question
+  block's own top margin is computed from the roll-number block's own
+  height, so the two sections' coordinate ranges never overlap regardless
+  of `roll_number_digits`. Stored in `layout` jsonb.
+- `OmrTemplateGenerator` (Assessments) — `updateOrCreate` keyed on
+  `quiz_id` (idempotent regeneration) + a printable PDF via the existing
+  `dompdf` dependency, same reuse posture `IdCardGenerator` (S15) already
+  took. Wired as a `generateOmrTemplate` action on the existing
+  `QuizResource` table (Teach panel, where quiz authoring already lives —
+  "Admin-panel action" in the plan's own wording read as "an
+  administrative action," not a literal Admin-panel placement, since
+  `QuizResource` itself has never lived there).
+- New tests (10): layout generation is deterministic (same inputs twice
+  produce identical output byte-for-byte), covers every question/option
+  position with no overlapping coordinates, covers every roll-number-
+  digit position the same way, the two sections never overlap each
+  other, scales correctly at different counts; the generator creates a
+  real template + PDF, regenerates in place rather than duplicating a
+  row, and works through the real Filament action. `composer test`:
+  1506/1507 pass; sole failure the pre-existing unrelated
+  `CourseSlugUniquenessTest`.
 
 ### B15 — I11 pt.2: scanner + auto-grade — not started
 

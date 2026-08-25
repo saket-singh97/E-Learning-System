@@ -10,6 +10,8 @@ use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Models\QuizProctoringEvent;
+use App\Domains\Assessments\Models\OmrSheetScan;
+use App\Domains\Assessments\Models\OmrTemplate;
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
@@ -149,6 +151,8 @@ class TenantModelRegistry
         TeacherAttendanceFlag::class,
         QuizProctoringEvent::class,
         TestSeries::class,
+        OmrTemplate::class,
+        OmrSheetScan::class,
     ];
 
     /**
@@ -944,6 +948,60 @@ class TenantModelRegistry
                 'occurred_at' => now(),
             ],
             TestSeries::class => ['title' => 'Row Series'],
+            OmrTemplate::class => [
+                'quiz_id' => Quiz::create([
+                    'lesson_id' => Lesson::create([
+                        'course_section_id' => CourseSection::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                            'title' => 'Parent',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Parent',
+                        'type' => 'quiz',
+                        'position' => 0,
+                    ])->id,
+                    'title' => 'Row Quiz',
+                    'blueprint' => [],
+                    'time_limit_minutes' => 30,
+                    'max_attempts' => 3,
+                ])->id,
+                'question_count' => 10,
+                'options_per_question' => 4,
+                'roll_number_digits' => 6,
+                'layout' => OmrTemplate::generateLayout(10, 4, 6),
+            ],
+            OmrSheetScan::class => (function () {
+                $quiz = Quiz::create([
+                    'lesson_id' => Lesson::create([
+                        'course_section_id' => CourseSection::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                            'title' => 'Parent',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Parent',
+                        'type' => 'quiz',
+                        'position' => 0,
+                    ])->id,
+                    'title' => 'Row Quiz',
+                    'blueprint' => [],
+                    'time_limit_minutes' => 30,
+                    'max_attempts' => 3,
+                ]);
+                $template = OmrTemplate::create([
+                    'quiz_id' => $quiz->id,
+                    'question_count' => 10,
+                    'options_per_question' => 4,
+                    'roll_number_digits' => 6,
+                    'layout' => OmrTemplate::generateLayout(10, 4, 6),
+                ]);
+
+                return [
+                    'omr_template_id' => $template->id,
+                    'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'image_disk_path' => 'omr-scans/row.png',
+                    'status' => 'pending',
+                ];
+            })(),
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1024,6 +1082,8 @@ class TenantModelRegistry
             TeacherAttendanceFlag::class => ['status' => 'resolved'],
             QuizProctoringEvent::class => ['event_type' => 'copy'],
             TestSeries::class => ['title' => 'tampered'],
+            OmrTemplate::class => ['question_count' => 20],
+            OmrSheetScan::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

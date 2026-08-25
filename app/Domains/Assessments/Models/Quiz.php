@@ -8,6 +8,7 @@ use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Quiz extends Model
 {
@@ -55,6 +56,11 @@ class Quiz extends Model
     public function testSeries(): BelongsTo
     {
         return $this->belongsTo(TestSeries::class);
+    }
+
+    public function omrTemplate(): HasOne
+    {
+        return $this->hasOne(OmrTemplate::class);
     }
 
     /**
