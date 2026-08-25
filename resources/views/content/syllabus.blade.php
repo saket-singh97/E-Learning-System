@@ -17,6 +17,10 @@
 
     <livewire:syllabus-tree :course="$course" />
 
+    {{-- S17 B8 — course-scoped, so the syllabus page (already gated on
+         course visibility) is the natural embed point, not a new page. --}}
+    <livewire:ai.weak-topics :course="$course" />
+
     @if ($recommendations->isNotEmpty())
         <h2>You might also like</h2>
         <ul>

@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ✅ done |
 | B6 | L12 pt.2 — search UI (student portal search bar + results) | ✅ done |
 | B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ✅ done |
-| B8 | L13 pt.2 — student-facing weak-topics view | ⬜ not started |
+| B8 | L13 pt.2 — student-facing weak-topics view | ✅ done |
 | B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ⬜ not started |
 | B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ⬜ not started |
 | B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ⬜ not started |
@@ -296,14 +296,26 @@ stop and report before starting the next block.
 - `composer test`: 1548/1549 pass, only failure is the pre-existing
   unrelated `CourseSlugUniquenessTest` flake.
 
-### B8 — L13 pt.2: student weak-topics view — not started
+### B8 — L13 pt.2: student weak-topics view — done
 
-- Student-facing view (dashboard widget or standalone page — decide on
-  build, follow whichever existing student-dashboard pattern is closest)
-  showing weak concepts with a link to the lesson(s) that cover them.
-- Tests: shows only the viewer's own weak topics, never a classmate's (same
-  privacy posture S16 B13's `TestSeriesResults` already established for
-  rank/percentile).
+- `App\Domains\AI\Livewire\WeakTopics`, embedded on the existing per-course
+  `content.syllabus` page — decided this over a dashboard widget since the
+  service is course-scoped (`weakTopicsFor(User, int $courseId)`) and the
+  syllabus page is the natural already-gated, course-scoped surface (same
+  reasoning that put `SyllabusTree`/`CourseReviews` there); no new page.
+- Privacy posture matches `TestSeriesResults` (own row only, never the
+  roster) — but structurally guaranteed here, not just convention:
+  `WeakTopicDetectionService` already scopes every query to
+  `auth()->user()->id`, so the component has no classmate data to leak
+  even if it wanted to.
+- Tests (`WeakTopicsTest.php`): shows the viewer's own weak concept and its
+  linked lesson; a classmate's differently-named weak concept (same
+  course, same tenant) never appears; a guest sees a login prompt instead
+  of an error.
+- `composer test`: 1551/1552 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake. (Same storage-debris
+  `BackupConfigurationTest` flake as B2/B4 surfaced on the first run —
+  cleaned `storage/app/private` again, confirmed gone on rerun.)
 
 ### B9 — L13 pt.3: instructor class-wide aggregate view — not started
 
