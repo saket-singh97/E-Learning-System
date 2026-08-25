@@ -6,6 +6,7 @@ use App\Domains\AI\Listeners\RetryIngestion;
 use App\Domains\AI\Listeners\StartIngestion;
 use App\Domains\AI\Livewire\DoubtChat;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
+use App\Domains\AI\Livewire\SemanticSearch;
 use App\Domains\Batches\Events\AttendanceRecorded;
 use App\Domains\Batches\Events\EnrolmentApprovalExpired;
 use App\Domains\Batches\Events\EnrolmentAwaitingPayment;
@@ -192,6 +193,7 @@ class AppServiceProvider extends ServiceProvider
         // tag needs an explicit alias.
         Livewire::component('ai.doubt-chat', DoubtChat::class);
         Livewire::component('ai.lesson-revision-notes', LessonRevisionNotes::class);
+        Livewire::component('ai.semantic-search', SemanticSearch::class);
         Livewire::component('batches.batch-catalog', BatchCatalog::class);
         Livewire::component('content.lesson-questions', LessonQuestions::class);
         Livewire::component('content.lesson-notes', LessonNotes::class);

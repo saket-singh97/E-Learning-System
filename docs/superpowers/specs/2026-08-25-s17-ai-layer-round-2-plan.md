@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ✅ done |
 | B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ✅ done |
 | B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ✅ done |
-| B6 | L12 pt.2 — search UI (student portal search bar + results) | ⬜ not started |
+| B6 | L12 pt.2 — search UI (student portal search bar + results) | ✅ done |
 | B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ⬜ not started |
 | B8 | L13 pt.2 — student-facing weak-topics view | ⬜ not started |
 | B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ⬜ not started |
@@ -242,16 +242,27 @@ stop and report before starting the next block.
 - `composer test`: 1541/1542 pass, only failure is the pre-existing
   unrelated `CourseSlugUniquenessTest` flake.
 
-### B6 — L12 pt.2: search UI — not started
+### B6 — L12 pt.2: search UI — done
 
-- Livewire search component: query input, debounced, result list linking
-  to `{lesson}#{start_s}` (same timestamp-anchor shape `DoubtChatService`
-  already cites in its own answers).
-- Wired into the student portal (existing embed point — confirm during
-  build, don't invent a new page if one already fits).
-- Tests: empty query returns nothing (no wasted `AiProvider::embed()`
-  call); a real query returns ranked results a logged-in student can click
-  through to the right lesson timestamp.
+- `App\Domains\AI\Livewire\SemanticSearch` — query input debounced
+  client-side (`wire:model.live.debounce.400ms`), `updatedQuery()` calls
+  `SemanticSearchService::search()` and short-circuits (no service call at
+  all) for an empty query or no authenticated viewer. Result links use
+  `route('lessons.watch', [...]).'#t='.$chunk->start_s` — the same
+  `{lesson}#{start_s}` timestamp-anchor shape `DoubtChatService`'s own
+  citations already point at, as a real navigable URL here since a search
+  result may point at a *different* lesson than whatever the viewer is
+  currently on (unlike `DoubtChat`'s same-page seek-to dispatch).
+- Wired into `resources/views/student/dashboard.blade.php` — the existing
+  student dashboard host page — no new route/page invented.
+- Tests (`SemanticSearchTest.php`): empty query calls `AiProvider::embed()`
+  zero times (recording fake driver); a real query returns the visible
+  chunk and its watch URL contains both the correct lesson id and the
+  `#t={start_s}` fragment; a guest sees empty results rather than an error
+  (the service's own `User` param is non-nullable, so the component must
+  never call it without an authenticated viewer).
+- `composer test`: 1544/1545 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake.
 
 ### B7 — L13 pt.1: weak-topic detection service — not started
 

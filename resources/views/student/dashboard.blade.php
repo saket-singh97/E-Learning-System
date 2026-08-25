@@ -21,6 +21,10 @@
          but this keeps both portals consistent if that ever changes. --}}
     <livewire:student-portal />
 
+    {{-- S17 B6 — semantic search across ingested lesson transcripts,
+         wired into the existing student dashboard rather than a new page. --}}
+    <livewire:ai.semantic-search />
+
     <livewire:comms.notice-board />
     <livewire:notification-centre />
     <livewire:impersonation-banner />
