@@ -6,6 +6,8 @@ use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
+use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
@@ -148,4 +150,96 @@ it('never includes another tenants or another students quiz answers', function (
         ->toBe(['Own Weak Concept'])
         ->not->toContain('Classmates Weak Concept')
         ->not->toContain('Cross Tenant Weak Concept');
+});
+
+function weakTopicAttemptFor(int $quizId, int $studentId): QuizAttempt
+{
+    return QuizAttempt::create([
+        'quiz_id' => $quizId,
+        'user_id' => $studentId,
+        'question_ids' => [],
+        'status' => 'submitted',
+        'started_at' => now(),
+        'expires_at' => now()->addHour(),
+        'max_score' => 10,
+    ]);
+}
+
+it('aggregates correct weak-student counts across a batchs actively enrolled students only', function () {
+    [$tenant, $studentA, $course, , , $attemptA] = weakTopicFixture();
+    weakTopicQuestionAndAnswer($course->id, $attemptA->id, 'Kinematics', false);
+
+    $quiz = Quiz::first();
+
+    $studentB = User::factory()->create(['tenant_id' => $tenant->id]);
+    weakTopicQuestionAndAnswer($course->id, weakTopicAttemptFor($quiz->id, $studentB->id)->id, 'Kinematics', false);
+
+    // Answers a different concept correctly — never weak, must not appear.
+    $studentC = User::factory()->create(['tenant_id' => $tenant->id]);
+    weakTopicQuestionAndAnswer($course->id, weakTopicAttemptFor($quiz->id, $studentC->id)->id, 'Dynamics', true);
+
+    // A student with a weak concept but NOT actively enrolled (waitlisted)
+    // — must not count toward the aggregate at all.
+    $notEnrolled = User::factory()->create(['tenant_id' => $tenant->id]);
+    weakTopicQuestionAndAnswer($course->id, weakTopicAttemptFor($quiz->id, $notEnrolled->id)->id, 'Kinematics', false);
+
+    $batch = Batch::create([
+        'course_id' => $course->id,
+        'title' => 'Batch A',
+        'slug' => 'batch-a-'.uniqid(),
+        'starts_on' => now()->toDateString(),
+        'ends_on' => now()->addMonth()->toDateString(),
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    foreach ([$studentA, $studentB, $studentC] as $student) {
+        Enrolment::create(['batch_id' => $batch->id, 'user_id' => $student->id, 'status' => 'active', 'source' => 'manual_add', 'requested_at' => now()]);
+    }
+    Enrolment::create(['batch_id' => $batch->id, 'user_id' => $notEnrolled->id, 'status' => 'waitlisted', 'source' => 'manual_add', 'requested_at' => now()]);
+
+    $aggregate = app(WeakTopicDetectionService::class)->classWideWeakTopicsFor($batch);
+
+    expect($aggregate)->toHaveCount(1)
+        ->and($aggregate->first()['concept'])->toBe('Kinematics')
+        ->and($aggregate->first()['weak_student_count'])->toBe(2)
+        ->and($aggregate->first()['total_students'])->toBe(3);
+});
+
+it('returns an empty collection, not an error, for a batch with no quiz attempts yet', function () {
+    [, , $course] = weakTopicFixture();
+    $student = User::factory()->create(['tenant_id' => Tenant::first()->id]);
+
+    $batch = Batch::create([
+        'course_id' => $course->id,
+        'title' => 'Empty Batch',
+        'slug' => 'empty-batch-'.uniqid(),
+        'starts_on' => now()->toDateString(),
+        'ends_on' => now()->addMonth()->toDateString(),
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+    Enrolment::create(['batch_id' => $batch->id, 'user_id' => $student->id, 'status' => 'active', 'source' => 'manual_add', 'requested_at' => now()]);
+
+    $aggregate = app(WeakTopicDetectionService::class)->classWideWeakTopicsFor($batch);
+
+    expect($aggregate)->toBeEmpty();
+});
+
+it('returns an empty collection for a batch with no active enrolments at all', function () {
+    [, , $course] = weakTopicFixture();
+
+    $batch = Batch::create([
+        'course_id' => $course->id,
+        'title' => 'No Students',
+        'slug' => 'no-students-'.uniqid(),
+        'starts_on' => now()->toDateString(),
+        'ends_on' => now()->addMonth()->toDateString(),
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    $aggregate = app(WeakTopicDetectionService::class)->classWideWeakTopicsFor($batch);
+
+    expect($aggregate)->toBeEmpty();
 });

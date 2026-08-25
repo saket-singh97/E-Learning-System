@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B6 | L12 pt.2 — search UI (student portal search bar + results) | ✅ done |
 | B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ✅ done |
 | B8 | L13 pt.2 — student-facing weak-topics view | ✅ done |
-| B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ⬜ not started |
+| B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ✅ done |
 | B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ⬜ not started |
 | B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ⬜ not started |
 | B12 | `TenantModelRegistry` sweep — 3 new models registered | ⬜ not started |
@@ -317,14 +317,37 @@ stop and report before starting the next block.
   `BackupConfigurationTest` flake as B2/B4 surfaced on the first run —
   cleaned `storage/app/private` again, confirmed gone on rerun.)
 
-### B9 — L13 pt.3: instructor class-wide aggregate view — not started
+### B9 — L13 pt.3: instructor class-wide aggregate view — done
 
-- Instructor/admin-facing view (Filament widget or resource page) showing,
-  for a batch, which concepts the largest share of students are weak on —
-  aggregate only, never a per-student breakdown on this view (that's B8's
-  job, and only the student themself sees it).
-- Tests: aggregate counts are correct across multiple students; a batch
-  with no quiz attempts yet shows an empty state, not an error.
+- `WeakTopicDetectionService::classWideWeakTopicsFor(Batch $batch):
+  Collection` — reuses `weakTopicsFor()` per actively-enrolled student
+  (`Enrolment.status = 'active'`), counts distinct weak students per
+  concept, sorted desc. Reads `Batches`' `Enrolment`/`Batch` models
+  directly — cross-domain *model* reads are established precedent
+  (`Quiz::isVisibleTo()` already does the same into `Content`), not the
+  cross-domain *service* calls CLAUDE.md's events-only rule targets.
+- `App\Filament\Teach\Widgets\BatchWeakTopicsWidget` (`StatsOverviewWidget`
+  — same base class every existing widget in this codebase already uses,
+  no new custom-view widget mechanism invented), placed via
+  `EditBatch::getFooterWidgets()`. Filament's own
+  `InteractsWithRecord::getWidgetData()` already hands every footer widget
+  `['record' => $batch]` for free — confirmed by reading Filament core
+  rather than assumed. Top 5 weak concepts as stat tiles
+  (`"N/M students weak"`); an empty aggregate renders one "None yet" tile
+  instead of a blank widget.
+- Aggregate only — no per-student breakdown here, that's B8's `WeakTopics`
+  component and only the student themself sees it.
+- Tests (appended to `WeakTopicDetectionServiceTest.php`): counts are
+  correct across 3 active students (2 weak on the same concept, 1 not);
+  a student with a weak concept but only *waitlisted* (not active)
+  correctly excluded from both the count and `total_students`; an empty
+  batch (no attempts, or zero active enrolments) returns an empty
+  collection, not an error.
+- Build-time fix: `Enrolment::create()` needed `requested_at` explicitly
+  (NOT NULL on `enrolments`) — caught by the targeted run before it
+  reached the full suite.
+- `composer test`: 1554/1555 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake.
 
 ### B10 — L14 pt.1: photo-doubt schema + async service — not started
 

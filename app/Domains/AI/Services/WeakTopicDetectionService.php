@@ -4,6 +4,8 @@ namespace App\Domains\AI\Services;
 
 use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\Assessments\Models\QuizAnswer;
+use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Content\Models\Lesson;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -102,5 +104,49 @@ class WeakTopicDetectionService
     protected function normalize(string $concept): string
     {
         return strtolower(trim($concept));
+    }
+
+    /**
+     * L13 pt.3 — instructor/class-wide aggregate: how many of a batch's
+     * actively-enrolled students are weak on each concept. Aggregate
+     * counts only, never a per-student breakdown (that's weakTopicsFor()'s
+     * own job, and only the student themself sees it — B8). Reads
+     * Batches' Enrolment/Batch models directly, same "cross-domain *model*
+     * reads are established precedent" posture Quiz::isVisibleTo()
+     * already documents for its own Content model reads — not a
+     * cross-domain *service* call, which CLAUDE.md's events-only rule
+     * actually targets.
+     *
+     * @return Collection<int, array{concept: string, weak_student_count: int, total_students: int}>
+     */
+    public function classWideWeakTopicsFor(Batch $batch): Collection
+    {
+        $studentIds = Enrolment::where('batch_id', $batch->id)
+            ->where('status', 'active')
+            ->pluck('user_id');
+
+        $totalStudents = $studentIds->count();
+
+        if ($totalStudents === 0) {
+            return collect();
+        }
+
+        $counts = collect();
+
+        User::whereIn('id', $studentIds)->get()->each(function (User $student) use ($batch, $counts): void {
+            $this->weakTopicsFor($student, $batch->course_id)->each(
+                fn (array $topic) => $counts->put($topic['concept'], $counts->get($topic['concept'], 0) + 1),
+            );
+        });
+
+        return $counts
+            ->map(fn (int $count, string $concept): array => [
+                'concept' => $concept,
+                'weak_student_count' => $count,
+                'total_students' => $totalStudents,
+            ])
+            ->values()
+            ->sortByDesc('weak_student_count')
+            ->values();
     }
 }
