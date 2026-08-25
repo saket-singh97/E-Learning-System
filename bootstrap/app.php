@@ -34,6 +34,7 @@ use App\Exceptions\LessonArtifactNotReadyException;
 use App\Exceptions\LivePollAuthorizationException;
 use App\Exceptions\LivePollStateException;
 use App\Exceptions\MissingTenantContextException;
+use App\Exceptions\PhotoTooLargeException;
 use App\Exceptions\PlanDowngradeBlockedException;
 use App\Exceptions\PrivilegeEscalationException;
 use App\Exceptions\QuizAttemptAlreadySubmittedException;
@@ -222,6 +223,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (TenantNotSubscribedException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (GdprDeletionRequestNotPendingException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (LessonArtifactNotReadyException $e) => abort(409, $e->getMessage()));
+        $exceptions->render(fn (PhotoTooLargeException $e) => abort(422, $e->getMessage()));
 
         // "Should never happen" — a programmer error (tenant-scoped code
         // reached with no tenant bound), not a client-recoverable state, so

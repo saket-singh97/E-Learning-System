@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ✅ done |
 | B8 | L13 pt.2 — student-facing weak-topics view | ✅ done |
 | B9 | L13 pt.3 — instructor/class-wide weak-topic aggregate view | ✅ done |
-| B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ⬜ not started |
+| B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ✅ done |
 | B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ⬜ not started |
 | B12 | `TenantModelRegistry` sweep — 3 new models registered | ⬜ not started |
 | B13 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -349,20 +349,42 @@ stop and report before starting the next block.
 - `composer test`: 1554/1555 pass, only failure is the pre-existing
   unrelated `CourseSlugUniquenessTest` flake.
 
-### B10 — L14 pt.1: photo-doubt schema + async service — not started
+### B10 — L14 pt.1: photo-doubt schema + async service — done
 
-- `photo_doubt_queries` migration (see design §3.2) + `PhotoDoubtQuery`
-  model.
-- `PhotoDoubtService::submit(UploadedFile $image, User $student, ?int
-  $courseId): PhotoDoubtQuery` — validates image (format/size cap), stores
-  to disk, creates a `pending` row, dispatches a queued job.
-- `ProcessPhotoDoubtQuery` job — calls `AiProvider::chatWithImage()`
-  (B0), fills `extracted_question`/`solution`, sets `status = ready` (or
-  `failed` on error) — same async shape `ProcessOmrSheetScan` (S16)
-  established (design §4 decision 8).
-- Tests: submit creates a pending row and dispatches the job; the job
-  transitions pending → ready with a solution from the fake driver; a
-  driver failure transitions to `failed`, not an uncaught exception.
+- `photo_doubt_queries` migration (design §3.2) + `PhotoDoubtQuery` model
+  (AI domain, `BelongsToTenant`).
+- `PhotoDoubtService::submit()` — validates extension against an allowlist
+  (`InvalidFileTypeException`, existing/registered) and a 5MB size cap
+  (new `PhotoTooLargeException`, 422), stores the file, creates a
+  `pending` row, dispatches `ProcessPhotoDoubtQuery` with the row's own
+  `tenant_id` (needed for `RebindsTenant` middleware — same shape
+  `ExtractLessonConcepts` already uses).
+- `ProcessPhotoDoubtQuery` — sets `status = processing`, calls
+  `AiProvider::chatWithImage()` (B0), sets `status = ready`
+  (or `failed` inside a `catch (Throwable)`, not `$this->fail()` — an AI
+  failure here is an expected, handled outcome, same posture
+  `ProcessOmrSheetScan`'s own non-exception business-failure paths
+  already take, not a queue-worthy retry signal).
+- **Build-time decision**: `chatWithImage()` has no structured-output mode
+  (B0's own contract), so there's no clean way to get two separate
+  `extracted_question`/`solution` fields from one plain-text response.
+  The prompt asks for a fixed `"Question: ...\nSolution: ..."` shape,
+  parsed with a regex; a response that doesn't match (including
+  `FakeAiDriver`'s own filler text) falls back to the whole response as
+  `solution` with `extracted_question` left `null`, rather than guessing
+  or crashing.
+- Registered `PhotoDoubtQuery` in `TenantModelRegistry` immediately (same
+  B1/B3 precedent).
+- Tests (`PhotoDoubtServiceTest.php`): `submit()` creates a `pending` row
+  and dispatches the job with the right id (`Bus::fake()`); disallowed
+  extension and over-cap size both throw cleanly; the job transitions
+  `pending -> ready` with a non-empty solution and real `token_cost` from
+  the fake driver; a driver that throws transitions the row to `failed`
+  instead of an uncaught exception.
+- `composer test`: 1560/1561 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake. (Same storage-debris
+  `BackupConfigurationTest` flake as B2/B4/B8 surfaced on the first run —
+  cleaned `storage/app/private` again, confirmed gone on rerun.)
 
 ### B11 — L14 pt.2: upload UI + result display — not started
 
