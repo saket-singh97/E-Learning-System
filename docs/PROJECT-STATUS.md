@@ -1859,3 +1859,117 @@ vendor-agnostic contract — no relationship with any specific
 biometric/RFID vendor to build a real SDK client against.
 
 **All 18 S16 blocks are now built, tested, and reviewed.**
+
+## S17 — AI Layer, Round 2: COMPLETE (all 14 blocks, 2026-08-26)
+
+Ninth P2/P3-mixed backlog slice. `docs/ROADMAP.md`'s own S17 row lists
+L9-L15 (7 items as counted there), but L10 (auto-subtitles) already
+shipped in S14 and L15 (AI content-generation assist for instructors) is
+P3-tier and not named in the roadmap's own S17 headline — same "not
+named, not in scope yet" boundary S16 drew the other way around. Real
+build scope was 5 items, 14 finer-grained build blocks.
+`docs/superpowers/specs/2026-08-25-s17-ai-layer-round-2-design.md` and
+`...-plan.md` cover B0-B13 in full per-block detail — not repeated here.
+Unlike S16, this is a clean phase-boundary slice — all 5 items are P2. No
+new domain — every item landed in the existing `AI` domain, reusing
+`LessonArtifact`/`LessonArtifactChunk` (pgvector `nearestNeighbors`,
+already proven by `DoubtChatService`), `AiProvider` (one new additive
+method, `chatWithImage()`), and the `AiSpendCap`/circuit-breaker
+decorators (already wrap every `AiProvider` call, so every new call site
+inherited spend-cap/resilience guarantees for free — no new plumbing). 3
+new `BelongsToTenant` models (`CourseOutlineDraft`, `LessonRevisionNote`,
+`PhotoDoubtQuery`), each registered in `TenantModelRegistry` immediately
+on creation rather than deferred to a single sweep block — the registry's
+own guard test runs on every `composer test`, so leaving a gap open
+between blocks isn't safe. B12's reverse sweep confirmed 72-for-72 against
+every real `BelongsToTenant` usage in `app/Domains`, zero gaps.
+
+- **B0** — `AiProvider::chatWithImage()`, a new additive interface method
+  (not an overload of `chat()`) implemented in `FakeAiDriver` and both
+  guard decorators. No real driver exists yet (only `FakeAiDriver` is
+  bound), so no fourth implementation was needed.
+- **B1/B2** — L9: `course_outline_drafts` + `CourseOutlineGenerator`
+  (`AiProvider::chat()` in structured-output mode, same pattern
+  `ExtractLessonConcepts` already uses) → `CourseOutlineDraftResource`
+  (Teach panel) with a header Action generating the outline (no blank
+  create form, same shape L5's own "Generate with AI" action already
+  established) → editable nested Repeater on the Edit page →
+  `CourseOutlineApprovalService::approve()` creates real
+  `Course`/`CourseSection`/`Lesson` rows directly (design decision: AI
+  domain relating into Content's own models by direct Eloquent call, not
+  an event — a synchronous, user-triggered click, not a domain reacting to
+  another domain's state change). Re-approving/re-rejecting an
+  already-decided draft is a no-op, not blocked — a double-click race
+  can't create a duplicate `Course`.
+- **B3/B4** — L11: `lesson_revision_notes` (unique per
+  `[lesson_id, source_artifact_version]`, never overwritten) +
+  `RevisionNotesGenerator` → instructor-triggered "Generate revision
+  notes" row action + student-facing `LessonRevisionNotes` component
+  gated through `LessonAccess::isVisibleTo()` directly in its own
+  `mount()`. No ready artifact throws a new `LessonArtifactNotReadyException`
+  (409) rather than writing a placeholder row — the table's own unique
+  constraint is built around a real artifact version, so a placeholder
+  would need a fake version number.
+- **B5/B6** — L12: `SemanticSearchService` — embeds the query,
+  `nearestNeighbors()` across `LessonArtifactChunk` (tenant-scoped,
+  ready-artifacts-only), **filters every candidate through
+  `LessonAccess::isVisibleTo()` before taking the top 10, not after** —
+  the load-bearing test proves an invisible lesson's chunk stays excluded
+  even when embedded with the exact query text (guaranteed nearest
+  match). Wired into the student dashboard with a debounced search box;
+  an empty query never calls `AiProvider::embed()`.
+- **B7/B8/B9** — L13: `WeakTopicDetectionService::weakTopicsFor()` groups
+  a student's graded quiz answers by exact-normalized `Question.concept`,
+  flags anything below a 0.6 correctness-ratio placeholder threshold,
+  cross-references `lesson_artifacts.concepts` for covering lessons (an
+  unmatched concept stays reported with an empty lessons list, never
+  dropped) → student-facing `WeakTopics` view on the syllabus page (own
+  concepts only, structurally guaranteed by the service's own
+  `auth()->user()->id` scoping) → `classWideWeakTopicsFor()` aggregates
+  weak-student counts per concept across a batch's actively-enrolled
+  students, surfaced as a `BatchWeakTopicsWidget` stat-tile widget on
+  `EditBatch` — aggregate only, never a per-student breakdown.
+- **B10/B11** — L14: `photo_doubt_queries` + `PhotoDoubtService::submit()`
+  (extension allowlist + 5MB size cap, new `PhotoTooLargeException`) →
+  `ProcessPhotoDoubtQuery` calls `chatWithImage()`, parses a fixed
+  `"Question: ...\nSolution: ..."` text shape (no structured-output mode
+  exists for vision calls), falls back to storing the whole response as
+  `solution` when the format doesn't match. A driver failure transitions
+  the row to `failed` inside a `catch (Throwable)`, not `$this->fail()` —
+  an AI failure here is an expected, handled outcome, not a queue-worthy
+  retry signal. Student-facing upload UI reuses `FeeCheckout`'s own
+  `wire:poll.3s`-while-in-flight shape rather than inventing a new
+  polling mechanism.
+- **B12** — `TenantModelRegistry` reverse sweep, zero gaps found (a loose
+  first-pass grep flagged `ImpersonationAudit`, which turned out to be a
+  docblock-prose false positive explaining why that model *doesn't* use
+  the trait — no code change needed).
+- **B13** — lifecycle E2E tests (outline generation → instructor approval
+  → real `Course`/`CourseSection`/`Lesson` rows matching the generated
+  outline exactly; real `QuizAttemptService::submit()` grading → concept
+  tagging → weak-topic report correctly excludes the concept answered
+  correctly) + this review pass + doc updates. Review pass re-examined the
+  two spots most likely to hide a `GeofenceCheckIn`-class bug (L12's
+  visibility gate, L14's async failure path) and found both sound.
+
+**One real testing gotcha hit and fixed (B4):** `Livewire::test()`'s
+initial mount runs through a real, temporary route with exception
+handling disabled for everything *except* `HttpException`/
+`AuthorizationException` (`RequestBroker::
+temporarilyDisableExceptionHandlingAndMiddleware()`), so a component-level
+`abort_unless(..., 404)` surfaces as a normal 404 response
+(`->assertNotFound()`), not a thrown PHP exception the way a plain
+service-method gate (`DoubtChatService::ask()`) does. The first draft of
+`LessonRevisionNotesTest.php`'s gate tests assumed the latter and silently
+exercised nothing until traced down.
+
+**What's still rough, on purpose:** L14's photo capture is a plain web
+file input, not native camera capture (`docs/FEATURES.md` W4 already
+reserves that for S25's mobile shell) and makes no accuracy guarantee on
+handwriting quality. L13's concept matching is exact-string only — a
+concept phrased differently by two authors won't link. L12's search is
+scoped to lesson video/audio transcripts only, not PDFs/attachments/forum
+posts. L9's outline generator produces structure only, never lesson
+bodies/video/quiz content.
+
+**All 14 S17 blocks are now built, tested, and reviewed.**

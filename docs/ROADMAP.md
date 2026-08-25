@@ -14,19 +14,18 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 16 (S1–S16) |
-| **Designed, not built** | 1 (S17) |
+| **Shipped** | 17 (S1–S17) |
 | **Proposed, not yet scoped** | 9 (S18–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **54 shipped** (S10, S11, S12, S13, S14, S15), plus S16's own P2 items (I6/I10/H10) — S16 itself is a mixed P2/P3 grab-bag, not a phase-boundary slice.
+- **P2 — Depth & extras** (~75 features): **59 shipped** (S10, S11, S12, S13, S14, S15, S17), plus S16's own P2 items (I6/I10/H10) — S16 itself is a mixed P2/P3 grab-bag, not a phase-boundary slice.
 - **P3 — Scale & enterprise** (~55 features): not started — by design, this comes after paying customers exist.
 
 ---
 
-## Shipped — S1 to S16
+## Shipped — S1 to S17
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -46,14 +45,7 @@ regenerate it from this file.
 | S14 | Video & Live-Class Depth — concurrent-playback limiting, auto-subtitles, print/save protection, live recording → AI ingestion, real per-institute Zoom OAuth, Google Meet, live polls. (D10-D12 multi-DRM/watermark/offline-DRM cut — P3, needs paying customers) | 19 blocks | Aug 19–22 | ✅ Done |
 | S15 | Batch & Institute Operations — instructor invitations/assignment + per-instructor permissions (closes a real never-built gap), timetable templates + teacher conflict detection, discussion forums, batch feedback, bulk student CSV import, bulk enrolment/invitations, admissions CRM, ID cards, enrolment/completion reports. (§S.S7 job board cut — P3, not in the roadmap's own headline) | 22 blocks | Aug 22–24 | ✅ Done |
 | S16 | Assessment & Attendance Depth — extended question types + partial credit, proctoring + violation auto-submit, test series with rank/percentile, OMR scanning, tenant-configurable low-attendance alerts, geofenced check-in, biometric/RFID device webhook, substitute-teacher workflow. (I7 numerical questions already shipped in S6 — real scope was 9 of the roadmap row's 10 named items) | 18 blocks | Aug 24–25 | ✅ Done |
-
----
-
-## Designed, not built — S17
-
-| Slice | Scope | Size | Design | Status |
-|---|---|---|---|---|
-| S17 | AI Layer, Round 2 — course outline generator, revision notes, semantic search, weak-topic detection, photo-based doubt solving. Real scope is 5 items, not the row's headline "7": L10 (auto-subtitles) already shipped in S14, L15 (AI content-generation assist) is P3 and cut for now — same "not named in the headline, not in scope" boundary S16 drew the other way | 14 blocks | [design](superpowers/specs/2026-08-25-s17-ai-layer-round-2-design.md) / [plan](superpowers/specs/2026-08-25-s17-ai-layer-round-2-plan.md) | 🔵 Designed, build not started |
+| S17 | AI Layer, Round 2 — course outline generator, revision notes, semantic search, weak-topic detection, photo-based doubt solving. Real scope is 5 items, not the row's headline "7": L10 (auto-subtitles) already shipped in S14, L15 (AI content-generation assist) is P3 and cut for now — same "not named in the headline, not in scope" boundary S16 drew the other way | 14 blocks | Aug 25–26 | ✅ Done |
 
 ---
 

@@ -5,26 +5,46 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-25)
+## Right now (2026-08-26)
 
-- **S17 — AI Layer, Round 2: DESIGNED, build not started.**
+- **S17 — AI Layer, Round 2: COMPLETE, all 14 blocks (2026-08-26).**
   `docs/superpowers/specs/2026-08-25-s17-ai-layer-round-2-design.md`,
-  `...-plan.md` (14 blocks, B0-B13). Real build scope: 5 items (L9 course
-  outline generator, L11 revision notes, L12 semantic search, L13
-  weak-topic detection, L14 photo-based doubt solving) — L10 (auto-
-  subtitles) already shipped in S14, L15 (AI content-gen assist) is P3 and
-  not named in the roadmap's own S17 headline, cut for now. No new domain —
-  everything lands in the existing `AI` domain, reusing `LessonArtifact`/
-  `LessonArtifactChunk` (pgvector `nearestNeighbors`, already used by
-  `DoubtChatService`), `AiProvider` (gains one new method,
-  `chatWithImage()`, for L14 — additive, no existing call site touched),
-  and `AiSpendCap`/circuit-breaker decorators (already wrap every
-  `AiProvider` call, so new call sites are spend-capped for free). One
-  load-bearing decision to watch during build: L12's semantic search must
-  filter every result through `LessonAccess::isVisibleTo()` before
-  display — a raw vector search has no concept of enrollment and would
-  otherwise leak chunk text across courses, the same class of gap S16's
-  `GeofenceCheckIn` had before its own B17 review pass caught it.
+  `...-plan.md` (full per-block build log lives there, not repeated here).
+  Real build scope: 5 items — L9 course outline generator (topic prompt →
+  AI-generated section/lesson skeleton → instructor review UI → approve
+  creates real `Course`/`CourseSection`/`Lesson` rows), L11 revision notes
+  (instructor-triggered per-lesson summaries, versioned by
+  `source_artifact_version`, never overwritten), L12 semantic search
+  (`nearestNeighbors` over `lesson_artifact_chunks`, filtered through
+  `LessonAccess::isVisibleTo()` before any result reaches a viewer), L13
+  weak-topic detection (quiz answers × `Question.concept`, exact-match
+  against `lesson_artifacts.concepts`, student view + instructor
+  class-wide aggregate widget), L14 photo-based doubt solving (new
+  `AiProvider::chatWithImage()`, async job, upload UI with `wire:poll`
+  while pending/processing). No new domain — everything landed in the
+  existing `AI` domain; 3 new `BelongsToTenant` models
+  (`CourseOutlineDraft`, `LessonRevisionNote`, `PhotoDoubtQuery`), each
+  registered in `TenantModelRegistry` immediately on creation (not
+  deferred to the registry-sweep block) since the registry's own guard
+  test runs on every `composer test`. B12's reverse-sweep confirmed zero
+  gaps (72 real `BelongsToTenant` usages match 72 registry entries
+  exactly) — a loose first-pass grep flagged `ImpersonationAudit`, which
+  turned out to be a docblock-prose false positive (its own comment
+  explains it *deliberately does not* use the trait), not a real gap.
+  B13's own review pass re-examined the two spots most likely to hide a
+  GeofenceCheckIn-class bug (L12's visibility gate, L14's async failure
+  path) and found both sound: the semantic-search visibility filter runs
+  *before* the result limit is applied (so a viewer with plenty of real
+  matches never sees an artificially-shrunk set), and the photo-doubt
+  job's `catch (Throwable)` correctly wraps only the AI call, transitioning
+  the row to `failed` without leaving it stuck at `processing`. One real
+  Livewire-testing gotcha hit and fixed during B4: `Livewire::test()`'s
+  initial mount runs through a real temp route with exception handling
+  disabled for everything *except* `HttpException`, so a component-level
+  `abort_unless(..., 404)` surfaces as a normal 404 response
+  (`->assertNotFound()`), not a thrown PHP exception the way a plain
+  service-method gate does — the first draft of those tests silently
+  exercised nothing until this was traced down.
 
 - **S16 — Assessment & Attendance Depth: COMPLETE, all 18 blocks
   (2026-08-25).** `docs/superpowers/specs/2026-08-24-s16-assessment-attendance-depth-design.md`,

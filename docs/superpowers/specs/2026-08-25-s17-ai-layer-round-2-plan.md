@@ -41,7 +41,7 @@ stop and report before starting the next block.
 | B10 | L14 pt.1 — `photo_doubt_queries` schema + `PhotoDoubtService` + queued vision job | ✅ done |
 | B11 | L14 pt.2 — student-facing upload UI + result display (pending/processing/ready states) | ✅ done |
 | B12 | `TenantModelRegistry` sweep — 3 new models registered | ✅ done |
-| B13 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B13 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 ---
 
@@ -438,18 +438,33 @@ stop and report before starting the next block.
   `CourseSlugUniquenessTest` flake (no code changed this block, run for
   compliance with the per-block verification bar).
 
-### B13 — Full test coverage, review pass — not started
+### B13 — Full test coverage, review pass — done
 
-- Lifecycle E2E test(s): outline generation → approval → real `Course`
-  exists with correct structure; quiz attempts with tagged concepts →
-  weak-topic report correctly excludes the concept answered correctly.
-- Review pass across every B0-B12 file for real bugs (not just a green
-  suite) — same discipline every prior slice's own final block applied.
-  Particular attention to the semantic-search visibility gate (§B5) and
-  the photo-doubt async failure path (§B10), the two spots most likely to
-  hide a real bug the same way S16's `GeofenceCheckIn` missing-enrolment-
-  check hid until B17's own review pass.
-- `composer test` full suite green (only the pre-existing unrelated
-  `CourseSlugUniquenessTest` failure tolerated).
-- Update `HANDOVER.md` (S17 complete entry), `docs/PROJECT-STATUS.md` (new
-  S17 section), `docs/ROADMAP.md` (S17 → Done, shipped count 16→17).
+- Lifecycle E2E tests (`tests/Feature/S17AiLayerRound2E2ETest.php`):
+  outline generation (`CourseOutlineGenerator`) → instructor approval
+  (`CourseOutlineApprovalService`) → real `Course`/`CourseSection`/
+  `Lesson` rows matching the generated outline's own titles exactly;
+  real `QuizAttemptService::submit()` grading (not a hand-set
+  `is_correct`) → concept-tagged questions → `WeakTopicDetectionService`
+  report correctly excludes the correctly-answered concept and includes
+  the wrong one.
+- Review pass across B0-B12: security baseline clean (no `DB::raw`/
+  `whereRaw`/`DB::statement` in any new `app/Domains/AI` file, no
+  `$guarded = []`). Re-examined the two flagged spots specifically —
+  **L12's visibility gate (§B5)**: confirmed the `isVisibleTo()` filter
+  runs *before* `take(10)`, not after, so a viewer with plenty of real
+  matches can't have their result set silently shrunk by invisible
+  higher-scoring decoys; **L14's async failure path (§B10)**: confirmed
+  the `catch (Throwable)` wraps only the `chatWithImage()` call (not the
+  `findOrFail()` before it), so a driver failure always resolves to
+  `status = failed`, never leaves a row stuck at `processing`. No new bug
+  found in either spot this pass — B4's own build already caught and
+  fixed the one real gotcha in this slice (the `Livewire::test()`
+  exception-handling discovery, documented in its own PROGRESS entry).
+- `composer test`: full suite green, only the pre-existing unrelated
+  `CourseSlugUniquenessTest` failure remains.
+- Updated `HANDOVER.md` (S17 → COMPLETE entry, replacing the "designed,
+  build not started" one), `docs/PROJECT-STATUS.md` (new S17 section,
+  same per-block-bullet shape S16's own section uses), `docs/ROADMAP.md`
+  (S17 moved into the Shipped table, "Designed, not built" section
+  removed since it's now empty, shipped count 16→17, P2 count 54→59).
