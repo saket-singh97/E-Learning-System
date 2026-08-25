@@ -2,6 +2,8 @@
 
 namespace App\Domains\Analytics\Services;
 
+use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Models\VideoWatchEvent;
 use App\Models\User;
@@ -60,6 +62,71 @@ class EngagementMetricsService
             'sustained_2x' => $fastCount >= self::SUSTAINED_MIN_EVENTS,
             'fast_heartbeat_count' => $fastCount,
             'total_heartbeats' => $events->count(),
+        ];
+    }
+
+    /**
+     * A1 pt.2 (S18 B1) — instructor-facing batch aggregate: average
+     * engagement ratio and sustained-2x student count across every
+     * (actively-enrolled student, video lesson) pair in the batch's own
+     * course that actually has watch data. Same "cross-domain *model*
+     * reads (Batches' Enrolment) are established precedent" posture
+     * WeakTopicDetectionService::classWideWeakTopicsFor() already
+     * documents, and the same per-pair loop shape it uses.
+     *
+     * @return array{avg_ratio: float, sustained_2x_count: int, total_students: int, sample_size: int}
+     */
+    public function classEngagementFor(Batch $batch): array
+    {
+        $studentIds = Enrolment::where('batch_id', $batch->id)
+            ->where('status', 'active')
+            ->pluck('user_id');
+
+        if ($studentIds->isEmpty()) {
+            return ['avg_ratio' => 0.0, 'sustained_2x_count' => 0, 'total_students' => 0, 'sample_size' => 0];
+        }
+
+        $lessons = Lesson::whereHas('section', fn ($query) => $query->where('course_id', $batch->course_id))
+            ->where('type', 'video')
+            ->whereNotNull('video_duration_seconds')
+            ->get()
+            ->keyBy('id');
+
+        $pairs = VideoWatchEvent::whereIn('user_id', $studentIds)
+            ->whereIn('lesson_id', $lessons->keys())
+            ->select('user_id', 'lesson_id')
+            ->distinct()
+            ->get();
+
+        if ($pairs->isEmpty()) {
+            return ['avg_ratio' => 0.0, 'sustained_2x_count' => 0, 'total_students' => $studentIds->count(), 'sample_size' => 0];
+        }
+
+        $students = User::whereIn('id', $studentIds)->get()->keyBy('id');
+
+        $ratios = collect();
+        $sustainedStudentIds = collect();
+
+        foreach ($pairs as $pair) {
+            $student = $students->get($pair->user_id);
+            $lesson = $lessons->get($pair->lesson_id);
+
+            if ($student === null || $lesson === null) {
+                continue;
+            }
+
+            $ratios->push($this->ratioFor($student, $lesson));
+
+            if ($this->speedProfileFor($student, $lesson)['sustained_2x']) {
+                $sustainedStudentIds->push($student->id);
+            }
+        }
+
+        return [
+            'avg_ratio' => $ratios->isEmpty() ? 0.0 : round($ratios->avg(), 2),
+            'sustained_2x_count' => $sustainedStudentIds->unique()->count(),
+            'total_students' => $studentIds->count(),
+            'sample_size' => $ratios->count(),
         ];
     }
 

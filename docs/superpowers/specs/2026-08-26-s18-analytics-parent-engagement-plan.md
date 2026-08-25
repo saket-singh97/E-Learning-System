@@ -27,7 +27,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | A1 pt.1 — `EngagementMetricsService` (engagement ratio + speed profile) | ✅ done |
-| B1 | A1 pt.2 — instructor/admin-facing engagement metrics view | ⬜ not started |
+| B1 | A1 pt.2 — instructor/admin-facing engagement metrics view | ✅ done |
 | B2 | A2 pt.1 — `RewatchHeatmapService` | ⬜ not started |
 | B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ⬜ not started |
 | B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ⬜ not started |
@@ -78,15 +78,27 @@ stop and report before starting the next block.
   B12 note) and `BackupConfigurationTest` (zip-size assertion, untouched
   by Analytics work).
 
-### B1 — A1 pt.2: engagement metrics view — not started
+### B1 — A1 pt.2: engagement metrics view — done
 
-- Instructor/admin-facing view (Filament widget on `BatchResource`'s
-  `EditBatch`, same `getFooterWidgets()` shape S17 B9's
-  `BatchWeakTopicsWidget` already established) showing per-batch average
-  engagement ratio and count of students flagged for sustained 2x
-  playback.
-- Tests: widget shows correct aggregate numbers across multiple students;
-  empty state for a batch with no watch events yet.
+- `EngagementMetricsService::classEngagementFor(Batch $batch): array{avg_ratio,
+  sustained_2x_count, total_students, sample_size}` added — loops every
+  (actively-enrolled student, video lesson) pair in the batch's course
+  that has at least one `VideoWatchEvent`, same per-pair loop shape
+  `WeakTopicDetectionService::classWideWeakTopicsFor()` already uses.
+  `sample_size` (pairs with real watch data) is distinct from
+  `total_students` so the widget can tell "no one enrolled" from
+  "enrolled but nothing watched yet" apart.
+- `app/Filament/Teach/Widgets/BatchEngagementWidget.php` created — same
+  `StatsOverviewWidget` + `getFooterWidgets()` wiring as
+  `BatchWeakTopicsWidget` (S17 B9), added alongside it on `EditBatch`.
+- Tests: `tests/Feature/Analytics/BatchEngagementWidgetTest.php`, 6 cases
+  — correct avg ratio across 2 students, sustained_2x flagged correctly,
+  zeroed (not error) result for enrolled-but-no-watch-data, zero totals
+  for no active enrolments, widget empty state ("No watch data yet"),
+  widget shows real numbers once data exists. All 6 pass.
+- `composer test` full suite: 1579/1581 pass. Same 2 pre-existing/
+  unrelated failures as B0 (`CourseSlugUniquenessTest`,
+  `BackupConfigurationTest`).
 
 ### B2 — A2 pt.1: `RewatchHeatmapService` — not started
 
