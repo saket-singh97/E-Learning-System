@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B2 | L9 pt.2 — instructor review UI + approve action creating real draft `Course`/`Section`/`Lesson` rows | ✅ done |
 | B3 | L11 pt.1 — `lesson_revision_notes` schema + `RevisionNotesGenerator` service | ✅ done |
 | B4 | L11 pt.2 — instructor trigger action + student-facing revision notes view | ✅ done |
-| B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ⬜ not started |
+| B5 | L12 pt.1 — `SemanticSearchService` (`LessonAccess`-gated, tenant-scoped) | ✅ done |
 | B6 | L12 pt.2 — search UI (student portal search bar + results) | ⬜ not started |
 | B7 | L13 pt.1 — `WeakTopicDetectionService` (quiz answers × question concept × artifact concepts) | ⬜ not started |
 | B8 | L13 pt.2 — student-facing weak-topics view | ⬜ not started |
@@ -217,17 +217,30 @@ stop and report before starting the next block.
   connection-timeout error on an unrelated Batches test also appeared on
   one run and did not recur — transient, not investigated further.)
 
-### B5 — L12 pt.1: semantic search service — not started
+### B5 — L12 pt.1: semantic search service — done
 
 - `SemanticSearchService::search(string $query, User $viewer, int
   $tenantId): Collection` — embeds the query, `nearestNeighbors()` across
-  `LessonArtifactChunk` scoped to the tenant, then filters every candidate
-  through `LessonAccess::isVisibleTo()` before returning (design §4
-  decision 5 — this is the load-bearing test in this block).
-- Tests: a result set never includes a chunk from a lesson the viewer can't
-  see, even when its similarity score is highest; results are scoped to
-  the viewer's own tenant only (cross-tenant regression, same shape every
-  prior slice's own `CrossTenantTest`-adjacent service test uses).
+  `LessonArtifactChunk` explicitly scoped to `$tenantId` (belt-and-suspenders
+  alongside `BelongsToTenant`'s own ambient scope), restricted to chunks
+  whose parent `LessonArtifact.status = 'ready'` (same "never read a
+  non-ready artifact's content" contract `DoubtChatService::ask()` already
+  enforces). Over-fetches a 50-candidate pool, **then** filters every
+  candidate through `LessonAccess::isVisibleTo()` before taking the top 10
+  (design §4 decision 5) — filtering before limiting, not after, so a
+  viewer with plenty of real visible matches never sees an
+  artificially-shrunk result set just because the top raw matches happened
+  to be from lessons they can't see.
+- No new schema (design §3.2 confirms L12 is a pure query service).
+- Tests (`SemanticSearchServiceTest.php`): a chunk from a lesson the viewer
+  can't see is excluded even when it's embedded with the *exact* query
+  text (guaranteed cosine distance 0, the nearest possible match) — the
+  load-bearing visibility-gate test; cross-tenant regression (same
+  decoy-tenant shape `DoubtChatTest.php` already uses); chunks from a
+  still-processing artifact are excluded; an empty/whitespace-only query
+  short-circuits to an empty result with no `embed()` call.
+- `composer test`: 1541/1542 pass, only failure is the pre-existing
+  unrelated `CourseSlugUniquenessTest` flake.
 
 ### B6 — L12 pt.2: search UI — not started
 
