@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ✅ done |
 | B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ✅ done |
 | B6 | A4 pt.1 — missed-class-replay nudge | ✅ done |
-| B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ⬜ not started |
+| B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ✅ done |
 | B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ⬜ not started |
 | B9 | A5 pt.2 — PDF generation | ⬜ not started |
 | B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ⬜ not started |
@@ -212,15 +212,33 @@ stop and report before starting the next block.
   1603/1604 pass. Only the one pre-existing, already-documented
   `CourseSlugUniquenessTest` flake — untouched by this block's files.
 
-### B7 — A4 pt.2: weak-topic-practice nudge — not started
+### B7 — A4 pt.2: weak-topic-practice nudge — done
 
-- New job in `Comms` calling `WeakTopicDetectionService::weakTopicsFor()`
-  (S17) directly per actively-enrolled student — a non-empty weak-topics
-  result triggers a nudge pointing at the linked lesson(s); an empty
-  result is silently skipped, not nudged. Same dedupe/cadence shape as B6.
-- Tests: a student with a real weak topic gets nudged with the correct
-  lesson link; a student with none is skipped; already-nudged-this-week
-  is never nudged twice.
+- `app/Domains/Comms/Jobs/SendWeakTopicPracticeNudges.php` created — loops
+  every active `Enrolment`, calls
+  `WeakTopicDetectionService::weakTopicsFor($student, $batch->course_id)`
+  (S17 B7) directly per student's own batch/course pair (design §4
+  decision 5's documented Comms → AI exception). A non-empty result
+  nudges; an empty result is silently skipped, no new detection logic.
+  Same `notifications`-table dedupe, once-per-week cadence,
+  `CurrentTenant`-cleared unscoped sweep shape as B6/`SendInactivityNudges`.
+- `app/Notifications/WeakTopicPracticeNudgeDue.php` created — same
+  student-facing, `[WhatsAppChannel, 'database']` dual-channel shape as
+  `MissedClassReplayNudgeDue`; carries the already-computed weak-topics
+  collection, `toArray()` flattens each topic to
+  `concept`/`ratio`/`lesson_ids` (the linked lesson(s) design §2.1
+  A4 calls for).
+- Scheduled in `bootstrap/app.php` alongside B6, daily on the
+  `'scheduled'` queue.
+- Tests: `tests/Feature/Comms/SendWeakTopicPracticeNudgesTest.php`, 5
+  cases — nudges a student with a real weak topic (correct concept on the
+  notification); skips a student with no weak topics; skips a
+  non-actively-enrolled student; only one nudge per student per week
+  across two `handle()` runs; confirms `ShouldQueue` + retry/backoff
+  config. All 5 pass.
+- `composer test` (full `php artisan test`, config cache cleared first):
+  1608/1609 pass. Only the one pre-existing, already-documented
+  `CourseSlugUniquenessTest` flake — untouched by this block's files.
 
 ### B8 — A5 pt.1: `monthly_report_cards` schema + data aggregator — not started
 
