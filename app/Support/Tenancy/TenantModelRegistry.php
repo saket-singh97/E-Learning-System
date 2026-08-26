@@ -48,6 +48,8 @@ use App\Domains\Comms\Models\Notice;
 use App\Domains\Comms\Models\NoticeReadReceipt;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
+use App\Domains\Comms\Models\Survey;
+use App\Domains\Comms\Models\SurveyQuestion;
 use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Content\Models\Category;
@@ -161,6 +163,8 @@ class TenantModelRegistry
         LessonRevisionNote::class,
         PhotoDoubtQuery::class,
         MonthlyReportCard::class,
+        Survey::class,
+        SurveyQuestion::class,
     ];
 
     /**
@@ -1029,6 +1033,18 @@ class TenantModelRegistry
                 'student_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'period_month' => now()->startOfMonth()->toDateString(),
             ],
+            Survey::class => [
+                'title' => 'Row Survey',
+                'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
+            SurveyQuestion::class => [
+                'survey_id' => Survey::create([
+                    'title' => 'Parent',
+                    'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                ])->id,
+                'prompt' => 'Row question',
+                'type' => 'text',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1115,6 +1131,8 @@ class TenantModelRegistry
             LessonRevisionNote::class => ['status' => 'failed'],
             PhotoDoubtQuery::class => ['status' => 'failed'],
             MonthlyReportCard::class => ['status' => 'failed'],
+            Survey::class => ['title' => 'tampered'],
+            SurveyQuestion::class => ['prompt' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

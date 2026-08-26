@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B1 | N11 pt.2 — real-time push wired into `DirectMessages` (first concrete integration, proves the channel-auth pattern) | ✅ done |
 | B2 | N14 pt.1 — `forum_threads.batch_id` nullable migration + `GeneralForum` Livewire component (list/create institute-wide threads) | ✅ done |
 | B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | ✅ done |
-| B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | not started |
+| B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | ✅ done |
 | B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | not started |
 | B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | not started |
 | B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | not started |
@@ -257,16 +257,37 @@ target.
 - `composer test`: 1646/1647 pass (7 new tests; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B4 — N15 pt.1: survey schema + builder
+### B4 — N15 pt.1: survey schema + builder — done
 
-- [ ] `surveys`/`survey_questions` migrations + models, registered in
-      `TenantModelRegistry`.
-- [ ] `SurveyResource` (Admin panel) — create/edit a survey and its
-      questions, `status` draft→published→closed, same
-      institute-authored-CRUD shape `ProgramResource`/`TestSeriesResource`
-      already established.
-- [ ] Tests: creates a survey with 3 question types, publishes it, a draft
-      survey isn't listed for respondents (checked properly in B5).
+- `surveys`/`survey_questions` migrations + `Survey`/`SurveyQuestion`
+  models (Comms), both registered in `TenantModelRegistry`. `Survey`
+  carries `STATUSES = ['draft', 'published', 'closed']`;
+  `SurveyQuestion::TYPES = ['text', 'single_choice', 'multi_choice',
+  'rating']`, `options` jsonb per design doc §4 decision 6 (`{choices:
+  [...]}` for the two choice types, `{max: N}` for rating, null for text).
+- `SurveyResource` — Comms' resource directory is already discovered on
+  the Admin panel (unlike Assessments), so no explicit
+  `->resources()` entry was needed the way `TestSeriesResource` required.
+  Questions are authored inline via a `Repeater::make('questions')
+  ->relationship()` bound to `Survey::questions()`, not a separate child
+  resource + relation manager — a survey question has none of a real quiz
+  question's grading complexity, so one form covers authoring end to end.
+  `orderColumn('position')` manages the `position` column on its own.
+  Type-conditional fields (`options.choices` TagsInput, `options.max`
+  rating input) use the same `Get`-closure `visible()`/`required()` idiom
+  `QuestionResource` already established, dot-notation nesting the value
+  under the model's single `options` jsonb column.
+- New tests (4, `tests/Feature/Comms/SurveyResourceTest.php`): creates a
+  survey with one question of each of the 3 non-trivial types (text,
+  single_choice, rating) in one form submission, confirming each type's
+  own `options` shape persists correctly; publishes a draft survey by
+  editing its `status`; lists surveys for the current tenant only; not
+  reachable from the Teach panel. "A draft survey isn't listed for
+  respondents" is B5's own concern (no respondent-facing code exists
+  yet) — not tested here, per the plan's own note.
+- `composer test`: 1652/1653 pass (6 new tests — 4 above +
+  `CrossTenantTest`'s auto-generated `Survey`/`SurveyQuestion` cases; sole
+  failure the pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B5 — N15 pt.2: response collection
 
