@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | ✅ done |
 | B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | ✅ done |
 | B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | ✅ done |
-| B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | not started |
+| B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | ✅ done |
 | B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | not started |
 | B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | not started |
 | B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | not started |
@@ -387,15 +387,29 @@ target.
   `CrossTenantTest`'s auto-generated cases; sole failure the pre-existing
   unrelated `CourseSlugUniquenessTest`).
 
-### B8 — N16 pt.2: staff queue
+### B8 — N16 pt.2: staff queue — done
 
-- [ ] `HelpDeskTicketResource` (Admin/Teach panel as applicable) — assign,
-      reply (respecting `is_internal_note`), change status, same
-      workflow-with-status-actions shape `MessageReportResource` already
-      established.
-- [ ] Tests: assignment, a public reply is visible to the requester, an
-      internal note is not, status transitions (open→in_progress→resolved→
-      closed).
+- `HelpDeskTicketResource` (Admin panel, auto-discovered — Comms' resource
+  directory already is, same as `SurveyResource`) — browse-only, same shape
+  `MessageReportResource`/`TeacherAttendanceFlagResource` already
+  established (every row comes from a requester's own `raiseTicket()`, B7,
+  never a manual admin entry, so no create/edit pages). `assign` and
+  `reply` reuse `TeacherAttendanceFlagResource`'s own
+  `Action->schema()->action()` modal-form idiom; `assign` offers every
+  `institute_admin`/`instructor` in the tenant. Status actions
+  (`markInProgress`/`resolve`/`close`) each guard their own visibility off
+  the ticket's current status, same `visible(fn ($record) => ...)` pattern
+  `MessageReportResource` already uses — `resolve` also stamps
+  `resolved_at`.
+- New tests (4, `tests/Feature/Comms/HelpDeskTicketResourceTest.php`):
+  assigning sets `assigned_to_user_id`; a public reply and an internal note
+  both persist with the right `is_internal_note`/`author_id` (B7's own test
+  already covers the requester-side hiding, not re-tested here); a ticket
+  walks open→in_progress→resolved→closed with each action hidden once past
+  it, `resolved_at` set on resolve; not reachable from the Teach panel.
+- `composer test`: 1672/1673 pass (4 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`). B9 (SLA sweep +
+  real-time replies) is N16's remaining block.
 
 ### B9 — N16 pt.3: SLA sweep + push
 
