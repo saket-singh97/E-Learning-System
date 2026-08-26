@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | ✅ done |
 | B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | ✅ done |
 | B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | ✅ done |
-| B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | not started |
+| B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | ✅ done |
 | B12 | N12 pt.3 — signed iCal feed export | not started |
 | B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | not started |
 | B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | not started |
@@ -487,13 +487,36 @@ target.
   `CrossTenantTest`'s auto-generated `PlannerEvent` case; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B11 — N12 pt.2: calendar UI
+### B11 — N12 pt.2: calendar UI — done
 
-- [ ] Student-facing calendar Livewire component (month/week view) backed
-      by `PlannerAggregator`.
-- [ ] Custom-event CRUD (create/edit/delete a `PlannerEvent`, owner-only).
-- [ ] Tests: calendar view renders the merged event set; a user can't
-      edit/delete another user's custom event.
+- `App\Domains\Planner\Livewire\Calendar` — one month at a time
+  (`previousMonth()`/`nextMonth()`), events rendered as a plain
+  date-ordered list rather than a visual grid — same bare-HTML minimalism
+  every other Livewire view in this app already uses (`BatchForum`,
+  `SurveyRunner`, `HelpDeskTicketForm`), not a week-view toggle on top of
+  it (not asked for beyond the plan's own descriptive parenthetical, and
+  this app has no calendar-grid precedent to match).
+- Create/edit/delete only ever touch the viewer's own `PlannerEvent` rows
+  — `ownEvent()` re-verifies ownership on every call, same client-settable-
+  id discipline `SurveyRunner`/`HelpDeskTicketForm` already established.
+  Edit/delete controls in the view only render for `source === 'custom'`
+  entries — `BatchSession`/`Assignment` ids share the same numeric space as
+  `PlannerEvent` ids across different tables, so wiring a delete button to
+  a non-custom entry's id could delete an unrelated row the viewer does
+  own if the numbers happened to coincide; gating in the view is what
+  keeps a click meaningful, not just a nicety.
+- New `routes/planner.php` (`GET /calendar`, no `auth` middleware, same
+  "guest sees a log-in prompt" shape every other Comms route already
+  takes) — first route file for the new `Planner` domain, added to
+  `routes/web.php`'s domain-group list alongside every other domain's.
+  Registered as `planner.calendar`.
+- New tests (5, `tests/Feature/Planner/CalendarTest.php`): renders the
+  merged set for the current month; creates a custom event through the
+  form; edits and deletes its own event; never lets a user touch another
+  user's event (via `editEvent`/`deleteEvent` directly, not just through
+  the UI); shows a different event set after navigating to the next month.
+- `composer test`: 1690/1691 pass (5 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B12 — N12 pt.3: iCal export
 
