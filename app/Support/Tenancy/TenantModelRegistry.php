@@ -43,6 +43,8 @@ use App\Domains\Comms\Models\BlockedUser;
 use App\Domains\Comms\Models\DirectMessage;
 use App\Domains\Comms\Models\ForumPost;
 use App\Domains\Comms\Models\ForumThread;
+use App\Domains\Comms\Models\HelpDeskTicket;
+use App\Domains\Comms\Models\HelpDeskTicketReply;
 use App\Domains\Comms\Models\MessageReport;
 use App\Domains\Comms\Models\Notice;
 use App\Domains\Comms\Models\NoticeReadReceipt;
@@ -169,6 +171,8 @@ class TenantModelRegistry
         SurveyQuestion::class,
         SurveyResponse::class,
         SurveyAnswer::class,
+        HelpDeskTicket::class,
+        HelpDeskTicketReply::class,
     ];
 
     /**
@@ -1074,6 +1078,22 @@ class TenantModelRegistry
                 ])->id,
                 'value' => 'Row answer',
             ],
+            HelpDeskTicket::class => [
+                'requester_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'subject' => 'Row ticket',
+                'body' => 'Row body',
+                'sla_due_at' => now()->addHours(48),
+            ],
+            HelpDeskTicketReply::class => [
+                'ticket_id' => HelpDeskTicket::create([
+                    'requester_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'subject' => 'Parent',
+                    'body' => 'Parent body',
+                    'sla_due_at' => now()->addHours(48),
+                ])->id,
+                'author_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'body' => 'Row reply',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1169,6 +1189,8 @@ class TenantModelRegistry
             // text->jsonb cast (unquoted `tampered` isn't valid JSON text).
             // Pre-encoding produces a valid JSON string literal instead.
             SurveyAnswer::class => ['value' => json_encode('tampered')],
+            HelpDeskTicket::class => ['subject' => 'tampered'],
+            HelpDeskTicketReply::class => ['body' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

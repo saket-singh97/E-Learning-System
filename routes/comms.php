@@ -37,6 +37,10 @@ Route::get('/forum', fn () => view('comms.general-forum'))
 Route::get('/surveys', fn () => view('comms.survey-runner'))
     ->name('survey-runner.show');
 
+// S19 N16 — no 'auth' middleware, same reasoning as /messages above.
+Route::get('/help-desk', fn () => view('comms.help-desk-ticket-form'))
+    ->name('help-desk.show');
+
 Route::get('/exports/attendance-register', DownloadAttendanceExportController::class)
     ->name('comms.attendance-export.download');
 

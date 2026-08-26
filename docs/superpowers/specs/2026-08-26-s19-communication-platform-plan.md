@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | ✅ done |
 | B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | ✅ done |
 | B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | ✅ done |
-| B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | not started |
+| B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | ✅ done |
 | B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | not started |
 | B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | not started |
 | B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | not started |
@@ -358,15 +358,34 @@ target.
 - `composer test`: 1663/1664 pass (4 new tests; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B7 — N16 pt.1: ticket schema + raise-a-ticket flow
+### B7 — N16 pt.1: ticket schema + raise-a-ticket flow — done
 
-- [ ] `help_desk_tickets`/`help_desk_ticket_replies` migrations + models,
-      registered in `TenantModelRegistry`.
-- [ ] `config/comms.php` — `help_desk_sla_hours` per priority.
-- [ ] Student/staff-facing "raise a ticket" Livewire component — sets
-      `sla_due_at` at creation per design doc §4 decision 7.
-- [ ] Tests: creates a ticket with the correct computed `sla_due_at` per
-      priority, requester can view their own ticket's replies.
+- `help_desk_tickets`/`help_desk_ticket_replies` migrations +
+  `HelpDeskTicket`/`HelpDeskTicketReply` models (Comms), both registered in
+  `TenantModelRegistry`. `is_internal_note` (default false) is a flag on
+  the reply, not a second table — same binary-visibility shape this app
+  already prefers for a yes/no distinction.
+- New `config/comms.php` — `help_desk_sla_hours` per priority
+  (low/normal/high), env-overridable, tenant-independent for this slice
+  (design doc §4 decision 7's own "no per-institute override yet" starting
+  point).
+- `HelpDeskTicketForm` Livewire component — raises a ticket
+  (`sla_due_at = created_at + config('comms.help_desk_sla_hours')[priority]`),
+  lists the requester's own tickets, and shows a ticket's replies minus any
+  `is_internal_note` one. Replying is B8's staff-queue concern, not built
+  here. `replies()` re-verifies the viewer owns the ticket on every call
+  (not just at `openTicket()` time) — same client-settable-property
+  discipline `SurveyRunner::questions()` (B5) already established, since
+  `openTicketId` is a plain public property a crafted request could set
+  directly.
+- New tests (3, `tests/Feature/Comms/HelpDeskTicketFormTest.php`): all
+  three priorities produce the exact configured `sla_due_at` offset; a
+  requester sees a public reply but never an internal note on their own
+  ticket; a different user is refused both through the normal open flow
+  and a direct property-set bypass attempt.
+- `composer test`: 1668/1669 pass (5 new tests — 3 above +
+  `CrossTenantTest`'s auto-generated cases; sole failure the pre-existing
+  unrelated `CourseSlugUniquenessTest`).
 
 ### B8 — N16 pt.2: staff queue
 
