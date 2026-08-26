@@ -15,7 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 18 (S1–S18) |
-| **Proposed, not yet scoped** | 8 (S19–S26) |
+| **In progress** | 1 (S19, 12/17 blocks) |
+| **Proposed, not yet scoped** | 7 (S20–S26) |
 
 **Phase completion:**
 
@@ -50,17 +51,28 @@ regenerate it from this file.
 
 ---
 
-## Full roadmap — S19 onward (proposed)
+## In progress — S19
+
+| Slice | Scope | Size | Started | Status |
+|---|---|---|---|---|
+| S19 | Communication Platform — real-time WebSockets (Reverb), general forum, feedback surveys, help desk, study planner + calendar (incl. signed `.ics` export), gamification | 17 blocks | Aug 26 | 🔶 12/17 blocks (B0-B12 done; B13-B16 remain) |
+
+Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
+`...-plan.md` — the plan file's own PROGRESS table is the live source of
+truth, updated block-by-block same as every prior slice.
+
+---
+
+## Full roadmap — S20 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S18 were each shaped only once they
+slice's turn comes, the same way S10-S19 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S19 | Communication Platform — real-time WebSockets, study planner + calendar, general forum, feedback surveys, help desk, gamification | 8 | N11-N18 |
 | S20 | Growth & Billing Extensions — affiliate codes, instructor payouts, refunds, subscription plans, multi-currency, revenue analytics (MRR/ARR) | 12 | R1-R6, P6/P8-P10, Q6-Q7 |
 | S21 | Platform Scale & Migration — read replicas, horizontal scaling, per-tenant feature flags, org SSO, data-import tooling from an existing LMS | 10 | V6-V15 |
 | S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, Daily Practice Problems, ask-at-timestamp, auto formula sheets | 8 | U1-U8 |

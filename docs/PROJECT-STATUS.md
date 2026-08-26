@@ -2069,3 +2069,32 @@ A5's WhatsApp delivery is a signed link, not a file attachment —
 documents — `DirectMessage` already covers the underlying capability.
 
 **All 13 S18 blocks are now built, tested, and reviewed.**
+
+## S19 — Communication Platform: IN PROGRESS (12 of 17 blocks, as of 2026-08-27)
+
+`docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`
+and `...-plan.md` cover B0-B16 in full per-block detail — the plan file's
+own PROGRESS table is the live source of truth, not this section. New
+`laravel/reverb` broadcasting foundation (B0), first proven on
+`DirectMessages` (B1) and reused for forum threads (B3) and help-desk
+replies (B9) with no new channel-auth pattern needed each time. New
+institute-wide `GeneralForum` alongside the existing per-batch one (B2).
+New `surveys`/`survey_questions`/`survey_responses`/`survey_answers`
+schema — Admin builder, student `SurveyRunner`, per-question aggregation +
+CSV export (B4-B6). New `help_desk_tickets`/`help_desk_ticket_replies` —
+raise-a-ticket flow, staff queue (assign/reply/resolve), SLA breach sweep
+(B7-B9). New `Planner` domain — `planner_events` + `PlannerAggregator`
+(merges custom events with existing `BatchSession`/`Assignment` due dates),
+student calendar view with custom event CRUD, and a permanently-signed
+per-user `.ics` feed export for external calendar apps (B10-B12).
+
+- **Remaining**: B13-B14 (gamification — XP awards on existing
+  attendance/quiz/assignment events, streaks, badge catalog, per-batch
+  leaderboard with a tenant-wide opt-out), B15 (`TenantModelRegistry`
+  reverse sweep for the slice's 10 new `BelongsToTenant` models), B16
+  (lifecycle E2E tests, dedicated review pass, this file's own
+  completion update).
+- Tests green: **1694/1695** (same 1 pre-existing, unrelated
+  `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+  scope) — new tests across B0-B12 not yet tallied here, see the plan
+  file's own per-block counts.

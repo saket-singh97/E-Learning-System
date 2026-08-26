@@ -5,7 +5,23 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-26)
+## Right now (2026-08-27)
+
+- **S19 — Communication Platform: IN PROGRESS, 12 of 17 blocks
+  (2026-08-26–27).** `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
+  `...-plan.md` (full per-block build log lives there — the PROGRESS table
+  is the source of truth, not this entry). New `laravel/reverb` broadcasting
+  foundation (B0) wired into `DirectMessages` (B1) and forum threads (B3);
+  general institute-wide forum (B2); surveys — schema/builder, response
+  collection, aggregation + CSV export (B4-B6); help desk — ticket schema +
+  raise-a-ticket, staff queue, SLA sweep + real-time replies (B7-B9); new
+  `Planner` domain — `planner_events` + `PlannerAggregator`, student
+  calendar view + custom event CRUD, signed permanently-valid `.ics` feed
+  export (B10-B12). Remaining: B13-B14 gamification (XP/streaks/badges/
+  leaderboard), B15 `TenantModelRegistry` sweep, B16 lifecycle E2E + review
+  pass + this file's own completion update. Tests green: **1694/1695**
+  (same 1 pre-existing, unrelated `CourseSlugUniquenessTest` failure carried
+  since S1/S2, still out of scope).
 
 - **S18 — Analytics & Parent Engagement: COMPLETE, all 13 blocks (2026-08-26).**
   `docs/superpowers/specs/2026-08-26-s18-analytics-parent-engagement-design.md`,
