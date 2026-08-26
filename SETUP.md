@@ -114,6 +114,24 @@ composer dev
 Visit `http://lms.test` for the central app, `http://{subdomain}.lms.test`
 for a tenant.
 
+## 6a. Real-time (S19 N11 — Reverb)
+
+`BROADCAST_CONNECTION` stays `log` for normal local dev and for the test
+suite — no server needed for everyday work. To actually see real-time push
+(direct messages, forum posts, help-desk replies) locally: set
+`BROADCAST_CONNECTION=reverb` in `.env`, then run the WebSocket server in
+its own terminal:
+
+```
+php artisan reverb:start
+```
+
+Reverb is Linux/Docker-first upstream; it runs on native Windows PHP but
+needs this dedicated long-lived process (no `ext-pcntl` signal handling to
+rely on here, same faked-extension situation `composer dev`'s queue worker
+already lives with) — not part of `composer dev`, start it separately when
+needed.
+
 ## 7. Run tests
 
 ```
