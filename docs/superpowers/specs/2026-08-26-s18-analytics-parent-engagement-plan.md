@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | B0 | A1 pt.1 — `EngagementMetricsService` (engagement ratio + speed profile) | ✅ done |
 | B1 | A1 pt.2 — instructor/admin-facing engagement metrics view | ✅ done |
 | B2 | A2 pt.1 — `RewatchHeatmapService` | ✅ done |
-| B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ⬜ not started |
+| B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ✅ done |
 | B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ⬜ not started |
 | B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ⬜ not started |
 | B6 | A4 pt.1 — missed-class-replay nudge | ⬜ not started |
@@ -119,13 +119,24 @@ stop and report before starting the next block.
   unrelated failures as B0/B1 (`CourseSlugUniquenessTest`,
   `BackupConfigurationTest`).
 
-### B3 — A2 pt.2: rewatch heatmap UI — not started
+### B3 — A2 pt.2: rewatch heatmap UI — done
 
-- Instructor-facing view on the lesson's own AI-content/artifact page
-  (`LessonResource`'s `ViewLessonArtifact` — confirm the closest existing
-  embed point during build) showing the top-N most-replayed windows with
-  timestamps.
-- Tests: shows the correct top windows in the correct order.
+- `app/Filament/Teach/Widgets/LessonRewatchHeatmapWidget.php` created —
+  same `StatsOverviewWidget` + footer-widget wiring as
+  `BatchWeakTopicsWidget`/`BatchEngagementWidget`, embedded on
+  `ViewLessonArtifact` (confirmed closest existing page — `LessonResource`
+  had no other artifact/analysis view). Top-5 windows, timestamps
+  formatted `m:ss-m:ss`.
+- Tests: `tests/Feature/Analytics/LessonRewatchHeatmapWidgetTest.php`, 2
+  cases — top windows render in correct replay-count order with correct
+  formatted timestamps; empty state for no watch data. Both pass.
+- `composer test` full suite: 1584/1588 pass. 4 failures, all
+  pre-existing/unrelated — the same `CourseSlugUniquenessTest` and
+  `BackupConfigurationTest` flakes from B0-B2, plus
+  `DownloadCompletionExportControllerTest`/
+  `DownloadEnrolmentExportControllerTest` (Comms export 404 checks —
+  confirmed cross-test storage-state flake, both pass in isolation, no
+  connection to this block's files).
 
 ### B4 — A3 pt.1: `DropOffService` — not started
 
