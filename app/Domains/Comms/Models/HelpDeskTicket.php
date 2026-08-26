@@ -30,6 +30,7 @@ class HelpDeskTicket extends Model
         'priority',
         'assigned_to_user_id',
         'sla_due_at',
+        'sla_breach_notified_at',
         'resolved_at',
     ];
 
@@ -37,6 +38,7 @@ class HelpDeskTicket extends Model
     {
         return [
             'sla_due_at' => 'datetime',
+            'sla_breach_notified_at' => 'datetime',
             'resolved_at' => 'datetime',
         ];
     }

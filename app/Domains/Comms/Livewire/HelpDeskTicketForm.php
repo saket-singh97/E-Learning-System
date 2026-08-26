@@ -50,6 +50,17 @@ class HelpDeskTicketForm extends Component
     }
 
     /**
+     * Called by the client's Echo listener on `help-desk-ticket.{id}`
+     * (S19 B9) when a `reply.created` broadcast arrives. The payload
+     * carries nothing this method needs to read — any Livewire round trip
+     * re-renders `replies()` fresh from the database.
+     */
+    public function receiveReply(array $payload): void
+    {
+        //
+    }
+
+    /**
      * `is_internal_note` replies are staff-only — never returned here.
      * Re-verifies ownership on every call, not just at `openTicket()` time:
      * `openTicketId` is a plain public Livewire property, settable

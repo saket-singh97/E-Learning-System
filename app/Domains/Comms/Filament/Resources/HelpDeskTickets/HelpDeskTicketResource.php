@@ -3,6 +3,7 @@
 namespace App\Domains\Comms\Filament\Resources\HelpDeskTickets;
 
 use App\Domains\Comms\Filament\Resources\HelpDeskTickets\Pages\ListHelpDeskTickets;
+use App\Domains\Comms\Events\HelpDeskTicketReplyCreated;
 use App\Domains\Comms\Models\HelpDeskTicket;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -88,11 +89,19 @@ class HelpDeskTicketResource extends Resource
                             ->label('Internal note (staff only — the requester never sees this)'),
                     ])
                     ->action(function (HelpDeskTicket $record, array $data): void {
-                        $record->replies()->create([
+                        $reply = $record->replies()->create([
                             'author_id' => auth()->id(),
                             'body' => $data['body'],
                             'is_internal_note' => $data['is_internal_note'] ?? false,
                         ]);
+
+                        // S19 B9 — only a public reply broadcasts; see
+                        // HelpDeskTicketReplyCreated's own docblock for why
+                        // an internal note never can.
+                        if (! $reply->is_internal_note) {
+                            $reply->setRelation('author', auth()->user());
+                            event(new HelpDeskTicketReplyCreated($reply));
+                        }
                     }),
                 Action::make('markInProgress')
                     ->label('Mark in progress')

@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | ✅ done |
 | B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | ✅ done |
 | B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | ✅ done |
-| B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | not started |
+| B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | ✅ done |
 | B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | not started |
 | B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | not started |
 | B12 | N12 pt.3 — signed iCal feed export | not started |
@@ -411,16 +411,48 @@ target.
   pre-existing unrelated `CourseSlugUniquenessTest`). B9 (SLA sweep +
   real-time replies) is N16's remaining block.
 
-### B9 — N16 pt.3: SLA sweep + push
+### B9 — N16 pt.3: SLA sweep + push — done
 
-- [ ] `HelpDeskSlaSweep` job — same "unscoped daily sweep" shape
-      `TeacherAttendanceSweep` (S16) established; flags/notifies on a
-      breached `sla_due_at` still open/in_progress.
-- [ ] New replies broadcast on `private-help-desk-ticket.{ticketId}`,
-      authorized to the requester + assigned staff only.
-- [ ] Tests: sweep flags exactly the breached-and-still-open tickets,
-      notifies the right recipient (assignee, or every institute_admin if
-      unassigned); channel auth refuses an unrelated tenant user.
+- Migration adds `help_desk_tickets.sla_breach_notified_at` (nullable
+  timestamp) — the dedup marker a schema this size needs isn't a whole
+  second table the way `TeacherAttendanceFlag` got one; one boolean fact,
+  one column.
+- `HelpDeskSlaSweep` job — same unscoped-daily-sweep shape
+  `TeacherAttendanceSweep` (S16) already established (`CurrentTenant`
+  cleared up front). `breachedTickets()` = `sla_due_at < now()` AND
+  `status` in `open`/`in_progress` AND `sla_breach_notified_at IS NULL`.
+  Notifies the assigned staff member, or every institute_admin for the
+  tenant if unassigned (design doc §4 decision 7) — new
+  `App\Notifications\HelpDeskSlaBreached` (database-only, same posture
+  `TeacherAttendanceFlagged` already established), one new
+  `NotificationCentre::summarize()` case. Registered `->daily()` in
+  `bootstrap/app.php` alongside the other unscoped sweeps.
+- New `App\Domains\Comms\Events\HelpDeskTicketReplyCreated`
+  (`ShouldBroadcastNow`) fires from `HelpDeskTicketResource`'s own `reply`
+  action — **only when the reply isn't an internal note**. This is the
+  real security constraint here: every subscriber to
+  `help-desk-ticket.{id}` receives the identical payload, and the
+  requester is one of the two roles authorized on that channel, so
+  broadcasting an internal note would leak it to them regardless of
+  `HelpDeskTicketForm::replies()`'s own server-side filter — the filter
+  only protects the next page render, not a live push.
+  `help-desk-ticket.{ticketId}` channel (`routes/channels.php`) authorizes
+  the ticket's own `requester_id` or `assigned_to_user_id` only, fetched
+  `withoutGlobalScopes()` same as `forum-thread.{id}` (B3).
+  `help-desk-ticket-form.blade.php` gained the same `@script` re-subscribe-
+  on-`openTicketId`-change wiring the forum views (B3) already established;
+  its host page gained the `@vite` tag it never had.
+- New tests (8, `HelpDeskSlaSweepTest.php` + `HelpDeskTicketReplyBroadcastTest.php`):
+  sweep notifies the assignee when one exists, every institute_admin when
+  none does, never flags a not-yet-due ticket, never re-flags an
+  already-resolved or already-notified one; channel auth accepts the
+  requester and the assigned staff member, refuses an unrelated tenant user
+  and a different tenant entirely; a public reply broadcasts on the exact
+  right channel with the right payload; an internal note never broadcasts
+  at all.
+- `composer test`: 1680/1681 pass (8 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`). **N16 (help desk)
+  fully done — B7/B8/B9 all shipped.**
 
 ### B10 — N12 pt.1: Planner domain + aggregator
 

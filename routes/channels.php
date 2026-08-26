@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Comms\Models\ForumThread;
+use App\Domains\Comms\Models\HelpDeskTicket;
 use App\Domains\Comms\Services\ForumThreadAccess;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -35,4 +36,22 @@ Broadcast::channel('forum-thread.{threadId}', function ($user, $threadId) {
     $thread = ForumThread::withoutGlobalScopes()->find($threadId);
 
     return $thread !== null && ForumThreadAccess::canParticipateInThread($thread, $user);
+});
+
+/**
+ * S19 N16 pt.3 — the requester and the ticket's own assigned staff member
+ * only; `HelpDeskTicketReplyCreated` (B9) only ever broadcasts a public
+ * reply, never an `is_internal_note` one, so authorizing the requester
+ * here is safe — they can never receive an internal note over this
+ * channel regardless. Fetched `withoutGlobalScopes()`, same reasoning
+ * `forum-thread.{threadId}` above already established.
+ */
+Broadcast::channel('help-desk-ticket.{ticketId}', function ($user, $ticketId) {
+    $ticket = HelpDeskTicket::withoutGlobalScopes()->find($ticketId);
+
+    if ($ticket === null || $user->tenant_id !== $ticket->tenant_id) {
+        return false;
+    }
+
+    return $user->id === $ticket->requester_id || $user->id === $ticket->assigned_to_user_id;
 });

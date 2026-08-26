@@ -44,4 +44,36 @@
             @endforeach
         </ul>
     @endif
+
+    {{-- S19 N16 pt.3 — real-time push over help-desk-ticket.{id}
+         (routes/channels.php, B9). openTicketId changes as the viewer
+         opens/closes tickets, same re-subscribe-on-change shape the forum
+         views (B3) already established. --}}
+    @script
+        <script>
+            let currentTicketChannel = null;
+
+            function subscribeToTicket(ticketId) {
+                if (currentTicketChannel) {
+                    window.Echo.leave(currentTicketChannel);
+                    currentTicketChannel = null;
+                }
+
+                if (!ticketId || !window.Echo) {
+                    return;
+                }
+
+                currentTicketChannel = `help-desk-ticket.${ticketId}`;
+                window.Echo.private(currentTicketChannel).listen('.reply.created', (event) => {
+                    $wire.call('receiveReply', event);
+                });
+            }
+
+            if (window.Echo) {
+                subscribeToTicket($wire.openTicketId);
+            }
+
+            $wire.$watch('openTicketId', (value) => subscribeToTicket(value));
+        </script>
+    @endscript
 </div>

@@ -8,6 +8,7 @@ use App\Domains\Batches\Jobs\TeacherAttendanceSweep;
 use App\Domains\Billing\Jobs\SendGraceSuspensionReminders;
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Analytics\Jobs\GenerateMonthlyReportCards;
+use App\Domains\Comms\Jobs\HelpDeskSlaSweep;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Comms\Jobs\SendMissedClassReplayNudges;
 use App\Domains\Comms\Jobs\SendWeakTopicPracticeNudges;
@@ -164,6 +165,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // monthly (design doc §4 decision 8): one report card per active
         // student per calendar month, not per enrolment anniversary.
         $schedule->job(new GenerateMonthlyReportCards, 'scheduled')->monthly();
+
+        // S19 B9 — same unscoped-sweep shape as the jobs above;
+        // sla_breach_notified_at is the dedup marker so a permanently-
+        // breached open ticket isn't re-notified every single day forever.
+        $schedule->job(new HelpDeskSlaSweep, 'scheduled')->daily();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same

@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Notifications\AbsenceAlertDue;
 use App\Notifications\EnrolmentRequestExpired;
 use App\Notifications\FeeReminderDue;
+use App\Notifications\HelpDeskSlaBreached;
 use App\Notifications\InactivityNudgeDue;
 use App\Notifications\LowAttendanceAlertDue;
 use App\Notifications\TeacherAttendanceFlagged;
@@ -59,6 +60,7 @@ class NotificationCentre extends Component
             LowAttendanceAlertDue::class => ($notification->data['student_name'] ?? 'A student').' is below the attendance/coverage threshold',
             InactivityNudgeDue::class => 'No learning activity in the last few days — come back and continue where you left off',
             TeacherAttendanceFlagged::class => ($notification->data['instructor_name'] ?? 'An instructor').'\'s attendance is unmarked for a past session',
+            HelpDeskSlaBreached::class => 'SLA breached: '.($notification->data['subject'] ?? 'a help desk ticket'),
             default => class_basename($notification->type),
         };
     }
