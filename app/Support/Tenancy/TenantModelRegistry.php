@@ -73,6 +73,7 @@ use App\Domains\Content\Models\Wishlist;
 use App\Domains\Fees\Models\FeeCoupon;
 use App\Domains\Operations\Models\Enquiry;
 use App\Domains\Operations\Models\EnquiryFollowUp;
+use App\Domains\Planner\Models\PlannerEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Security\Models\AccountSharingFlag;
@@ -173,6 +174,7 @@ class TenantModelRegistry
         SurveyAnswer::class,
         HelpDeskTicket::class,
         HelpDeskTicketReply::class,
+        PlannerEvent::class,
     ];
 
     /**
@@ -1094,6 +1096,11 @@ class TenantModelRegistry
                 'author_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'body' => 'Row reply',
             ],
+            PlannerEvent::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'title' => 'Row event',
+                'starts_at' => now()->addDay(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1191,6 +1198,7 @@ class TenantModelRegistry
             SurveyAnswer::class => ['value' => json_encode('tampered')],
             HelpDeskTicket::class => ['subject' => 'tampered'],
             HelpDeskTicketReply::class => ['body' => 'tampered'],
+            PlannerEvent::class => ['title' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

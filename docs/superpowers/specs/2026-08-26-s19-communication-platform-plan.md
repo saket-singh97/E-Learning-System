@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | ✅ done |
 | B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | ✅ done |
 | B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | ✅ done |
-| B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | not started |
+| B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | ✅ done |
 | B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | not started |
 | B12 | N12 pt.3 — signed iCal feed export | not started |
 | B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | not started |
@@ -454,18 +454,38 @@ target.
   pre-existing unrelated `CourseSlugUniquenessTest`). **N16 (help desk)
   fully done — B7/B8/B9 all shipped.**
 
-### B10 — N12 pt.1: Planner domain + aggregator
+### B10 — N12 pt.1: Planner domain + aggregator — done
 
-- [ ] New `app/Domains/Planner/` scaffold (Models/Services/Livewire/Views/
-      per CLAUDE.md's standard domain layout).
-- [ ] `planner_events` migration + `PlannerEvent` model, registered in
-      `TenantModelRegistry`.
-- [ ] `PlannerAggregator::eventsFor(User $viewer, DateRange $range)` — reads
-      `planner_events` + the viewer's enrolled `BatchSession`s +
-      `Assignment.due_at` + quiz open/close windows, merged and sorted, no
-      duplication into `planner_events`.
-- [ ] Tests: aggregator returns the right merged set for one user, excludes
-      another user's/tenant's data, respects the date range.
+- New `app/Domains/Planner/` domain — `Models/PlannerEvent.php` +
+  `Services/PlannerAggregator.php` (Livewire/Views arrive in B11, per
+  CLAUDE.md's standard layout populated incrementally — every other domain
+  in this app grew its subfolders the same way, not all at once).
+  `planner_events` migration + model, registered in `TenantModelRegistry`.
+  Domain view namespace registration is automatic (`AppServiceProvider`'s
+  own `glob()` loop), no manual step needed.
+- **Real gap found before writing the service**: the design doc's own
+  third source, "quiz open/close windows," doesn't exist anywhere in this
+  app — verified directly, not assumed: `Quiz` has no `opens_at`/
+  `closes_at`/any scheduling column at all, only `time_limit_minutes` (a
+  duration once *started*) and `max_attempts`; `Quiz::isVisibleTo()` gates
+  on the parent lesson's own access rules, not a date window. Same
+  "verify before building, the design doc can be stale" discipline every
+  prior slice's own design doc already applied when a roadmap assumption
+  turned out wrong (S16's I7, H10). `PlannerAggregator::eventsFor()` merges
+  two real sources, not three: the viewer's own `PlannerEvent` rows, and
+  `BatchSession`s + `Assignment.due_at` for batches they hold an active
+  `Enrolment` in (assignments resolved through
+  `Assignment → Lesson → CourseSection → Course`, matched against the
+  enrolled batches' own `course_id`). Computed at read time, no
+  materialized aggregate — same posture `TestSeriesRankingService` (S16)
+  already established; nothing gets copied into `planner_events`.
+- New tests (4, `tests/Feature/Planner/PlannerAggregatorTest.php`): merges
+  all three real sources for one user in `starts_at` order; excludes a
+  batch the viewer isn't enrolled in and another user's own custom event;
+  never leaks another tenant's data; respects the given date range.
+- `composer test`: 1685/1686 pass (5 new tests — 4 above +
+  `CrossTenantTest`'s auto-generated `PlannerEvent` case; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B11 — N12 pt.2: calendar UI
 
