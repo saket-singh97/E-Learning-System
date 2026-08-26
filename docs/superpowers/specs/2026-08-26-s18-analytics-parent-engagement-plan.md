@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ✅ done |
 | B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ✅ done |
 | B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ✅ done |
-| B6 | A4 pt.1 — missed-class-replay nudge | ⬜ not started |
+| B6 | A4 pt.1 — missed-class-replay nudge | ✅ done |
 | B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ⬜ not started |
 | B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ⬜ not started |
 | B9 | A5 pt.2 — PDF generation | ⬜ not started |
@@ -179,15 +179,38 @@ stop and report before starting the next block.
   flake from B3/B4 didn't recur this run, confirming it's cross-test
   noise, not caused by any Analytics file.
 
-### B6 — A4 pt.1: missed-class-replay nudge — not started
+### B6 — A4 pt.1: missed-class-replay nudge — done
 
-- New job in `Comms`, same shape `SendInactivityNudges` already
-  established: find `BatchSession` rows with a `LiveRecording` (S14)
-  whose enrolled students have no matching `VideoWatchEvent` for that
-  session's own lesson since the recording went up. Dedupe via
-  `notifications`, once-per-week cadence (design §4 decision 4/7).
-- Tests: a student who watched the replay is never nudged; a student who
-  hasn't is nudged once, not again within the same week.
+- `app/Domains/Comms/Jobs/SendMissedClassReplayNudges.php` created — same
+  shape `SendInactivityNudges` already established (S9 B13): unscoped
+  cross-tenant sweep (`CurrentTenant` cleared up front), dedupe via
+  `notifications`, once-per-week cadence. Iterates every `LiveRecording`
+  with `status = 'ready'`, resolves its `BatchSession`, and for each
+  actively-enrolled student on that session's batch checks for a
+  `VideoWatchEvent` on the session's own `lesson_id` created since the
+  recording's own `updated_at` — `LiveRecording` has no dedicated
+  "went ready" column, but nothing else ever updates a `ready` row again,
+  so `updated_at` is that transition timestamp. Fires per `BatchSession`,
+  not per lesson (design §4 decision 7).
+- `app/Notifications/MissedClassReplayNudgeDue.php` created — same
+  student-facing, `[WhatsAppChannel, 'database']` dual-channel shape as
+  `InactivityNudgeDue`; carries `batch_session_id`/`lesson_id`/
+  `session_title` only, no URL generation (matches `LowAttendanceAlertDue`/
+  `InactivityNudgeDue`'s own convention of storing IDs, not tenant-scoped
+  links, since the job runs with no tenant bound).
+- Scheduled in `bootstrap/app.php` — `Schedule::job()` on the `'scheduled'`
+  Horizon queue, daily, alongside every other S9 B10-converted sweep.
+- Tests: `tests/Feature/Comms/SendMissedClassReplayNudgesTest.php`, 7
+  cases — nudges a student who never watched the replay; skips a student
+  who watched it after the recording went ready; still nudges when the
+  student's only watch event *predates* the recording going ready (not a
+  real replay-watch); skips while the recording is still
+  `downloading`/not `ready`; skips a non-actively-enrolled student;
+  sends only one nudge per student per week across two `handle()` runs;
+  confirms `ShouldQueue` + retry/backoff config. All 7 pass.
+- `composer test` (full `php artisan test`, config cache cleared first):
+  1603/1604 pass. Only the one pre-existing, already-documented
+  `CourseSlugUniquenessTest` flake — untouched by this block's files.
 
 ### B7 — A4 pt.2: weak-topic-practice nudge — not started
 

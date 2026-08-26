@@ -8,6 +8,7 @@ use App\Domains\Batches\Jobs\TeacherAttendanceSweep;
 use App\Domains\Billing\Jobs\SendGraceSuspensionReminders;
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
+use App\Domains\Comms\Jobs\SendMissedClassReplayNudges;
 use App\Domains\Content\Jobs\CloseStaleLessonStreamSessions;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
 use App\Domains\Fees\Jobs\SendFeeReminders;
@@ -146,6 +147,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // doc §4 decision 10 — B6 wires the actual TeacherAttendanceFlag
         // creation onto this).
         $schedule->job(new TeacherAttendanceSweep, 'scheduled')->daily();
+
+        // S18 B6 — same unscoped-sweep shape as the jobs above; the other
+        // half of M15's nudge set alongside SendInactivityNudges (design
+        // doc §4 decision 4).
+        $schedule->job(new SendMissedClassReplayNudges, 'scheduled')->daily();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
