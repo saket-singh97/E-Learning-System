@@ -30,7 +30,7 @@ stop and report before starting the next block.
 | B1 | A1 pt.2 — instructor/admin-facing engagement metrics view | ✅ done |
 | B2 | A2 pt.1 — `RewatchHeatmapService` | ✅ done |
 | B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ✅ done |
-| B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ⬜ not started |
+| B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ✅ done |
 | B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ⬜ not started |
 | B6 | A4 pt.1 — missed-class-replay nudge | ⬜ not started |
 | B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ⬜ not started |
@@ -138,14 +138,27 @@ stop and report before starting the next block.
   confirmed cross-test storage-state flake, both pass in isolation, no
   connection to this block's files).
 
-### B4 — A3 pt.1: `DropOffService` — not started
+### B4 — A3 pt.1: `DropOffService` — done
 
-- `DropOffService::dropOffPointFor(Lesson $lesson): ?int` — the
-  video-time second where the largest share of students' own last watch
-  event ends, before the lesson's own total duration (a genuine
-  "stopped watching here," not just "finished the video").
-- Tests: a lesson where most students stop at ~120s reports that point; a
-  lesson where everyone finishes reports `null` (no meaningful drop-off).
+- `app/Domains/Analytics/Services/DropOffService.php` created —
+  `dropOffPointFor(Lesson $lesson): ?int`. Per student, takes their own
+  last watch event's `end_s`; a student within `NEAR_END_TOLERANCE_S`
+  (5s) of the lesson's own duration counts as finished, not dropped off,
+  and is excluded. Remaining "dropped off" points are bucketed to
+  `RewatchHeatmapService::BUCKET_WIDTH_S` (10s, same domain/convention),
+  and the bucket with the most students returned as the drop-off second.
+  `null` when no `video_duration_seconds` yet, no watch events at all, or
+  every student finished.
+- Tests: `tests/Feature/Analytics/DropOffServiceTest.php`, 5 cases —
+  correct majority bucket reported over a minority early-drop student;
+  `null` when everyone finishes within tolerance; finished students
+  excluded while genuine drop-offs still get reported; `null` for no
+  `video_duration_seconds`; `null` for no watch events. All 5 pass.
+- `composer test` full suite: 1590/1593 pass. Same 3 pre-existing/
+  unrelated flakes as B3 (`CourseSlugUniquenessTest`,
+  `BackupConfigurationTest`, one export-controller 404 flake — the other
+  export test passed this run, confirming it's the same cross-test
+  storage-state flake, not a regression).
 
 ### B5 — A3 pt.2: drop-off UI — not started
 
