@@ -23,6 +23,7 @@ use App\Domains\Comms\Livewire\BatchForum;
 use App\Domains\Comms\Livewire\DirectMessages;
 use App\Domains\Comms\Livewire\GeneralForum;
 use App\Domains\Comms\Livewire\NoticeBoard;
+use App\Domains\Comms\Livewire\SurveyRunner;
 use App\Domains\Content\Livewire\CourseReviews;
 use App\Domains\Content\Livewire\LessonNotes;
 use App\Domains\Content\Livewire\LessonQuestions;
@@ -211,6 +212,7 @@ class AppServiceProvider extends ServiceProvider
         // tag-name resolution entirely, never an HTTP hit on the real page.
         Livewire::component('comms.batch-forum', BatchForum::class);
         Livewire::component('comms.general-forum', GeneralForum::class);
+        Livewire::component('comms.survey-runner', SurveyRunner::class);
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
 

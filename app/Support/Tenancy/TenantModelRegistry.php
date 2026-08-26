@@ -49,7 +49,9 @@ use App\Domains\Comms\Models\NoticeReadReceipt;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Models\ParentInviteCode;
 use App\Domains\Comms\Models\Survey;
+use App\Domains\Comms\Models\SurveyAnswer;
 use App\Domains\Comms\Models\SurveyQuestion;
+use App\Domains\Comms\Models\SurveyResponse;
 use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Content\Models\Category;
@@ -165,6 +167,8 @@ class TenantModelRegistry
         MonthlyReportCard::class,
         Survey::class,
         SurveyQuestion::class,
+        SurveyResponse::class,
+        SurveyAnswer::class,
     ];
 
     /**
@@ -1045,6 +1049,31 @@ class TenantModelRegistry
                 'prompt' => 'Row question',
                 'type' => 'text',
             ],
+            SurveyResponse::class => [
+                'survey_id' => Survey::create([
+                    'title' => 'Parent',
+                    'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                ])->id,
+                'respondent_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+            ],
+            SurveyAnswer::class => [
+                'survey_response_id' => SurveyResponse::create([
+                    'survey_id' => Survey::create([
+                        'title' => 'Parent',
+                        'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    ])->id,
+                    'respondent_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                ])->id,
+                'survey_question_id' => SurveyQuestion::create([
+                    'survey_id' => Survey::create([
+                        'title' => 'Parent',
+                        'created_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    ])->id,
+                    'prompt' => 'Row question',
+                    'type' => 'text',
+                ])->id,
+                'value' => 'Row answer',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1133,6 +1162,13 @@ class TenantModelRegistry
             MonthlyReportCard::class => ['status' => 'failed'],
             Survey::class => ['title' => 'tampered'],
             SurveyQuestion::class => ['prompt' => 'tampered'],
+            SurveyResponse::class => ['submitted_at' => now()],
+            // `Model::where()->update()` (CrossTenantTest's own update path)
+            // bypasses Eloquent's 'array' cast mutator entirely — a bare PHP
+            // string sent as-is to a jsonb column fails Postgres' implicit
+            // text->jsonb cast (unquoted `tampered` isn't valid JSON text).
+            // Pre-encoding produces a valid JSON string literal instead.
+            SurveyAnswer::class => ['value' => json_encode('tampered')],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

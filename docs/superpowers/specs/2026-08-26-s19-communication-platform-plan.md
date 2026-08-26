@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B2 | N14 pt.1 — `forum_threads.batch_id` nullable migration + `GeneralForum` Livewire component (list/create institute-wide threads) | ✅ done |
 | B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | ✅ done |
 | B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | ✅ done |
-| B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | not started |
+| B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | ✅ done |
 | B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | not started |
 | B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | not started |
 | B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | not started |
@@ -289,15 +289,43 @@ target.
   `CrossTenantTest`'s auto-generated `Survey`/`SurveyQuestion` cases; sole
   failure the pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B5 — N15 pt.2: response collection
+### B5 — N15 pt.2: response collection — done
 
-- [ ] `survey_responses`/`survey_answers` migrations + models, registered.
-- [ ] `SurveyRunner` Livewire component — lists published surveys the
-      viewer hasn't yet responded to, submits answers, enforces the
-      `unique(survey_id, respondent_id)` one-response rule.
-- [ ] Tests: submits a full response, a second submission attempt is
-      refused/updates rather than duplicates (pick one, document it), a
-      draft/closed survey isn't offered.
+- `survey_responses`/`survey_answers` migrations + `SurveyResponse`/
+  `SurveyAnswer` models (Comms), both registered in `TenantModelRegistry`.
+  `survey_responses` carries the actual `unique(survey_id, respondent_id)`
+  DB constraint the design doc names.
+- `SurveyRunner` Livewire component — `availableSurveys()` lists only
+  `status = 'published'` surveys the viewer has no `SurveyResponse` row
+  for yet. `submit()` uses `SurveyResponse::updateOrCreate` keyed on that
+  same pair: **re-submitting updates the existing response rather than
+  erroring or duplicating** — the same precedent `BatchFeedbackForm`
+  already established, chosen over refusing a second submission since
+  nothing in this slice's own scope needs "one shot only" semantics.
+- Caught and fixed one real gap during implementation, before it shipped:
+  `openSurvey()` only guards entry into a survey via its own published
+  check, but `surveyId` is a plain public Livewire property — settable
+  directly from the client, bypassing that guard entirely. `questions()`
+  now re-verifies `status = 'published'` on every call, not just at
+  `openSurvey()` time, so a crafted request naming a draft/closed survey's
+  id can't read its question text — same class of gap `BatchForum`'s own
+  B21 review pass had to catch after the fact; caught here in first draft
+  instead.
+- New tests (5, `tests/Feature/Comms/SurveyRunnerTest.php`): only a
+  published, not-yet-answered survey is listed; a draft survey's questions
+  are refused both through the normal open flow and a direct property-set
+  bypass attempt; a full response with one answer per question type (text,
+  single_choice, rating) persists correctly; a second submission updates
+  the same response row rather than creating a second one; an answered
+  survey no longer appears in the list. `CrossTenantTest`'s own generated
+  `SurveyResponse`/`SurveyAnswer` cases surfaced one real framework gotcha:
+  its update path (`Model::where()->update()`) bypasses Eloquent's `array`
+  cast mutator entirely, so a bare PHP string sent to a jsonb column fails
+  Postgres' implicit `text->jsonb` cast — fixed by pre-encoding the
+  registry's own tampered value (`json_encode('tampered')`), not a
+  production code change.
+- `composer test`: 1659/1660 pass (7 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B6 — N15 pt.3: aggregation + export
 
