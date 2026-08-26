@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B9 | A5 pt.2 — PDF generation | ✅ done |
 | B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ✅ done |
 | B11 | `TenantModelRegistry` sweep — 1 new model registered | ✅ done |
-| B12 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B12 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 ---
 
@@ -400,21 +400,59 @@ stop and report before starting the next block.
   model registered this block, S18 B8 already added the +1 for
   `MonthlyReportCard`).
 
-### B12 — Full test coverage, review pass — not started
+### B12 — Full test coverage, review pass — done
 
-- Lifecycle E2E test(s): a batch of `VideoWatchEvent` rows → engagement
-  ratio/rewatch heatmap/drop-off point all compute correctly from the
-  same underlying data; a month's worth of attendance/quiz/engagement
-  data → report-card generation → PDF exists on disk → WhatsApp send
-  recorded, `status = sent`.
-- Review pass across every B0-B11 file for real bugs (not just a green
-  suite) — same discipline every prior slice's own final block applied.
-  Particular attention to A4's dedupe logic (a nudge sent twice in one
-  week is a real user-facing annoyance, same class of bug this project's
-  own `SendInactivityNudges` already had to get right) and A5's
-  idempotency (a re-sent report card is a real "why did I get this
-  twice" support ticket).
-- `composer test` full suite green (only the pre-existing unrelated
-  `CourseSlugUniquenessTest` failure tolerated).
-- Update `HANDOVER.md` (S18 complete entry), `docs/PROJECT-STATUS.md` (new
-  S18 section), `docs/ROADMAP.md` (S18 → Done, shipped count 17→18).
+- `tests/Feature/S18AnalyticsParentEngagementE2ETest.php` created, 2 cases
+  — one chains a batch of `VideoWatchEvent` rows (2 straight-through
+  viewers + 1 skimmer touching only 20-30s) through
+  `EngagementMetricsService`/`RewatchHeatmapService`/`DropOffService` and
+  checks all three numbers are mutually consistent from the same
+  underlying rows (ratio 0.5, heatmap peak at the 20-30s bucket with
+  count 3, drop-off bucketed to 100s); the other chains a month of
+  attendance/quiz/watch data through `GenerateMonthlyReportCards` to a
+  real on-disk PDF and a `sent` WhatsApp notification. Both pass.
+- **Review pass (dispatched to a review agent against the design/plan
+  docs + all 23 B0-B11 files) found 2 real bugs, both in
+  `GenerateMonthlyReportCards.php` — the exact A5-idempotency risk area
+  the plan itself flagged, not the A4 dedupe queries (those checked out
+  clean):
+  1. **Uncaught race on the tracking-row create.** The read-then-create
+     of the `MonthlyReportCard` row sat outside the method's own
+     `try/catch`. A manual re-trigger overlapping the scheduled run (or
+     two workers) could both see `$card === null` before either INSERT
+     committed; the loser's `create()` then threw a raw unique-constraint
+     violation that aborted the *entire* sweep from that student onward,
+     not just that one student. **Fixed**: the create is now wrapped in
+     its own try/catch — on a `QueryException`, re-fetch the row the
+     winner created (and bail immediately if it's already
+     `generated`/`sent`) instead of propagating.
+  2. **Partial-parent-send re-notify on retry.** `notifyParents()` only
+     flipped `status` to `sent` after every linked parent's own `notify()`
+     call completed. If the loop threw partway (2nd of 3 parents' send
+     fails, or `Tenant::findOrFail()` throws), the outer catch set
+     `status = failed` and a later retry re-entered `notifyParents()` from
+     scratch — re-sending WhatsApp to parents who'd already received it,
+     the exact "why did I get this twice" class design doc §5 calls out.
+     **Fixed**: added `alreadyNotified()`, same read-back-the-notifiable's-
+     own-stored-notifications dedupe shape `SendAbsenceAlert` already
+     uses (keyed on `monthly_report_card_id` in the notification's own
+     `data` payload) — each parent is checked individually before
+     sending, not gated by the card's single status column alone.
+  - New regression test added to `GenerateMonthlyReportCardsTest.php`:
+    a card stuck `failed` with one parent already real-notified is
+    retried — that parent gets no second WhatsApp send, the other linked
+    parent does, and status correctly reaches `sent`. `GenerateMonthlyReportCardsTest.php`
+    now 7 cases, all pass.
+- `composer test` (`php artisan test` directly, composer's own 300s
+  wrapper timeout confirmed too short for this suite again): full run
+  green modulo the pre-existing, already-documented flakes only —
+  `CourseSlugUniquenessTest` every block, plus whichever of the
+  `DownloadCompletionExportControllerTest`/`BackupConfigurationTest`
+  cross-test storage-state flakes happen to land in a given run (both
+  independently confirmed pre-existing/unrelated in B10/B11's own runs).
+- `HANDOVER.md` S18 entry flipped from "DESIGNED, build not started" to
+  a "COMPLETE, all 13 blocks" summary; `docs/PROJECT-STATUS.md` gained a
+  new `## S18` section (same per-block-detail format every prior slice's
+  own section uses); `docs/ROADMAP.md`'s S18 row moved from "Designed,
+  not built" into the "Shipped" table, **Shipped** count 17 → 18, P2
+  shipped-feature count 59 → 64 (+5 for S18's own real scope).

@@ -1973,3 +1973,99 @@ posts. L9's outline generator produces structure only, never lesson
 bodies/video/quiz content.
 
 **All 14 S17 blocks are now built, tested, and reviewed.**
+
+## S18 — Analytics & Parent Engagement: COMPLETE (all 13 blocks, 2026-08-26)
+
+Tenth P2/P3-mixed backlog slice. `docs/ROADMAP.md`'s own S18 row lists 8
+items (M5-M8/M14-M15/O5-O6), but M15's 3-day-inactivity nudge already
+shipped in S9 B13, M14 and O5 are the same monthly-report-card feature
+counted twice, and O6 (parent-teacher thread) is P3-tier and largely
+already covered by the existing generic `DirectMessage` — cut for now,
+same "not named, not in scope yet" boundary S16/S17 both drew. Real
+build scope was 5 items, 13 build blocks.
+`docs/superpowers/specs/2026-08-26-s18-analytics-parent-engagement-design.md`
+and `...-plan.md` cover B0-B12 in full per-block detail — not repeated
+here. One new domain, `Analytics` — A1-A3 are pure query services over
+the already-existing `video_watch_events` table (S2), no new schema; A5
+needed the slice's only new table, `monthly_report_cards`, versioned by
+`[student_id, period_month]` so a scheduler retry or manual re-trigger
+can never double-generate or double-send a parent the same month's
+report. 1 new `BelongsToTenant` model (`MonthlyReportCard`), registered
+in `TenantModelRegistry` immediately on creation (B8), not deferred to
+the registry-sweep block (B11) — same S16/S17 precedent. B11's reverse
+sweep confirmed 73-for-73 against every real `BelongsToTenant` usage in
+`app/`, zero gaps (`ImpersonationAudit`'s non-membership is deliberate
+and already documented, not a gap).
+
+- **B0/B1** — A1: `EngagementMetricsService::ratioFor()`/`speedProfileFor()`
+  (watch-time-vs-wall-clock ratio + sustained-2x-speed detection, one
+  service since both read the same `VideoWatchEvent` rows in the same
+  pass) + `classEngagementFor()` batch aggregate →
+  `BatchEngagementWidget` on `EditBatch`. Speed is inferred from the
+  lesson player's own fixed 10s heartbeat cadence (no wall-clock column
+  exists to reuse) — a single heartbeat's implied speed is
+  indistinguishable from a manual skip, so `sustained_2x` requires 3+
+  fast heartbeats.
+- **B2/B3** — A2: `RewatchHeatmapService::heatmapFor()` (10s-bucketed,
+  distinct-student overlap count, a student rewatching the same window
+  counts once) → `LessonRewatchHeatmapWidget` on `ViewLessonArtifact`.
+- **B4/B5** — A3: `DropOffService::dropOffPointFor()`/`detailsFor()`
+  (per-student last-event end, a student within 5s of the lesson's own
+  duration counts finished not dropped-off, remaining points bucketed to
+  the same 10s width as A2) → `LessonDropOffWidget`, its own separate
+  widget alongside the heatmap one (different question, not folded
+  together).
+- **B6/B7** — A4: `SendMissedClassReplayNudges` (fires per `BatchSession`
+  whose `LiveRecording` is `ready` with no matching post-recording
+  `VideoWatchEvent` — a session, not a lesson, since one lesson can
+  recur across many batches each with its own recording) and
+  `SendWeakTopicPracticeNudges` (thin wrapper around S17's
+  `WeakTopicDetectionService::weakTopicsFor()`, zero new detection
+  logic, the documented `Comms` → `AI` cross-domain-read exception to
+  CLAUDE.md's events-only rule). Both extend `SendInactivityNudges`'s own
+  established shape: `notifications`-table dedupe, once-per-week,
+  `CurrentTenant` cleared for an unscoped cross-tenant sweep.
+- **B8/B9** — A5 pt.1/2: `monthly_report_cards` schema +
+  `ReportCardDataAggregator::summarize()` (attendance/quiz math
+  duplicates `StudentMetrics`'s own formulas rather than adding a
+  month-scoping parameter there; engagement ratio reuses B0's
+  `ratioFor()` unmodified) → `ReportCardPdfGenerator` (`barryvdh/laravel-
+  dompdf`, same library `CertificateService`/`IdCardGenerator` already
+  use).
+- **B10** — A5 pt.3: `GenerateMonthlyReportCards` monthly sweep
+  (`Schedule::job()`, `'scheduled'` queue) — generates, then delivers a
+  signed 7-day download link (`DownloadReportCardController`, the actual
+  `DownloadGdprExportController` no-login-required pattern, not
+  `DownloadInvoiceController`'s session-gated one the design doc had
+  initially named — a build-time correction) to any linked parent
+  (`ParentGuardianLink`) over WhatsApp. Idempotent on
+  `[student_id, period_month]`: a `generated`/`sent` row is left alone on
+  a re-run, a `pending`/`failed` row is retried.
+- **B11** — Registry confirmation sweep: 73 real `BelongsToTenant` usages,
+  73 registry entries, exact match.
+- **B12** — Lifecycle E2E (watch-events → engagement/heatmap/drop-off
+  consistency; a month's data → report card → PDF → sent WhatsApp) +
+  review pass, which found and fixed 2 real bugs in
+  `GenerateMonthlyReportCards`:
+  1. The tracking-row read-then-create sat outside the method's own
+     try/catch — a race between an overlapping manual re-trigger and the
+     scheduled run could throw an uncaught unique-constraint violation
+     that aborted the entire sweep from that student onward, not just
+     that student. Fixed by catching the `QueryException` and re-fetching
+     the winner's row instead of propagating.
+  2. `notifyParents()` only flipped status to `sent` after every parent's
+     `notify()` call completed, so a retry after a partial failure
+     (parent 2 of 3 fails, or `Tenant::findOrFail()` throws) re-sent
+     WhatsApp to parents who'd already received it. Fixed with an
+     `alreadyNotified()` per-parent check, same read-back-the-notifiable's-
+     own-notifications dedupe shape `SendAbsenceAlert` already uses.
+
+**What's still rough, on purpose:** A1-A3 are pure query services with no
+rollup table — fine at today's scale, a future perf item if a tenant's
+`video_watch_events` volume ever makes a live per-request aggregate slow.
+A5's WhatsApp delivery is a signed link, not a file attachment —
+`CommsProvider::sendTemplate()` has no media-attachment method today. O6
+(parent-teacher message thread UI) remains cut, same as the design doc
+documents — `DirectMessage` already covers the underlying capability.
+
+**All 13 S18 blocks are now built, tested, and reviewed.**

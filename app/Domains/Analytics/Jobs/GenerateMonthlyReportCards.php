@@ -17,6 +17,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 use Throwable;
@@ -88,14 +89,34 @@ class GenerateMonthlyReportCards implements ShouldQueue
         }
 
         if ($card === null) {
-            MonthlyReportCard::withoutEvents(function () use (&$card, $tenantId, $studentId, $periodMonth): void {
-                $card = MonthlyReportCard::create([
-                    'tenant_id' => $tenantId,
-                    'student_id' => $studentId,
-                    'period_month' => $periodMonth->toDateString(),
-                    'status' => 'pending',
-                ]);
-            });
+            try {
+                MonthlyReportCard::withoutEvents(function () use (&$card, $tenantId, $studentId, $periodMonth): void {
+                    $card = MonthlyReportCard::create([
+                        'tenant_id' => $tenantId,
+                        'student_id' => $studentId,
+                        'period_month' => $periodMonth->toDateString(),
+                        'status' => 'pending',
+                    ]);
+                });
+            } catch (QueryException $e) {
+                // B12 review-pass fix: a manual re-trigger overlapping the
+                // scheduled run (or two workers) can both see $card === null
+                // before either INSERT commits — the unique(student_id,
+                // period_month) constraint then throws for the loser instead
+                // of silently losing the race. Re-fetch the row the winner
+                // created rather than letting this abort the whole sweep.
+                $card = MonthlyReportCard::where('student_id', $studentId)
+                    ->where('period_month', $periodMonth->toDateString())
+                    ->first();
+
+                if ($card === null) {
+                    throw $e;
+                }
+
+                if (in_array($card->status, ['generated', 'sent'], true)) {
+                    return;
+                }
+            }
         }
 
         $student = User::find($studentId);
@@ -136,8 +157,32 @@ class GenerateMonthlyReportCards implements ShouldQueue
             'monthlyReportCard' => $card->id,
         ]);
 
-        $parents->each(fn (User $parent) => $parent->notify(new MonthlyReportCardReady($card, $student, $downloadUrl)));
+        foreach ($parents as $parent) {
+            if ($this->alreadyNotified($parent, $card)) {
+                continue;
+            }
+
+            $parent->notify(new MonthlyReportCardReady($card, $student, $downloadUrl));
+        }
 
         $card->forceFill(['status' => 'sent', 'sent_at' => now()])->save();
+    }
+
+    /**
+     * B12 review-pass fix: status only flips to `sent` after every parent in
+     * the loop above is notified, so a retry after a partial failure (the
+     * 2nd of 3 parents' send throws, or the loop throws for any other
+     * reason) previously re-entered this method from scratch and re-sent
+     * WhatsApp to parents who already got it — the exact "why did I get
+     * this twice" class design doc §5 flags for A5. Same dedupe shape
+     * SendAbsenceAlert already uses: read back the notifiable's own stored
+     * notifications rather than a second tracking column.
+     */
+    protected function alreadyNotified(User $parent, MonthlyReportCard $card): bool
+    {
+        return $parent->notifications()
+            ->where('type', MonthlyReportCardReady::class)
+            ->get()
+            ->contains(fn ($notification) => (int) ($notification->data['monthly_report_card_id'] ?? 0) === $card->id);
     }
 }

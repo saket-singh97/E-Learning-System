@@ -111,6 +111,35 @@ it('never creates a second row or re-sends on a second run for the same month', 
     Notification::assertSentToTimes($parent, MonthlyReportCardReady::class, 1);
 });
 
+it('does not re-notify a parent already notified when a partially-failed card is retried', function () {
+    $student = reportCardSweepFixture($this->tenant);
+    $parent1 = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $parent2 = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    ParentGuardianLink::create(['parent_user_id' => $parent1->id, 'student_user_id' => $student->id, 'relationship' => 'father']);
+    ParentGuardianLink::create(['parent_user_id' => $parent2->id, 'student_user_id' => $student->id, 'relationship' => 'mother']);
+
+    $periodMonth = now()->startOfMonth()->subMonth();
+    $card = MonthlyReportCard::create([
+        'student_id' => $student->id,
+        'period_month' => $periodMonth->toDateString(),
+        'status' => 'failed',
+        'pdf_disk_path' => 'report-cards/prior.pdf',
+    ]);
+
+    // Simulate parent1 already having received the report card before a
+    // prior run failed partway through the parent-notify loop (B12
+    // review-pass fix — a naive retry would re-send to every linked parent).
+    $parent1->notify(new MonthlyReportCardReady($card, $student, 'https://prior.example/download'));
+
+    Notification::fake();
+
+    runReportCardSweep();
+
+    Notification::assertNotSentTo($parent1, MonthlyReportCardReady::class);
+    Notification::assertSentTo($parent2, MonthlyReportCardReady::class);
+    expect(MonthlyReportCard::where('student_id', $student->id)->first()->status)->toBe('sent');
+});
+
 it('retries a card stuck pending from an interrupted prior run', function () {
     Notification::fake();
 
