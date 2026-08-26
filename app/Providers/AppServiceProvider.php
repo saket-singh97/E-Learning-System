@@ -21,6 +21,7 @@ use App\Domains\Batches\Livewire\BatchCatalog;
 use App\Domains\Batches\Livewire\BatchFeedbackForm;
 use App\Domains\Comms\Livewire\BatchForum;
 use App\Domains\Comms\Livewire\DirectMessages;
+use App\Domains\Comms\Livewire\GeneralForum;
 use App\Domains\Comms\Livewire\NoticeBoard;
 use App\Domains\Content\Livewire\CourseReviews;
 use App\Domains\Content\Livewire\LessonNotes;
@@ -209,6 +210,7 @@ class AppServiceProvider extends ServiceProvider
         // caught by direct Livewire::test(Class::class) calls that bypass
         // tag-name resolution entirely, never an HTTP hit on the real page.
         Livewire::component('comms.batch-forum', BatchForum::class);
+        Livewire::component('comms.general-forum', GeneralForum::class);
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
 

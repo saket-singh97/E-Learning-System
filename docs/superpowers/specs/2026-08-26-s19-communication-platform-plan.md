@@ -31,7 +31,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | N11 pt.1 — `laravel/reverb` install + broadcasting config + `routes/channels.php` foundation + one proven private channel | ✅ done |
 | B1 | N11 pt.2 — real-time push wired into `DirectMessages` (first concrete integration, proves the channel-auth pattern) | ✅ done |
-| B2 | N14 pt.1 — `forum_threads.batch_id` nullable migration + `GeneralForum` Livewire component (list/create institute-wide threads) | not started |
+| B2 | N14 pt.1 — `forum_threads.batch_id` nullable migration + `GeneralForum` Livewire component (list/create institute-wide threads) | ✅ done |
 | B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | not started |
 | B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | not started |
 | B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | not started |
@@ -168,18 +168,46 @@ target.
 - `composer test`: 1635/1636 pass (5 new tests; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B2 — N14 pt.1: general forum schema + component
+### B2 — N14 pt.1: general forum schema + component — done
 
-- [ ] Migration: `forum_threads.batch_id` nullable, FK `cascadeOnDelete()` →
-      `nullOnDelete()`.
-- [ ] `ForumThread::batch_id` cast/relation stays, now nullable.
-- [ ] `GeneralForum` Livewire component (parallel to `BatchForum`) — lists/
-      creates threads where `batch_id IS NULL`, visible to every tenant
-      user (not gated by batch enrolment).
-- [ ] Reuses `ForumPostComposer` unchanged for posting/depth-limit.
-- [ ] Tests: existing batch-forum suite stays green unchanged (regression
-      guard); a general thread is visible tenant-wide; a general thread
-      from tenant A is invisible to tenant B.
+- Migration `2026_08_26_100000_make_batch_id_nullable_on_forum_threads_table.php`:
+  drops the existing FK, `ALTER COLUMN batch_id DROP NOT NULL` (raw DDL —
+  doctrine/dbal isn't installed for Schema's `->change()`, same precedent
+  `add_program_id_to_fee_invoices_table` already established), re-adds the
+  FK with `nullOnDelete()` instead of the original `cascadeOnDelete()` — a
+  general thread has no batch to cascade from, and a batch-scoped thread
+  should outlive its own batch being deleted rather than vanish with it.
+  `ForumThread`'s class docblock updated to document the new meaning of a
+  null `batch_id`; no code change needed in the model itself.
+- `App\Domains\Comms\Livewire\GeneralForum` — same shape `BatchForum`
+  already established (`threads()`/`openThread()`/`createThread()`/
+  `reply()`/`postTree()`/`attachReplies()`), scoped to `whereNull('batch_id')`
+  instead of one batch, with the enrolment/instructor gate removed
+  (`canParticipate()` is just "any authenticated user" — `BelongsToTenant`'s
+  own global scope is what actually keeps this tenant-isolated, same as
+  every other query in this component). `render()` gates
+  `threads()`/`postTree()` behind `canParticipate` from this block's first
+  draft, not left for a later review pass to catch the way `BatchForum`'s
+  own B21 fix had to.
+- Reuses `ForumPost`/`ForumPostComposer` completely unchanged — depth-3
+  reply limit, single-write-chokepoint, everything carries over.
+- New host page `resources/views/comms/general-forum.blade.php` +
+  domain view `general-forum.blade.php`, routed `GET /forum` (`routes/comms.php`,
+  no `auth` middleware, same "guest sees a log-in prompt" shape `/messages`
+  already takes), registered as `comms.general-forum`
+  (`AppServiceProvider`). No `@vite` tag yet — B2 has no real-time piece
+  (that's B3); adding it now would be dead weight this block doesn't need.
+- New tests (4, `tests/Feature/Comms/GeneralForumTest.php`): visible to any
+  authenticated tenant user, not just one who created it; a guest sees no
+  thread/post content; a general thread from a different tenant never
+  leaks in; the shared depth-limited reply path works through the real
+  component. Existing `BatchForumTest`/`ForumPostComposerTest` suites (11
+  tests) stay green unchanged — confirmed by running them alongside the
+  new file, not assumed. `CrossTenantTest`'s own generated `ForumThread`
+  isolation case re-run explicitly to confirm the nullable-column migration
+  didn't disturb it.
+- `composer test`: 1639/1640 pass (4 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B3 — N14 pt.2: real-time forum push
 

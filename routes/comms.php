@@ -28,6 +28,10 @@ Route::get('/batches/{batch}/forum', function (Request $request) {
     return view('comms.batch-forum', ['batch' => $batch]);
 })->name('batch-forum.show');
 
+// S19 N14 — no 'auth' middleware, same reasoning as /messages above.
+Route::get('/forum', fn () => view('comms.general-forum'))
+    ->name('general-forum.show');
+
 Route::get('/exports/attendance-register', DownloadAttendanceExportController::class)
     ->name('comms.attendance-export.download');
 

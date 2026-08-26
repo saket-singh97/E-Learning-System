@@ -13,6 +13,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Batch-scoped (F6, design doc §3.1) — adjacent to but distinct from
  * DirectMessage/MessageReport's own private-messaging shape; a thread is
  * visible to everyone actively enrolled in its own batch, not one-to-one.
+ *
+ * `batch_id` is nullable since S19 N14 (design doc §3.2/§4 decision 5): a
+ * null value means a general, institute-wide thread instead (GeneralForum),
+ * visible to every tenant user rather than one batch's enrolled roster.
  */
 class ForumThread extends Model
 {
