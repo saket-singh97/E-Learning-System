@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ✅ done |
 | B9 | A5 pt.2 — PDF generation | ✅ done |
 | B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ✅ done |
-| B11 | `TenantModelRegistry` sweep — 1 new model registered | ⬜ not started |
+| B11 | `TenantModelRegistry` sweep — 1 new model registered | ✅ done |
 | B12 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 ---
@@ -379,14 +379,26 @@ stop and report before starting the next block.
   cross-test storage-state flake from B3/B4/B8 — re-ran in isolation,
   passes) — both untouched by this block's files.
 
-### B11 — `TenantModelRegistry` sweep — not started
+### B11 — `TenantModelRegistry` sweep — done
 
-- Register `MonthlyReportCard` in `TenantModelRegistry::MODELS` with
-  `seedAttributes()`/`updateAttributes()` entries — register immediately
-  when B8 builds it, not deferred here (S17's own precedent: the
-  registry's guard test runs on every `composer test`). This block is
-  the reverse-check confirmation sweep, same shape S17 B12 ran.
-- Grep sweep for any `BelongsToTenant` usage not yet in the registry.
+- `MonthlyReportCard` was already registered in B8 (with
+  `seedAttributes()`/`updateAttributes()` entries) — this block is the
+  reverse-check confirmation sweep only, same shape S17 B12 ran.
+- Grep sweep: `use\s+([A-Za-z]+,\s*)*BelongsToTenant\b` across
+  `app/**/*.php` matches exactly **73 files**, all under `app/Domains/*/Models/`.
+  `TenantModelRegistry::MODELS` has exactly **73 entries** (counted
+  programmatically, not by eye). Every file in the grep list has a
+  matching registry entry — full 73/73 match, nothing missing.
+- One deliberate non-member confirmed, not a gap: `ImpersonationAudit`
+  (`app/Domains/Tenancy/Models/ImpersonationAudit.php`) does NOT use
+  `BelongsToTenant` — its own docblock and the S12 migration's docblock
+  both document why (`tenant_id` set explicitly from the target user's
+  own tenant, not resolved from `CurrentTenant`, since an impersonation
+  audit's actor and target can legitimately sit on different tenant
+  contexts). Correctly excluded from the registry, not an oversight.
+- `tests/Isolation/CrossTenantTest.php`: 74/74 pass (no change — no new
+  model registered this block, S18 B8 already added the +1 for
+  `MonthlyReportCard`).
 
 ### B12 — Full test coverage, review pass — not started
 
