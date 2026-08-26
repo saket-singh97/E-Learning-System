@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B6 | A4 pt.1 — missed-class-replay nudge | ✅ done |
 | B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ✅ done |
 | B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ✅ done |
-| B9 | A5 pt.2 — PDF generation | ⬜ not started |
+| B9 | A5 pt.2 — PDF generation | ✅ done |
 | B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ⬜ not started |
 | B11 | `TenantModelRegistry` sweep — 1 new model registered | ⬜ not started |
 | B12 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -284,16 +284,41 @@ stop and report before starting the next block.
   `DownloadEnrolmentExportControllerTest` and `BackupConfigurationTest`,
   both already documented cross-test storage-state flakes in B3/B4.
 
-### B9 — A5 pt.2: PDF generation — not started
+### B9 — A5 pt.2: PDF generation — done
 
-- `ReportCardPdfGenerator::generate(MonthlyReportCard $card, array
-  $summary): string` (returns disk path) — reuses `barryvdh/laravel-
-  dompdf`, same library `CertificateService`/`IdCardGenerator` already
-  use, not a new dependency.
-- Tests: generates a real PDF file on disk containing the student's own
-  numbers (parse-and-assert on rendered text, same pattern
-  `CertificateService`'s own tests likely already use — confirm during
-  build).
+- `app/Domains/Analytics/Services/ReportCardPdfGenerator.php` created —
+  `generate(MonthlyReportCard $card, array $summary): string`, returns
+  the disk path. Reuses `barryvdh/laravel-dompdf` (`Pdf::loadView(...)
+  ->save($diskPath, 'local')`), same shape `CertificateService`/
+  `IdCardGenerator` already use, not a new dependency. Pure rendering
+  step only — persisting `pdf_disk_path`/flipping `status` on the row is
+  B10's own job (the sweep that orchestrates aggregate -> generate ->
+  send), not this one.
+- `resources/views/analytics/report-card-pdf.blade.php` created —
+  same plain `resources/views/{domain}/...` convention
+  `certificate-pdf.blade.php`/`id-card-pdf.blade.php` already use for
+  dompdf templates (not the domain `Views/` namespace, which is reserved
+  for Filament/Livewire per CLAUDE.md).
+- **Correction found during build**: the plan's own "parse-and-assert on
+  rendered text" idea assumed a PDF-text-extraction step; no such library
+  exists anywhere in this codebase (confirmed by grep), and
+  `CertificateServiceTest`'s own actual pattern only checks the `%PDF`
+  magic-byte header — dompdf compresses its output stream by default, so
+  a raw substring search for real text on the saved file wouldn't find it
+  anyway. Used that same magic-byte check for "a real PDF exists," plus a
+  second test that renders the Blade view directly
+  (`view('analytics.report-card-pdf', [...])->render()`) and asserts the
+  student's name/tenant name/numbers/period appear in the HTML — verifies
+  the template's own correctness without depending on PDF binary
+  internals.
+- Tests: `tests/Feature/Analytics/ReportCardPdfGeneratorTest.php`, 3 cases
+  — generates a real PDF file on disk (`%PDF` header); the rendered
+  template contains the student's own name, tenant name, all three
+  numbers, and the formatted period month; two students in the same
+  period month get distinct disk paths. All 3 pass.
+- `composer test` (full `php artisan test`, config cache cleared first):
+  1615/1616 pass. Only the one pre-existing, already-documented
+  `CourseSlugUniquenessTest` flake — untouched by this block's files.
 
 ### B10 — A5 pt.3: WhatsApp delivery + scheduled sweep — not started
 
