@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B2 | A2 pt.1 — `RewatchHeatmapService` | ✅ done |
 | B3 | A2 pt.2 — rewatch heatmap UI (per-lesson, instructor-facing) | ✅ done |
 | B4 | A3 pt.1 — `DropOffService` (per-lesson drop-off point) | ✅ done |
-| B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ⬜ not started |
+| B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ✅ done |
 | B6 | A4 pt.1 — missed-class-replay nudge | ⬜ not started |
 | B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ⬜ not started |
 | B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ⬜ not started |
@@ -160,12 +160,24 @@ stop and report before starting the next block.
   export test passed this run, confirming it's the same cross-test
   storage-state flake, not a regression).
 
-### B5 — A3 pt.2: drop-off UI — not started
+### B5 — A3 pt.2: drop-off UI — done
 
-- Same embed point as B3's heatmap (confirm whether they share one view
-  or are separate sections on the same page during build) — shows the
-  drop-off point as a percentage of runtime + student count affected.
-- Tests: shows the correct drop-off point and percentage.
+- `DropOffService::detailsFor(Lesson): array{point_s, percentage_of_runtime,
+  students_affected}|null` added, refactored to share
+  `bucketedDropOffCounts()` with the existing `dropOffPointFor()` (B4) —
+  no behavior change to the already-shipped method.
+- `app/Filament/Teach/Widgets/LessonDropOffWidget.php` created — **own
+  separate widget**, not folded into B3's heatmap widget (drop-off and
+  rewatch density are different questions), same footer on
+  `ViewLessonArtifact` alongside `LessonRewatchHeatmapWidget`.
+- Tests: 2 new cases in `DropOffServiceTest.php` (correct percentage +
+  affected count; `null` when everyone finishes) and
+  `LessonDropOffWidgetTest.php` (2 cases — correct numbers rendered;
+  no-significant-drop-off empty state). All pass.
+- `composer test` full suite: 1596/1597 pass. Only the one known
+  pre-existing `CourseSlugUniquenessTest` flake — the export-controller
+  flake from B3/B4 didn't recur this run, confirming it's cross-test
+  noise, not caused by any Analytics file.
 
 ### B6 — A4 pt.1: missed-class-replay nudge — not started
 

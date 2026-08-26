@@ -95,3 +95,29 @@ it('returns null for a lesson with no watch events at all', function () {
 
     expect($dropOff)->toBeNull();
 });
+
+it('reports the correct drop-off percentage of runtime and affected student count', function () {
+    [$tenant, $lesson] = dropOffLessonFixture(200);
+
+    dropOffStudentStopsAt($tenant->id, $lesson->id, 121);
+    dropOffStudentStopsAt($tenant->id, $lesson->id, 123);
+    dropOffStudentStopsAt($tenant->id, $lesson->id, 129);
+    dropOffStudentStopsAt($tenant->id, $lesson->id, 40);
+
+    $details = app(DropOffService::class)->detailsFor($lesson);
+
+    expect($details)->toBe([
+        'point_s' => 120,
+        'percentage_of_runtime' => 60,
+        'students_affected' => 3,
+    ]);
+});
+
+it('returns null details when every student finishes the lesson', function () {
+    [$tenant, $lesson] = dropOffLessonFixture(200);
+
+    dropOffStudentStopsAt($tenant->id, $lesson->id, 200);
+    dropOffStudentStopsAt($tenant->id, $lesson->id, 198);
+
+    expect(app(DropOffService::class)->detailsFor($lesson))->toBeNull();
+});

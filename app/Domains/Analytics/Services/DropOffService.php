@@ -4,11 +4,12 @@ namespace App\Domains\Analytics\Services;
 
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Models\VideoWatchEvent;
+use Illuminate\Support\Collection;
 
 /**
- * A3 pt.1 (design doc §2.1, M8) — where students genuinely stop watching,
- * not just "the video ended." Pure query service over VideoWatchEvent, no
- * new schema (design §2.2/§4 decision 2), same posture B0/B2 already
+ * A3 (design doc §2.1, M8) — where students genuinely stop watching, not
+ * just "the video ended." Pure query service over VideoWatchEvent, no new
+ * schema (design §2.2/§4 decision 2), same posture B0/B2 already
  * established.
  */
 class DropOffService
@@ -29,6 +30,40 @@ class DropOffService
      */
     public function dropOffPointFor(Lesson $lesson): ?int
     {
+        $buckets = $this->bucketedDropOffCounts($lesson);
+
+        return $buckets === null ? null : (int) $buckets->keys()->first();
+    }
+
+    /**
+     * A3 pt.2 (S18 B5) — same bucketing as dropOffPointFor(), plus the
+     * runtime percentage and affected-student count the instructor-facing
+     * widget needs, without a second duplicate query pass.
+     *
+     * @return array{point_s: int, percentage_of_runtime: int, students_affected: int}|null
+     */
+    public function detailsFor(Lesson $lesson): ?array
+    {
+        $buckets = $this->bucketedDropOffCounts($lesson);
+
+        if ($buckets === null) {
+            return null;
+        }
+
+        $point = (int) $buckets->keys()->first();
+
+        return [
+            'point_s' => $point,
+            'percentage_of_runtime' => (int) round($point / $lesson->video_duration_seconds * 100),
+            'students_affected' => (int) $buckets->first(),
+        ];
+    }
+
+    /**
+     * @return Collection<int, int>|null bucket start second => student count, sorted desc; null when not computable.
+     */
+    protected function bucketedDropOffCounts(Lesson $lesson): ?Collection
+    {
         if (blank($lesson->video_duration_seconds) || $lesson->video_duration_seconds <= 0) {
             return null;
         }
@@ -46,11 +81,9 @@ class DropOffService
             return null;
         }
 
-        $bucketCounts = $droppedOffPoints
+        return $droppedOffPoints
             ->map(fn (int $lastEnd): int => intdiv($lastEnd, RewatchHeatmapService::BUCKET_WIDTH_S) * RewatchHeatmapService::BUCKET_WIDTH_S)
             ->countBy()
             ->sortDesc();
-
-        return (int) $bucketCounts->keys()->first();
     }
 }
