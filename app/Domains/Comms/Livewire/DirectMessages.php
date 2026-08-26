@@ -2,6 +2,7 @@
 
 namespace App\Domains\Comms\Livewire;
 
+use App\Domains\Comms\Events\DirectMessageSent;
 use App\Domains\Comms\Models\BlockedUser;
 use App\Domains\Comms\Models\DirectMessage;
 use App\Domains\Comms\Models\MessageReport;
@@ -23,6 +24,17 @@ class DirectMessages extends Component
 
     /** @var array<int, string> */
     public array $reportReasons = [];
+
+    /**
+     * Highest message id already rendered in the open thread — read by the
+     * client's Echo `subscribed()` hook (S19 N11 pt.2) to ask `catchUp()`
+     * for exactly what a disconnected socket could have missed, not the
+     * whole thread again.
+     */
+    public int $lastSeenMessageId = 0;
+
+    /** @var array<int, array<string, mixed>> */
+    public array $catchUpMessages = [];
 
     /**
      * Every user in the tenant this viewer has exchanged a message with,
@@ -180,13 +192,59 @@ class DirectMessages extends Component
 
         $this->validate(['newMessageBody' => 'required|string|max:2000']);
 
-        DirectMessage::create([
+        $message = DirectMessage::create([
             'sender_id' => $viewer->id,
             'recipient_id' => $recipient->id,
             'body' => $this->newMessageBody,
         ]);
 
+        $message->setRelation('sender', $viewer);
+        event(new DirectMessageSent($message));
+
         $this->newMessageBody = '';
+    }
+
+    /**
+     * Called by the client's Echo listener on `user.{id}` (S19 N11 pt.2)
+     * when a `message.sent` broadcast arrives for the currently authenticated
+     * viewer. The payload itself carries nothing this method needs to read —
+     * any Livewire round trip re-renders `threadMessages()`/
+     * `conversationPartnerIds()` fresh from the database, which already has
+     * the sender's own `send()` write committed before the broadcast fired.
+     */
+    public function receiveMessage(array $payload): void
+    {
+        //
+    }
+
+    /**
+     * Reconnect-with-catch-up (S19 N11 pt.2): the client calls this from the
+     * Echo channel's own `subscribed()` hook, not just once on page load, so
+     * a socket that drops and reconnects mid-session still recovers whatever
+     * arrived while it was down — a normal Livewire call, not something a
+     * lost WebSocket frame can silently swallow.
+     */
+    public function catchUp(int $sinceId): void
+    {
+        $viewer = auth()->user();
+
+        if (! $viewer || ! $this->recipientId) {
+            $this->catchUpMessages = [];
+
+            return;
+        }
+
+        $this->catchUpMessages = DirectMessage::where('id', '>', $sinceId)
+            ->where(fn ($query) => $query
+                ->where(fn ($q) => $q
+                    ->where('sender_id', $viewer->id)
+                    ->where('recipient_id', $this->recipientId))
+                ->orWhere(fn ($q) => $q
+                    ->where('sender_id', $this->recipientId)
+                    ->where('recipient_id', $viewer->id)))
+            ->orderBy('created_at')
+            ->get()
+            ->toArray();
     }
 
     /**
@@ -215,6 +273,8 @@ class DirectMessages extends Component
     public function render(): View
     {
         $viewer = auth()->user();
+        $messages = $this->threadMessages();
+        $this->lastSeenMessageId = (int) ($messages->max('id') ?? 0);
 
         return view('comms::direct-messages', [
             'conversationPartners' => $viewer
@@ -223,7 +283,7 @@ class DirectMessages extends Component
             'otherUsers' => $viewer
                 ? User::where('tenant_id', $viewer->tenant_id)->where('id', '!=', $viewer->id)->orderBy('name')->get()
                 : collect(),
-            'messages' => $this->threadMessages(),
+            'messages' => $messages,
             'blockedUserIds' => $viewer
                 ? BlockedUser::where('user_id', $viewer->id)->pluck('blocked_user_id')->all()
                 : [],

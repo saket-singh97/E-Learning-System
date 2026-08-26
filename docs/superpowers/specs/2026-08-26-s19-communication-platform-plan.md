@@ -30,7 +30,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | N11 pt.1 — `laravel/reverb` install + broadcasting config + `routes/channels.php` foundation + one proven private channel | ✅ done |
-| B1 | N11 pt.2 — real-time push wired into `DirectMessages` (first concrete integration, proves the channel-auth pattern) | not started |
+| B1 | N11 pt.2 — real-time push wired into `DirectMessages` (first concrete integration, proves the channel-auth pattern) | ✅ done |
 | B2 | N14 pt.1 — `forum_threads.batch_id` nullable migration + `GeneralForum` Livewire component (list/create institute-wide threads) | not started |
 | B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | not started |
 | B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | not started |
@@ -112,17 +112,61 @@ target.
   (`storage/app/private`, keep `.gitignore`) or wave through explicitly,
   rather than reported as a regression this block introduced.
 
-### B1 — N11 pt.2: real-time push for DirectMessages
+### B1 — N11 pt.2: real-time push for DirectMessages — done
 
-- [ ] `DirectMessage` creation broadcasts on `private-user.{recipientId}`.
-- [ ] `DirectMessages` Livewire component listens client-side, appends the
-      new message without a full re-render/poll.
-- [ ] Reconnect-with-catch-up: on channel (re)subscribe, fetch any messages
-      newer than the client's last-seen id via a normal Livewire method call
-      (not assumed lost during a disconnect window).
-- [ ] Tests: recipient receives the broadcast event, a different tenant
-      user's channel never receives it, reconnect fetch returns exactly the
-      missed messages.
+- `App\Domains\Comms\Events\DirectMessageSent` (`ShouldBroadcastNow`, not
+  the queued `ShouldBroadcast` — a chat message shouldn't depend on a queue
+  worker being alive): `broadcastOn()` → `PrivateChannel('user.'.$recipientId)`
+  (B0's channel), `broadcastAs()` → `'message.sent'`, `broadcastWith()` →
+  a minimal `{id, sender_id, sender_name, body, created_at}` payload.
+  `DirectMessages::send()` fires it right after `DirectMessage::create()`,
+  `setRelation('sender', $viewer)` first so `broadcastWith()` doesn't
+  re-query a sender it already has in memory.
+- `laravel-echo` + `pusher-js` installed (`npm install`, `resources/js/echo.js`
+  new — Reverb speaks Pusher's protocol, so `broadcaster: 'reverb'` reuses
+  Echo's dedicated driver for it, imported from `resources/js/app.js`).
+  `resources/views/comms/messages.blade.php` (the one real page hosting this
+  component) gained the `@vite(...)` tag it never had — without it
+  `window.Echo` would never exist on that page at all, silently no-op-ing
+  every listener below.
+- `direct-messages.blade.php` gained a `@script`/`@endscript` block (guarded
+  on `window.Echo` existing, so a host page without the Vite bundle degrades
+  to pre-S19 behaviour instead of throwing): `channel.listen('.message.sent', ...)`
+  calls a new `receiveMessage()` Livewire method for the live-push path;
+  `channel.subscribed(...)` calls a new `catchUp($wire.lastSeenMessageId)`
+  for the reconnect path — Echo/Pusher's own `subscribed` hook fires on
+  every (re)subscribe, not just the first page load, so a socket that drops
+  mid-session and reconnects still recovers.
+- `catchUp(int $sinceId)` returns exactly the thread's own messages with
+  `id > $sinceId` into a `catchUpMessages` public property (Livewire-testable
+  directly, no browser needed). `lastSeenMessageId` (new public property) is
+  set in `render()` to the open thread's own newest message id, so the
+  client always reads a value that's fresh after any round trip.
+  `receiveMessage()` itself is an intentionally empty method body — any
+  Livewire call already re-renders `threadMessages()` fresh from the
+  database, which is all the live-push path needs.
+- New tests (5, `tests/Feature/Comms/DirectMessageBroadcastTest.php`):
+  `send()` broadcasts on the exact recipient's own channel with the right
+  event name/payload; the channel name is never a different (cross-tenant)
+  user's; `lastSeenMessageId` matches the open thread's newest message;
+  `receiveMessage()` accepts a call without error. Real bug caught and
+  fixed by the catch-up test itself: `catchUp()`'s first draft chained
+  `->where('id','>',$sinceId)->where(fn...)->orWhere(fn...)` — the
+  `orWhere` branch (the reversed sender/recipient direction) wasn't
+  actually ANDed with the id filter at all (SQL's own AND-before-OR
+  precedence splits it into `(id>N AND branch1) OR branch2`), so every
+  message in that direction leaked past `catchUp()` regardless of
+  `$sinceId` — caught by a failing assertion (expected 2 ids, got 3), fixed
+  by wrapping the whole thread-membership OR in one outer group so the id
+  filter applies to both directions. Noted, not touched: `threadMessages()`
+  has the exact same `where(fn)->orWhere(fn)->whereDoesntHave(...)` shape
+  and the same latent precedence gap, but `reportMessage()` only ever lets
+  a viewer report the *other* party's own messages, so a message the
+  viewer sent can never carry an `actioned` report in the first place —
+  the gap is real but structurally unreachable through this app's own
+  write path, out of this block's scope to touch.
+- `composer test`: 1635/1636 pass (5 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B2 — N14 pt.1: general forum schema + component
 

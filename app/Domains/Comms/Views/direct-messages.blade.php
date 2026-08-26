@@ -59,5 +59,26 @@
                 <button type="submit">Send</button>
             </form>
         @endif
+
+        {{-- S19 N11 pt.2 — real-time push over the user.{id} private channel
+             (routes/channels.php, B0). Guarded on window.Echo existing: this
+             component can be embedded on a page that hasn't loaded the Vite
+             bundle, in which case it degrades to the pre-S19 behaviour
+             (thread refreshes on the next normal Livewire interaction). --}}
+        @script
+            <script>
+                if (window.Echo) {
+                    let channel = window.Echo.private(`user.{{ auth()->id() }}`);
+
+                    channel.listen('.message.sent', (event) => {
+                        $wire.call('receiveMessage', event);
+                    });
+
+                    channel.subscribed(() => {
+                        $wire.call('catchUp', $wire.lastSeenMessageId);
+                    });
+                }
+            </script>
+        @endscript
     @endguest
 </div>
