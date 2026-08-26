@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B5 | A3 pt.2 — drop-off UI (per-lesson, instructor-facing) | ✅ done |
 | B6 | A4 pt.1 — missed-class-replay nudge | ✅ done |
 | B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ✅ done |
-| B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ⬜ not started |
+| B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ✅ done |
 | B9 | A5 pt.2 — PDF generation | ⬜ not started |
 | B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ⬜ not started |
 | B11 | `TenantModelRegistry` sweep — 1 new model registered | ⬜ not started |
@@ -240,17 +240,49 @@ stop and report before starting the next block.
   1608/1609 pass. Only the one pre-existing, already-documented
   `CourseSlugUniquenessTest` flake — untouched by this block's files.
 
-### B8 — A5 pt.1: `monthly_report_cards` schema + data aggregator — not started
+### B8 — A5 pt.1: `monthly_report_cards` schema + data aggregator — done
 
-- `monthly_report_cards` migration (design §3.2, unique on
-  `[student_id, period_month]`) + `MonthlyReportCard` model.
-- `ReportCardDataAggregator::summarize(User $student, CarbonInterface
-  $periodMonth): array` — attendance % (`AttendanceRecord`), quiz
-  average (`QuizAttempt`), engagement ratio average (B0's own service) —
-  all for that calendar month only.
-- Tests: aggregator produces correct numbers from real fixture data
-  across the three sources; a student with zero activity that month
-  returns zeroed-out (not null/error) values.
+- `database/migrations/2026_08_26_000000_create_monthly_report_cards_table.php`
+  created (design §3.2) — `tenant_id`, `student_id`, `period_month` (date),
+  `status` (enum `pending|generated|sent|failed`, default `pending`),
+  `pdf_disk_path` (nullable), `sent_at` (nullable), unique on
+  `[student_id, period_month]`.
+- `app/Domains/Analytics/Models/MonthlyReportCard.php` created — tracking
+  row only, no summary numbers stored on it (those are always recomputed
+  by the aggregator, never persisted).
+- `app/Domains/Analytics/Services/ReportCardDataAggregator.php` created —
+  `summarize(User $student, CarbonInterface $periodMonth): array{attendance_percent,
+  quiz_average_percent, engagement_ratio_percent}`. Attendance/quiz math
+  duplicates `StudentMetrics`'s own established formulas (BatchSession
+  rows only as the reliable present/absent denominator; quiz average is
+  the mean of each completed attempt's own score/max_score ratio) rather
+  than calling it, since `StudentMetrics` has no month-scoping parameter.
+  Engagement ratio reuses `EngagementMetricsService::ratioFor()` (B0)
+  unmodified — the month scopes *which lessons* count (any lesson with a
+  `VideoWatchEvent` that month), not the ratio formula itself, since
+  engagement ratio is inherently a cumulative per-lesson measure. Zero
+  activity in a month returns zeroed-out values (0.0 for all three), never
+  null/error.
+- `MonthlyReportCard` registered in `TenantModelRegistry::MODELS`
+  immediately (design §3.3 — not deferred to B11), with
+  `seedAttributes()`/`updateAttributes()` entries (`status => 'failed'`
+  for the tamper check, since `status` is a DB-level enum, not a plain
+  string column — matches the same-shaped `PhotoDoubtQuery`/
+  `TeacherAttendanceFlag` entries already in the file, not the literal
+  `'tampered'` string plain-string-column models use).
+- Tests: `tests/Feature/Analytics/ReportCardDataAggregatorTest.php`, 3
+  cases — correct attendance/quiz-average/engagement-ratio numbers from
+  real fixture data spanning all three sources; activity outside the
+  given calendar month excluded; zeroed-out (not null/error) result for a
+  student with zero activity that month. All 3 pass.
+  `tests/Isolation/CrossTenantTest.php` — 74/74 pass, including the new
+  `MonthlyReportCard` coverage generated from the registry.
+- `composer test` (full `php artisan test`, config cache cleared first):
+  1610/1613 pass. 3 failures, all pre-existing/unrelated (confirmed by
+  re-running two of them in isolation, where both pass) — the same
+  `CourseSlugUniquenessTest` flake from every prior block, plus
+  `DownloadEnrolmentExportControllerTest` and `BackupConfigurationTest`,
+  both already documented cross-test storage-state flakes in B3/B4.
 
 ### B9 — A5 pt.2: PDF generation — not started
 

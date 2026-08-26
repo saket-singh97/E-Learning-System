@@ -8,6 +8,7 @@ use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
+use App\Domains\Analytics\Models\MonthlyReportCard;
 use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
@@ -159,6 +160,7 @@ class TenantModelRegistry
         CourseOutlineDraft::class,
         LessonRevisionNote::class,
         PhotoDoubtQuery::class,
+        MonthlyReportCard::class,
     ];
 
     /**
@@ -1023,6 +1025,10 @@ class TenantModelRegistry
                 'image_disk_path' => 'photo-doubts/row.jpg',
                 'status' => 'pending',
             ],
+            MonthlyReportCard::class => [
+                'student_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'period_month' => now()->startOfMonth()->toDateString(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1108,6 +1114,7 @@ class TenantModelRegistry
             CourseOutlineDraft::class => ['status' => 'approved'],
             LessonRevisionNote::class => ['status' => 'failed'],
             PhotoDoubtQuery::class => ['status' => 'failed'],
+            MonthlyReportCard::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
