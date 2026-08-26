@@ -2,6 +2,7 @@
 
 namespace App\Domains\Comms\Services;
 
+use App\Domains\Comms\Events\ForumPostCreated;
 use App\Domains\Comms\Models\ForumPost;
 use App\Domains\Comms\Models\ForumThread;
 use App\Exceptions\ForumReplyDepthExceededException;
@@ -26,12 +27,17 @@ class ForumPostComposer
             throw ForumReplyDepthExceededException::forParent($parent->id);
         }
 
-        return ForumPost::create([
+        $post = ForumPost::create([
             'forum_thread_id' => $thread->id,
             'parent_id' => $parent?->id,
             'depth' => $depth,
             'author_id' => $author->id,
             'body' => $body,
         ]);
+
+        $post->setRelation('author', $author);
+        event(new ForumPostCreated($post));
+
+        return $post;
     }
 }

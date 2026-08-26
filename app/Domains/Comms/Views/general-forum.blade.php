@@ -35,4 +35,34 @@
             @endforeach
         </ul>
     @endif
+
+    {{-- S19 N14 pt.2 — same real-time wiring as batch-forum.blade.php, over
+         the same shared forum-thread.{id} channel. --}}
+    @script
+        <script>
+            let currentForumChannel = null;
+
+            function subscribeToForumThread(threadId) {
+                if (currentForumChannel) {
+                    window.Echo.leave(currentForumChannel);
+                    currentForumChannel = null;
+                }
+
+                if (!threadId || !window.Echo) {
+                    return;
+                }
+
+                currentForumChannel = `forum-thread.${threadId}`;
+                window.Echo.private(currentForumChannel).listen('.post.created', (event) => {
+                    $wire.call('receivePost', event);
+                });
+            }
+
+            if (window.Echo) {
+                subscribeToForumThread($wire.openThreadId);
+            }
+
+            $wire.$watch('openThreadId', (value) => subscribeToForumThread(value));
+        </script>
+    @endscript
 </div>

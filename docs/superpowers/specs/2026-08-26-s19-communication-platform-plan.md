@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B0 | N11 pt.1 — `laravel/reverb` install + broadcasting config + `routes/channels.php` foundation + one proven private channel | ✅ done |
 | B1 | N11 pt.2 — real-time push wired into `DirectMessages` (first concrete integration, proves the channel-auth pattern) | ✅ done |
 | B2 | N14 pt.1 — `forum_threads.batch_id` nullable migration + `GeneralForum` Livewire component (list/create institute-wide threads) | ✅ done |
-| B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | not started |
+| B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | ✅ done |
 | B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | not started |
 | B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | not started |
 | B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | not started |
@@ -209,16 +209,53 @@ target.
 - `composer test`: 1639/1640 pass (4 new tests; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B3 — N14 pt.2: real-time forum push
+### B3 — N14 pt.2: real-time forum push — done
 
-- [ ] New `ForumPost` broadcasts on a per-thread channel
-      (`private-forum-thread.{threadId}`), authorized by the same
-      visibility rule `BatchForum`/`GeneralForum` already enforce (batch
-      enrolment, or any tenant user for a general thread).
-- [ ] Both `BatchForum` and `GeneralForum` listen and append new posts live.
-- [ ] Tests: a viewer not enrolled in the thread's batch is refused the
-      channel; a general thread's channel accepts any tenant user, refuses
-      cross-tenant.
+- New `App\Domains\Comms\Services\ForumThreadAccess` — the one place
+  answering "may this viewer participate in this thread," same "lesson
+  access rules live in one class" discipline `LessonAccess` already
+  established (CLAUDE.md). `canParticipateInBatch()` holds the exact
+  enrolment/instructor/institute_admin rule `BatchForum::canParticipate()`
+  used to inline; `canParticipateInThread()` wraps it, adding the explicit
+  tenant check and the "null batch_id = any tenant user" branch for general
+  threads. `BatchForum::canParticipate()` now delegates to it — the
+  channel-auth closure below needed the identical rule, and duplicating an
+  enrolment check in two places is exactly the drift risk that discipline
+  exists to prevent.
+- `App\Domains\Comms\Events\ForumPostCreated` (`ShouldBroadcastNow`) fires
+  from `ForumPostComposer::post()` — the single write chokepoint both forum
+  kinds already share, so one dispatch point covers `createThread()` and
+  `reply()` on both `BatchForum` and `GeneralForum` without touching either
+  component's own write methods. `broadcastOn()` →
+  `PrivateChannel('forum-thread.'.$post->forum_thread_id)`, `broadcastAs()`
+  → `'post.created'`.
+- `routes/channels.php` — `forum-thread.{threadId}` channel, one shared
+  pattern for both forum kinds (a thread's own `batch_id` decides which
+  rule applies, not two channel patterns). Fetches the thread
+  `withoutGlobalScopes()` and leans on `ForumThreadAccess`'s own explicit
+  tenant check as the real boundary — this auth endpoint carries no
+  `Route::domain()` constraint (B0), so `CurrentTenant` isn't guaranteed
+  bound the way a normal tenant-subdomain request would be.
+- Both `batch-forum.blade.php` and `general-forum.blade.php` gained the
+  same `@script` block: `openThreadId` changes as the viewer opens/closes
+  threads (unlike B1's fixed-per-session `user.{id}` channel), so the
+  subscription re-establishes on every change via `$wire.$watch`, leaving
+  the previous thread's channel first (`Echo.leave`) before subscribing to
+  the new one. Both host pages (`resources/views/comms/{batch,general}-forum.blade.php`)
+  gained the `@vite` tag neither had — B1's own gotcha, would have silently
+  no-op'd otherwise.
+- New tests (7, `tests/Feature/Comms/ForumThreadBroadcastTest.php`): an
+  enrolled student and the batch's own instructor are both authorized for
+  a batch thread's channel; an unrelated tenant user is refused; any tenant
+  user is authorized for a general thread's channel; a different tenant's
+  user is refused; a new post on each forum kind broadcasts on the correct
+  `forum-thread.{id}` channel with the right event name/payload. Existing
+  `BatchForum`/`GeneralForum`/`ForumPostComposer`/`DirectMessageBroadcastTest`/
+  `BroadcastingChannelAuthTest` suites (23 tests) re-run green as a
+  regression guard — `BatchForum`'s refactored `canParticipate()` needed to
+  produce byte-identical decisions to before.
+- `composer test`: 1646/1647 pass (7 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B4 — N15 pt.1: survey schema + builder
 

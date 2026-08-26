@@ -63,6 +63,17 @@ class GeneralForum extends Component
         $this->openThreadId = null;
     }
 
+    /**
+     * Called by the client's Echo listener on `forum-thread.{id}` (S19 N14
+     * pt.2) when a `post.created` broadcast arrives for the open thread.
+     * The payload carries nothing this method needs to read — any Livewire
+     * round trip re-renders `postTree()` fresh from the database.
+     */
+    public function receivePost(array $payload): void
+    {
+        //
+    }
+
     public function createThread(): void
     {
         $viewer = auth()->user();

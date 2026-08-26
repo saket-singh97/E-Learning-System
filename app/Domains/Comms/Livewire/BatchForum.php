@@ -3,10 +3,10 @@
 namespace App\Domains\Comms\Livewire;
 
 use App\Domains\Batches\Models\Batch;
-use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Comms\Models\ForumPost;
 use App\Domains\Comms\Models\ForumThread;
 use App\Domains\Comms\Services\ForumPostComposer;
+use App\Domains\Comms\Services\ForumThreadAccess;
 use App\Exceptions\ForumReplyDepthExceededException;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -66,6 +66,17 @@ class BatchForum extends Component
     public function closeThread(): void
     {
         $this->openThreadId = null;
+    }
+
+    /**
+     * Called by the client's Echo listener on `forum-thread.{id}` (S19 N14
+     * pt.2) when a `post.created` broadcast arrives for the open thread.
+     * The payload carries nothing this method needs to read — any Livewire
+     * round trip re-renders `postTree()` fresh from the database.
+     */
+    public function receivePost(array $payload): void
+    {
+        //
     }
 
     public function createThread(): void
@@ -155,22 +166,7 @@ class BatchForum extends Component
 
     protected function canParticipate(?User $viewer): bool
     {
-        if ($viewer === null || $viewer->tenant_id !== $this->batch->tenant_id) {
-            return false;
-        }
-
-        if ($viewer->hasRole('institute_admin')) {
-            return true;
-        }
-
-        if ($viewer->id === $this->batch->instructor_id) {
-            return true;
-        }
-
-        return Enrolment::where('batch_id', $this->batch->id)
-            ->where('user_id', $viewer->id)
-            ->where('status', 'active')
-            ->exists();
+        return ForumThreadAccess::canParticipateInBatch($this->batch, $viewer);
     }
 
     public function render(): View
