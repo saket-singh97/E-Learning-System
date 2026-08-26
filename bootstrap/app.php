@@ -7,6 +7,7 @@ use App\Domains\Batches\Jobs\RecordVideoCoverageAttendance;
 use App\Domains\Batches\Jobs\TeacherAttendanceSweep;
 use App\Domains\Billing\Jobs\SendGraceSuspensionReminders;
 use App\Domains\Billing\Jobs\SuspendOverdueTenantSubscriptions;
+use App\Domains\Analytics\Jobs\GenerateMonthlyReportCards;
 use App\Domains\Comms\Jobs\SendInactivityNudges;
 use App\Domains\Comms\Jobs\SendMissedClassReplayNudges;
 use App\Domains\Comms\Jobs\SendWeakTopicPracticeNudges;
@@ -157,6 +158,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // S18 B7 — same unscoped-sweep shape as the jobs above; the other
         // half of M15's nudge set (design doc §4 decision 4/5).
         $schedule->job(new SendWeakTopicPracticeNudges, 'scheduled')->daily();
+
+        // S18 B10 — same unscoped-sweep shape as the jobs above, but
+        // monthly (design doc §4 decision 8): one report card per active
+        // student per calendar month, not per enrolment anniversary.
+        $schedule->job(new GenerateMonthlyReportCards, 'scheduled')->monthly();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same

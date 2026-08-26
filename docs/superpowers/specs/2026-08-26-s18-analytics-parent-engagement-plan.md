@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B7 | A4 pt.2 — weak-topic-practice nudge (reuses S17 `WeakTopicDetectionService`) | ✅ done |
 | B8 | A5 pt.1 — `monthly_report_cards` schema + data aggregator | ✅ done |
 | B9 | A5 pt.2 — PDF generation | ✅ done |
-| B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ⬜ not started |
+| B10 | A5 pt.3 — WhatsApp delivery (signed URL) + scheduled monthly sweep | ✅ done |
 | B11 | `TenantModelRegistry` sweep — 1 new model registered | ⬜ not started |
 | B12 | Full test coverage, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -320,20 +320,64 @@ stop and report before starting the next block.
   1615/1616 pass. Only the one pre-existing, already-documented
   `CourseSlugUniquenessTest` flake — untouched by this block's files.
 
-### B10 — A5 pt.3: WhatsApp delivery + scheduled sweep — not started
+### B10 — A5 pt.3: WhatsApp delivery + scheduled sweep — done
 
-- Signed, time-limited download route for the PDF (same pattern
-  `DownloadInvoiceController` already uses) — the URL becomes a
-  `CommsProvider::sendTemplate()` param, no new `CommsProvider` method
-  (design §4 decision 3).
-- `GenerateMonthlyReportCards` — scheduled monthly job (`Schedule::job()`
-  on the `'scheduled'` Horizon queue, same S9 B10 posture), one row per
-  active student per calendar month, idempotent on
-  `[student_id, period_month]` (design §4 decision 6/8) — never
-  regenerates or re-sends an already-`sent` row.
-- Tests: running the sweep twice for the same month never creates a
-  second row or re-sends WhatsApp to an already-`sent` student — the
-  load-bearing idempotency test.
+- `app/Http/Controllers/Analytics/DownloadReportCardController.php` +
+  `routes/analytics.php` (`report-card.download`, `signed`-middleware-only)
+  created — **correction found during build**: the design doc named
+  `DownloadInvoiceController`'s pattern, but that controller (and
+  `DownloadIdCardController`) both gate on an authenticated session +
+  role/ownership check, not a signed URL — neither route actually carries
+  `signed` middleware. The real precedent for "possessing the link is the
+  access token, no login required" is `DownloadGdprExportController`
+  (`routes/security.php`) — `URL::temporarySignedRoute()` + `signed`
+  middleware, `{monthlyReportCard}` read off `$request->route()` (CLAUDE.md
+  domain-route splicing gotcha), 404 for a not-yet-generated card. Matches
+  what a parent actually needs: a WhatsApp link with no portal login.
+- `app/Domains/Analytics/Jobs/GenerateMonthlyReportCards.php` created —
+  scheduled monthly (`Schedule::job()` on the `'scheduled'` Horizon queue,
+  `->monthly()`, `bootstrap/app.php`), `CurrentTenant` cleared up front,
+  same unscoped-sweep shape as every other S9 B10-converted job. Iterates
+  every active `Enrolment` (not a distinct-student query — a student active
+  in >1 batch is simply visited twice; the idempotency check below makes
+  the second visit a no-op, same lazy shape `SendWeakTopicPracticeNudges`
+  already established). For `period_month = ` the calendar month that just
+  ended (`now()->startOfMonth()->subMonth()`): creates the tracking row
+  (`MonthlyReportCard::withoutEvents()`, explicit `tenant_id`, same shape
+  `TeacherAttendanceSweep` already uses) if none exists yet, computes the
+  summary (`ReportCardDataAggregator`, B8), generates the PDF
+  (`ReportCardPdfGenerator`, B9), flips status to `generated`, then looks up
+  linked parents via `ParentGuardianLink` (same lookup `SendAbsenceAlert`
+  already uses) and notifies each with a signed 7-day download link,
+  flipping status to `sent`. A student with no linked parent stays
+  `generated` (nothing to notify, not an error). A step that throws flips
+  status to `failed` and rethrows, for the queue's own retry to pick up.
+- Idempotency (design §4 decision 6): a card already `generated` or `sent`
+  for this `period_month` is left untouched on a re-run. A `pending`/
+  `failed` row (an interrupted or failed prior attempt) is retried, not
+  skipped — same posture the job's own `tries`/`backoff` already assumes.
+- `app/Notifications/MonthlyReportCardReady.php` created — notifiable is
+  the **parent**, not the student (same recipient shift `SendAbsenceAlert`
+  already established), `[WhatsAppChannel, 'database']` dual-channel,
+  carries the signed download URL as a template param (design §4
+  decision 3 — `CommsProvider::sendTemplate()` has no media-attachment
+  method).
+- Tests: `tests/Feature/Analytics/GenerateMonthlyReportCardsTest.php`, 6
+  cases — full generate-and-send to a linked parent; stays `generated`
+  (never `sent`) with no linked parent; **the load-bearing idempotency
+  test** — running the sweep twice creates only one row and sends the
+  WhatsApp notification only once; a `pending` row from an interrupted
+  prior run is picked back up and completed; a non-actively-enrolled
+  student gets no row at all; `ShouldQueue` + retry/backoff config. All 6
+  pass. `tests/Feature/Analytics/DownloadReportCardControllerTest.php`, 3
+  cases — downloads via a valid signed URL; 403 on a tampered/unsigned URL;
+  404 for a card that isn't `generated`/`sent` yet. All 3 pass.
+- `composer test` (`php artisan test` directly — composer's own wrapper
+  process-timed-out at 300s on this suite's real ~443s runtime, not a test
+  failure): 1623/1625 pass. Only the 2 pre-existing, already-documented
+  flakes (`CourseSlugUniquenessTest`, and the `DownloadCompletionExportControllerTest`
+  cross-test storage-state flake from B3/B4/B8 — re-ran in isolation,
+  passes) — both untouched by this block's files.
 
 ### B11 — `TenantModelRegistry` sweep — not started
 

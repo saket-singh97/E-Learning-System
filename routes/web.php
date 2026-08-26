@@ -85,3 +85,7 @@ Route::domain('{subdomain}.lms.test')
 Route::domain('{subdomain}.lms.test')
     ->middleware(['web', 'resolve.tenant'])
     ->group(base_path('routes/batches.php'));
+
+Route::domain('{subdomain}.lms.test')
+    ->middleware(['web', 'resolve.tenant'])
+    ->group(base_path('routes/analytics.php'));
