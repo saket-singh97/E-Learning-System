@@ -4,9 +4,11 @@ namespace App\Domains\Planner\Livewire;
 
 use App\Domains\Planner\Models\PlannerEvent;
 use App\Domains\Planner\Services\PlannerAggregator;
+use App\Support\Tenancy\CurrentTenant;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\URL;
 use Livewire\Component;
 
 /**
@@ -165,11 +167,31 @@ class Calendar extends Component
         $this->endsAt = '';
     }
 
+    /**
+     * Permanently signed (design doc §4 decision 4) — a calendar app
+     * subscribes once and polls this same URL indefinitely, unlike
+     * `MonthlyReportCard`'s own 7-day-expiring one-time download link.
+     */
+    public function feedUrl(): ?string
+    {
+        $viewer = auth()->user();
+
+        if (! $viewer || ! app(CurrentTenant::class)->isBound()) {
+            return null;
+        }
+
+        return URL::signedRoute('calendar.feed', [
+            'subdomain' => app(CurrentTenant::class)->get()->subdomain,
+            'user' => $viewer->id,
+        ]);
+    }
+
     public function render(): View
     {
         return view('planner::calendar', [
             'events' => $this->events(),
             'canRespond' => auth()->user() !== null,
+            'feedUrl' => $this->feedUrl(),
         ]);
     }
 }

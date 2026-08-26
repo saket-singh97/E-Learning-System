@@ -8,6 +8,10 @@
         <span>{{ $month }}</span>
         <button type="button" wire:click="nextMonth">Next &raquo;</button>
 
+        @if ($feedUrl)
+            <p><a href="{{ $feedUrl }}">Subscribe to calendar feed (.ics)</a></p>
+        @endif
+
         <ul>
             @forelse ($events as $event)
                 <li>

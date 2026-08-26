@@ -41,7 +41,7 @@ stop and report before starting the next block.
 | B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | ✅ done |
 | B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | ✅ done |
 | B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | ✅ done |
-| B12 | N12 pt.3 — signed iCal feed export | not started |
+| B12 | N12 pt.3 — signed iCal feed export | ✅ done |
 | B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | not started |
 | B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | not started |
 | B15 | `TenantModelRegistry` sweep — all 10 new `BelongsToTenant` models confirmed registered | not started |
@@ -518,14 +518,30 @@ target.
 - `composer test`: 1690/1691 pass (5 new tests; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B12 — N12 pt.3: iCal export
+### B12 — N12 pt.3: iCal export — done
 
-- [ ] Signed, per-user feed URL (same shape `MonthlyReportCard`'s WhatsApp
-      download link already established) generating a real `.ics` file
-      from `PlannerAggregator`'s output.
-- [ ] Tests: feed round-trips through a real `.ics` parser to the expected
-      event set; an unsigned/tampered URL is refused; a leaked URL for user
-      A never resolves to user B's events.
+- `DownloadCalendarFeedController` on a `signed`-middleware-only route
+  (`GET /calendar/{user}/feed.ics`, named `calendar.feed`), same "the
+  signed URL itself is the access token" shape `DownloadReportCardController`
+  established — but **permanently** signed (`URL::signedRoute()`, no TTL),
+  unlike that one's 7-day expiry: a calendar app subscribes once and polls
+  the same URL indefinitely, so an expiring link would silently break every
+  subscription a week in. `{user}` read off the route (`$request->route('user')`)
+  rather than method-injected, per CLAUDE.md's domain-route splicing gotcha.
+- `Calendar::feedUrl()` builds the signed URL from the viewer's own tenant
+  subdomain + id; the view renders it as a plain "Subscribe" link when a
+  viewer is authenticated.
+- `buildIcs()` renders `PlannerAggregator::eventsFor()`'s 3-months-back/
+  6-months-forward window as RFC5545 `VCALENDAR`/`VEVENT` blocks (`\r\n`
+  line endings, `SUMMARY` comma/semicolon/newline-escaped).
+- Tests (4, `tests/Feature/Planner/CalendarFeedTest.php`): feed parses as a
+  well-formed `.ics` containing the expected event; an unsigned request is
+  refused; a tampered signature naming a different user is refused (the
+  signature covers the full URL including the `{user}` param, so swapping
+  it invalidates the signature rather than serving the wrong feed); one
+  user's valid feed URL never leaks another user's events.
+- `composer test`: 1694/1695 pass (4 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B13 — N18 pt.1: gamification schema + XP
 
