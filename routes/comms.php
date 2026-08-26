@@ -6,6 +6,7 @@ use App\Http\Controllers\Comms\DownloadCompletionExportController;
 use App\Http\Controllers\Comms\DownloadEngagementExportController;
 use App\Http\Controllers\Comms\DownloadEnrolmentExportController;
 use App\Http\Controllers\Comms\DownloadRevenueExportController;
+use App\Http\Controllers\Comms\DownloadSurveyExportController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -50,3 +51,7 @@ Route::get('/exports/enrolment-register', DownloadEnrolmentExportController::cla
 
 Route::get('/exports/completion-register', DownloadCompletionExportController::class)
     ->name('comms.completion-export.download');
+
+// S19 N15 pt.3 — per-survey, not tenant-wide like the exports above.
+Route::get('/surveys/{survey}/export', DownloadSurveyExportController::class)
+    ->name('comms.survey-export.download');

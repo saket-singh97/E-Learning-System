@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B3 | N14 pt.2 — real-time new-post push for both batch and general forum threads (reuses B0/B1 infra) | ✅ done |
 | B4 | N15 pt.1 — `surveys`/`survey_questions` schema + Admin-panel survey builder (mirrors `QuestionResource`'s shape) | ✅ done |
 | B5 | N15 pt.2 — `survey_responses`/`survey_answers` schema + student-facing `SurveyRunner` Livewire + submission | ✅ done |
-| B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | not started |
+| B6 | N15 pt.3 — per-question aggregation view + CSV export (reuses the existing export-job pattern) | ✅ done |
 | B7 | N16 pt.1 — `help_desk_tickets`/`help_desk_ticket_replies` schema + student-facing "raise a ticket" flow | not started |
 | B8 | N16 pt.2 — staff ticket queue Filament resource (assign/reply/resolve, internal notes) | not started |
 | B9 | N16 pt.3 — SLA sweep (flags breached tickets, notifies) + real-time push for new replies | not started |
@@ -327,17 +327,36 @@ target.
 - `composer test`: 1659/1660 pass (7 new tests; sole failure the
   pre-existing unrelated `CourseSlugUniquenessTest`).
 
-### B6 — N15 pt.3: aggregation + export
+### B6 — N15 pt.3: aggregation + export — done
 
-- [ ] Aggregation view (Admin panel) — per-question tally (choice types)
-      or average (rating type), reusing the same "computed at read time,
-      no materialized column" posture as the design doc's other read-heavy
-      aggregates.
-- [ ] CSV export job, same shape `ExportGradebookCsv`/`GradebookExport`
-      already established (one row per respondent).
-- [ ] Tests: aggregation produces correct tallies/averages against known
-      seeded responses; CSV export contains every response with the right
-      columns; a different tenant's responses never appear.
+- `SurveyResponseAggregator` (Comms) — computed at read time, no
+  materialized column, same posture `TestSeriesRankingService` (S16)
+  already established. `single_choice`/`multi_choice` → per-option tally;
+  `rating` → average + response count; `text` → response count only (no
+  numeric summary makes sense for free text).
+- `SurveyResource` table gained a `viewResults` modal action — same
+  modal-action-with-`Placeholder` idiom `FlaggedQuizAttemptResource` (S16)
+  already established, one `Placeholder` per question rendering its own
+  aggregate.
+- `ExportSurveyResponsesCsv` job — same `ShouldQueue` + `RebindsTenant` +
+  `EscapesCsvFormulas` + `Storage::disk('local')` shape
+  `ExportGradebookCsv`/`ExportCompletionRegister` already established, one
+  row per respondent, one column per question in position order.
+  `DownloadSurveyExportController` (`GET /surveys/{survey}/export`, `survey`
+  resolved via `$request->route()` per CLAUDE.md's domain-route splicing
+  gotcha) mirrors `DownloadCompletionExportController`'s institute_admin +
+  tenant-match gate exactly. `exportCsv`/`downloadCsv` table actions on
+  `SurveyResource` mirror `CompletionExport` page's own
+  generate-then-download idiom, just per-record instead of per-tenant.
+- New tests (4, `tests/Feature/Comms/SurveyAggregationExportTest.php`):
+  choice tally and rating average/count match known seeded responses
+  exactly; a text question's count excludes a null answer; a different
+  tenant's survey never appears in another tenant's own aggregate; the CSV
+  export contains every question as a column header and one row per
+  respondent with the right values. Existing `SurveyResource`/
+  `SurveyRunner` suites (9 tests) re-run green as a regression guard.
+- `composer test`: 1663/1664 pass (4 new tests; sole failure the
+  pre-existing unrelated `CourseSlugUniquenessTest`).
 
 ### B7 — N16 pt.1: ticket schema + raise-a-ticket flow
 

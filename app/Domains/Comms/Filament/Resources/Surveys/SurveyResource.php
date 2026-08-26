@@ -5,22 +5,29 @@ namespace App\Domains\Comms\Filament\Resources\Surveys;
 use App\Domains\Comms\Filament\Resources\Surveys\Pages\CreateSurvey;
 use App\Domains\Comms\Filament\Resources\Surveys\Pages\EditSurvey;
 use App\Domains\Comms\Filament\Resources\Surveys\Pages\ListSurveys;
+use App\Domains\Comms\Jobs\ExportSurveyResponsesCsv;
 use App\Domains\Comms\Models\Survey;
 use App\Domains\Comms\Models\SurveyQuestion;
+use App\Domains\Comms\Services\SurveyResponseAggregator;
+use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * S19 N15 pt.1 — institute-authored bundle CRUD, same posture
@@ -106,6 +113,48 @@ class SurveyResource extends Resource
                 TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->recordActions([
+                // S19 N15 pt.3 — same "computed at read time" posture the
+                // design doc's other read-heavy aggregates already use, and
+                // the same modal-action-with-Placeholder idiom
+                // FlaggedQuizAttemptResource (S16) already established.
+                Action::make('viewResults')
+                    ->label('View results')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->schema(fn (Survey $record): array => collect(app(SurveyResponseAggregator::class)->aggregateFor($record))
+                        ->map(fn (array $row) => Placeholder::make("summary_{$row['question']->id}")
+                            ->label($row['question']->prompt)
+                            ->content(match ($row['question']->type) {
+                                'single_choice', 'multi_choice' => collect($row['summary'])
+                                    ->map(fn (int $count, string $choice): string => "{$choice}: {$count}")
+                                    ->implode(', ') ?: 'No choices configured.',
+                                'rating' => $row['summary']['average'] === null
+                                    ? 'No ratings yet.'
+                                    : "Average {$row['summary']['average']} ({$row['summary']['responses']} responses)",
+                                default => "{$row['summary']['responses']} responses",
+                            }))
+                        ->all()),
+                Action::make('exportCsv')
+                    ->label('Export CSV')
+                    ->action(function (Survey $record): void {
+                        ExportSurveyResponsesCsv::dispatch($record->id, app(CurrentTenant::class)->id());
+
+                        Notification::make()
+                            ->title('Export queued — reopen this list in a moment to download it.')
+                            ->success()
+                            ->send();
+                    }),
+                Action::make('downloadCsv')
+                    ->label('Download CSV')
+                    ->icon(Heroicon::OutlinedArrowDownTray)
+                    ->url(fn (Survey $record): string => route('comms.survey-export.download', [
+                        'subdomain' => app(CurrentTenant::class)->get()->subdomain,
+                        'survey' => $record->id,
+                    ]))
+                    ->openUrlInNewTab()
+                    ->visible(fn (Survey $record): bool => Storage::disk('local')->exists(
+                        ExportSurveyResponsesCsv::pathFor($record->id)
+                    )),
                 EditAction::make(),
                 DeleteAction::make(),
             ]);
