@@ -79,6 +79,7 @@ use App\Domains\Operations\Models\EnquiryFollowUp;
 use App\Domains\Planner\Models\PlannerEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
+use App\Domains\Fees\Models\FeeRefund;
 use App\Domains\Security\Models\AccountSharingFlag;
 use App\Domains\Security\Models\DeviceSession;
 use App\Domains\Security\Models\GdprDeletionRequest;
@@ -118,6 +119,7 @@ class TenantModelRegistry
         FeeCoupon::class,
         FeeInvoice::class,
         FeePayment::class,
+        FeeRefund::class,
         ParentGuardianLink::class,
         ParentInviteCode::class,
         Assignment::class,
@@ -465,6 +467,57 @@ class TenantModelRegistry
                 'idempotency_key' => 'idem_'.uniqid(),
                 'amount' => 118,
                 'status' => 'created',
+            ],
+            FeeRefund::class => [
+                'fee_payment_id' => FeePayment::create([
+                    'fee_invoice_id' => FeeInvoice::create([
+                        'batch_id' => Batch::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                            'title' => 'Parent',
+                            'slug' => 'parent-'.uniqid(),
+                            'starts_on' => now()->toDateString(),
+                            'ends_on' => now()->addMonth()->toDateString(),
+                            'self_enrol_mode' => 'manual_only',
+                            'status' => 'published',
+                            'is_paid' => true,
+                            'price' => 100,
+                        ])->id,
+                        'enrolment_id' => Enrolment::create([
+                            'batch_id' => Batch::create([
+                                'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                                'title' => 'Parent',
+                                'slug' => 'parent-'.uniqid(),
+                                'starts_on' => now()->toDateString(),
+                                'ends_on' => now()->addMonth()->toDateString(),
+                                'self_enrol_mode' => 'manual_only',
+                                'status' => 'published',
+                                'is_paid' => true,
+                                'price' => 100,
+                            ])->id,
+                            'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                            'status' => 'pending_payment',
+                            'source' => 'self_enrol_direct',
+                            'requested_at' => now(),
+                        ])->id,
+                        'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                        'sequence_number' => 1,
+                        'invoice_number' => 'INV-ROW-'.uniqid(),
+                        'description' => 'Row',
+                        'amount' => 100,
+                        'gst_amount' => 18,
+                        'total_amount' => 118,
+                        'due_date' => now()->toDateString(),
+                        'status' => 'paid',
+                        'paid_at' => now(),
+                    ])->id,
+                    'provider_order_id' => 'order_row_'.uniqid(),
+                    'idempotency_key' => 'idem_'.uniqid(),
+                    'amount' => 118,
+                    'status' => 'captured',
+                ])->id,
+                'requested_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'amount' => 118,
+                'reason' => 'Row reason',
             ],
             ParentGuardianLink::class => [
                 'parent_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
@@ -1159,6 +1212,7 @@ class TenantModelRegistry
             FeeCoupon::class => ['code' => 'TAMPERED'],
             FeeInvoice::class => ['status' => 'tampered'],
             FeePayment::class => ['status' => 'tampered'],
+            FeeRefund::class => ['status' => 'tampered'],
             ParentGuardianLink::class => ['relationship' => 'tampered'],
             ParentInviteCode::class => ['redeemed_at' => now()],
             Assignment::class => ['title' => 'tampered'],

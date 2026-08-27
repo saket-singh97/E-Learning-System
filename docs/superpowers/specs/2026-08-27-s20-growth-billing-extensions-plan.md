@@ -26,7 +26,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | not started |
+| B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | done |
 | B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | not started |
 | B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | not started |
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | not started |
@@ -50,17 +50,32 @@ carried since S1/S2, out of scope here same as every prior slice).
 
 ## Block detail (starting checklist — expand into a build narrative as each block actually lands, same as every prior plan file)
 
-### B0 — P6 pt.1: refund schema + eligibility
+### B0 — P6 pt.1: refund schema + eligibility — DONE
 
-- [ ] `fee_refunds` migration + `FeeRefund` model (Fees), registered in
+- [x] `fee_refunds` migration + `FeeRefund` model (Fees), registered in
       `TenantModelRegistry`.
-- [ ] `tenants.refund_window_days` (nullable — null = institute hasn't
+- [x] `tenants.refund_window_days` (nullable — null = institute hasn't
       configured a window, same absence-turns-it-off shape `fee_grace_period_days`
       (B2) will use).
-- [ ] `RefundEligibilityService` — a `FeePayment` is refundable only within
+- [x] `RefundEligibilityService` — a `FeePayment` is refundable only within
       its own tenant's configured window from `paid_at`.
-- [ ] Tests: eligible within window, refused past it, refused when the
+- [x] Tests: eligible within window, refused past it, refused when the
       tenant never configured a window at all.
+
+Built as designed, no deviations. `paid_at` lives on `FeeInvoice` (not
+`FeePayment` — confirmed no such column exists on `FeePayment` before
+writing this), so eligibility reads `$payment->invoice->paid_at`; a
+payment whose invoice was never marked paid is refused rather than treated
+as always-in-window (correctness case beyond the plan's own 3, covered by
+a 4th test). `RefundEligibilityService` loads the `Tenant` row directly by
+`$payment->tenant_id` rather than trusting ambient `CurrentTenant`, since
+B1's future approval action and any queued job calling this later may run
+without tenant context bound. Full suite: 1722/1725 passing — 3 failures,
+all pre-existing and unrelated (`CourseSlugUniquenessTest`, carried since
+S1/S2; two `DownloadCompletionExportControllerTest`/
+`DownloadEnrolmentExportControllerTest` cases that are order-dependent
+storage-pollution flakes already flagged in S19 B16 — both pass in
+isolation, confirmed before marking this block done).
 
 ### B1 — P6 pt.2: approval + gateway call
 

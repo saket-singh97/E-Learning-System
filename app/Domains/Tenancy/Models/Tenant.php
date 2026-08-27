@@ -51,6 +51,7 @@ class Tenant extends Model
         'plan_id',
         'at_risk_threshold_percent',
         'gamification_leaderboard_enabled',
+        'refund_window_days',
     ];
 
     protected function casts(): array
@@ -59,6 +60,7 @@ class Tenant extends Model
             'custom_domain_verified_at' => 'datetime',
             'at_risk_threshold_percent' => 'float',
             'gamification_leaderboard_enabled' => 'boolean',
+            'refund_window_days' => 'integer',
         ];
     }
 
