@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | ✅ done |
 | B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | ✅ done |
 | B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | ✅ done |
-| B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | not started |
+| B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | ✅ done |
 | B14 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
 **Test suite baseline:** 1718+/1719+ passing at slice start per S19's own
@@ -519,9 +519,9 @@ since S1/S2); no new failures. **All 9 of S20's real build-scope items
 (P6, P8, P9, P10, Q6, R1, R2, R3, R6) are now shipped** — B13/B14 remain:
 the `TenantModelRegistry` reverse-sweep and the final review/E2E pass.
 
-### B13 — `TenantModelRegistry` sweep
+### B13 — `TenantModelRegistry` sweep — DONE
 
-- [ ] Reverse sweep (same anchored-grep method S19 B15 used, not a bare
+- [x] Reverse sweep (same anchored-grep method S19 B15 used, not a bare
       substring match): grep every `app/Domains/*/Models/*.php` for a real
       `use BelongsToTenant` declaration, diff against
       `TenantModelRegistry::MODELS`, confirm zero gaps either direction.
@@ -530,6 +530,22 @@ the `TenantModelRegistry` reverse-sweep and the final review/E2E pass.
       `AffiliatePayoutRequest`, `InstructorPayout`, `CourseInterestSignup`)
       confirmed present with working `seedAttributes()`/`updateAttributes()`
       entries.
+
+Anchored grep (`^use App\Support\Tenancy\BelongsToTenant;`, not a bare
+substring — a comment mentioning the trait's name would false-positive on
+anything looser, the exact false-positive class S19 B15's own sweep found
+worth guarding against) across every `app/Domains/*/Models/*.php` found
+**91 files**; `TenantModelRegistry::MODELS` lists **91 entries**; `comm`
+diffed the two sorted lists in both directions and both came back empty —
+zero models using the trait without being registered, zero registered
+classes with no matching trait-using file. All 8 new S20 models present
+by name in both lists. Ran `tests/Isolation/CrossTenantTest.php` directly
+as the runtime half of this confirmation (not just a static grep): **92
+tests, all passing** — proves every one of the 91 registered models'
+`seedAttributes()`/`updateAttributes()` entries actually work, the 8 new
+ones included, not just that they're syntactically present in the match
+arms. No code changes this block — pure verification, per its own
+checklist.
 
 ### B14 — Full test coverage, review pass
 
