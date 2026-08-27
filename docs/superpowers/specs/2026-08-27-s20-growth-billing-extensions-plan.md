@@ -26,7 +26,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | done |
+| B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | ✅ done |
 | B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | not started |
 | B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | not started |
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | not started |
