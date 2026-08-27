@@ -38,4 +38,35 @@ class AffiliateAttributionService
             'status' => 'pending',
         ]);
     }
+
+    /**
+     * S20 R1 pt.2 — computes the real commission for an already-attributed
+     * referral, per its own `AffiliateCode`'s configured type, and confirms
+     * it. A no-op on anything not still `pending` (already confirmed or
+     * reversed), same idempotent-no-op discipline `PaymentReconciler::capture()`
+     * already takes on an already-captured row — this is meant to run once
+     * per referral, whenever its own payment settles.
+     */
+    public function confirmCommission(AffiliateReferral $referral): AffiliateReferral
+    {
+        if ($referral->status !== 'pending') {
+            return $referral;
+        }
+
+        $affiliateCode = $referral->affiliateCode;
+        $amount = (float) $referral->payment->amount;
+
+        $commission = match ($affiliateCode->commission_type) {
+            'percentage' => round($amount * (float) $affiliateCode->commission_value / 100, 2),
+            'fixed' => (float) $affiliateCode->commission_value,
+            default => 0.0,
+        };
+
+        $referral->update([
+            'commission_amount' => $commission,
+            'status' => 'confirmed',
+        ]);
+
+        return $referral->fresh();
+    }
 }

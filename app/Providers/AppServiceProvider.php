@@ -34,9 +34,11 @@ use App\Domains\Comms\Listeners\SendAbsenceAlert;
 use App\Domains\Comms\Listeners\SendLowAttendanceAlert;
 use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Events\LessonVideoReady;
+use App\Domains\Fees\Events\FeeRefundProcessed;
 use App\Domains\Fees\Events\PaymentCaptured;
 use App\Domains\Fees\Events\ProgramInvoicePaid;
 use App\Domains\Fees\Listeners\CreateInvoiceForPendingEnrolment;
+use App\Domains\Growth\Listeners\ReverseAffiliateCommissionOnRefund;
 use App\Domains\Security\Listeners\ReconcileCookieConsent;
 use App\Domains\Security\Listeners\RecordLoginHistory;
 use App\Domains\Security\Listeners\RegisterDeviceOnLogin;
@@ -177,6 +179,9 @@ class AppServiceProvider extends ServiceProvider
         // call the review pass caught (CLAUDE.md: Events only, never a
         // direct cross-domain service call).
         Event::listen(ProgramInvoicePaid::class, EnrolFromProgramPayment::class);
+        // S20 R1 pt.2 — Growth's own reversal-on-refund, same event-only
+        // discipline as the line above.
+        Event::listen(FeeRefundProcessed::class, ReverseAffiliateCommissionOnRefund::class);
         Event::listen(AttendanceRecorded::class, SendAbsenceAlert::class);
         Event::listen(AttendanceRecorded::class, SendLowAttendanceAlert::class);
 

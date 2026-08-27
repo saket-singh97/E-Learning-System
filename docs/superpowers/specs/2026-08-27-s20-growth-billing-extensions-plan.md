@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | ✅ done |
 | B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | ✅ done |
 | B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | ✅ done |
-| B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | not started |
+| B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | ✅ done |
 | B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | not started |
 | B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | not started |
 | B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | not started |
@@ -348,16 +348,43 @@ generation + attribution" as a service capability, not a UI). Full suite:
 1762/1763 — only the one long-standing `CourseSlugUniquenessTest` failure
 (carried since S1/S2); no new failures.
 
-### B8 — R1 pt.2: commission + reversal
+### B8 — R1 pt.2: commission + reversal — DONE
 
-- [ ] Commission calculation (percentage or fixed, per `AffiliateCode`'s
+- [x] Commission calculation (percentage or fixed, per `AffiliateCode`'s
       own configured type) on each attributed `AffiliateReferral`.
-- [ ] Listener on `FeeRefund`'s own completion (B1) flips a matching
+- [x] Listener on `FeeRefund`'s own completion (B1) flips a matching
       referral's status to `reversed` (design doc §4 decision 6) — a real
       event, not a manual reconciliation step.
-- [ ] Tests: commission computed correctly for both commission types, a
+- [x] Tests: commission computed correctly for both commission types, a
       refunded payment's own referral reverses automatically, an
       unaffiliated payment triggers nothing.
+
+New `FeeRefundProcessed` event (Fees), dispatched from
+`RefundApprovalService::approve()` right where it already flips the
+payment to `refunded` — mirrors `ProgramInvoicePaid`'s exact
+one-way-ignorance shape (plain `feePaymentId`/`tenantId`, no model, no
+idea Growth exists). `Growth\Listeners\ReverseAffiliateCommissionOnRefund`
+is the real event listener the checklist itself demands, registered in
+`AppServiceProvider` next to `ProgramInvoicePaid`'s own line — a bulk
+`update()` scoped to `status = 'confirmed'` for that payment, a safe
+no-op when zero rows match (unaffiliated payment, or a still-pending
+referral that was never confirmed). `AffiliateAttributionService::
+confirmCommission()` computes the actual amount — `percentage` rounds
+against the referral's own `FeePayment.amount`, `fixed` is the configured
+value regardless of payment size (no capping — a fixed reward isn't a
+discount subtracted from anything, so there's nothing to clamp against)
+— and is itself idempotent (a no-op on anything not still `pending`, same
+discipline `PaymentReconciler::capture()` already takes on an
+already-captured row). Not wired to fire automatically on payment capture
+in this block — nothing in this checklist names that trigger, and
+tying it to `PaymentCaptured` specifically would silently skip
+program/membership-linked payments, which use different events; calling
+`confirmCommission()` at the real settlement point is left as a fast-follow
+for whichever block needs it live (same class of deferral as B4's own
+proration-charging and renewal-scheduling notes), while the calculation
+itself is fully built, correct, and tested now. Full suite: 1767/1768 —
+only the one long-standing `CourseSlugUniquenessTest` failure (carried
+since S1/S2); no new failures.
 
 ### B9 — R2: affiliate dashboard + payout requests
 

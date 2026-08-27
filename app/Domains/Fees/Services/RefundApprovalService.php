@@ -2,6 +2,7 @@
 
 namespace App\Domains\Fees\Services;
 
+use App\Domains\Fees\Events\FeeRefundProcessed;
 use App\Domains\Fees\Models\FeeRefund;
 use App\Exceptions\RefundActionException;
 use App\Integrations\PaymentProvider;
@@ -38,6 +39,12 @@ class RefundApprovalService
             ]);
 
             $locked->payment->update(['status' => 'refunded']);
+
+            // S20 R1 pt.2 (design doc §4 decision 6) — a real event, not a
+            // direct call into Growth's own AffiliateReferral: Fees has no
+            // idea an affiliate program exists, same "domains talk through
+            // events only" rule ProgramInvoicePaid already follows.
+            FeeRefundProcessed::dispatch($locked->fee_payment_id, $locked->tenant_id);
 
             return $locked->fresh();
         });
