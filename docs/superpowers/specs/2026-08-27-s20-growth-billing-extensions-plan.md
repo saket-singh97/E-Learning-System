@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | ✅ done |
 | B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | ✅ done |
 | B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | ✅ done |
-| B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | not started |
+| B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | ✅ done |
 | B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | not started |
 | B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | not started |
 | B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | not started |
@@ -386,16 +386,42 @@ itself is fully built, correct, and tested now. Full suite: 1767/1768 —
 only the one long-standing `CourseSlugUniquenessTest` failure (carried
 since S1/S2); no new failures.
 
-### B9 — R2: affiliate dashboard + payout requests
+### B9 — R2: affiliate dashboard + payout requests — DONE
 
-- [ ] Affiliate-facing Livewire view: their own codes, referral count,
+- [x] Affiliate-facing Livewire view: their own codes, referral count,
       confirmed vs. reversed commission, running balance.
-- [ ] `affiliate_payout_requests` migration + model, registered in
+- [x] `affiliate_payout_requests` migration + model, registered in
       `TenantModelRegistry` — request/approve/reject, same shape B1's own
       refund-approval flow established.
-- [ ] Tests: balance reflects only confirmed (not reversed or pending)
+- [x] Tests: balance reflects only confirmed (not reversed or pending)
       commission, a payout request can't exceed the available balance, an
       affiliate never sees another affiliate's own numbers.
+
+`AffiliatePayoutRequest` is scoped to one `AffiliateCode` (design doc
+§3.2), not an owner-wide aggregate — an owner with two codes requests a
+payout against each separately, and `AffiliatePayoutService::balanceFor()`
+computes confirmed commission minus everything already claimed
+(`requested`/`approved`/`paid`, never `rejected` — a rejected request
+gives the money back, verified by its own test) per code. Approve/reject
+mirror `RefundApprovalService`'s exact shape: `lockForUpdate()` +
+re-verify `status === 'requested'` before deciding, closing the same
+double-decision race class B1 built in from its own first draft. New
+`AffiliatePayoutActionException` rather than reusing B1's
+`RefundActionException` — a payout-not-eligible error under a name that
+says "refund" would read wrong to whoever hits it. `AffiliateDashboard`
+Livewire component (Growth's own `Views/`, `Filament/` — first block this
+domain needed either) filters `AffiliateCode::where('owner_user_id', ...)`
+on every read, same "no auth middleware, guest sees a log-in prompt
+inside the component" posture Planner's own `Calendar` established; its
+own test seeds two different owners' codes in the same tenant and
+confirms one never sees the other's. No "mark paid" action — this block's
+own checklist names only request/approve/reject; `paid` stays a defined
+status for whichever later block needs that third step (R3's own
+instructor-payout flow already establishes the same pattern). Full suite:
+1776/1778 — the one long-standing `CourseSlugUniquenessTest` failure plus
+one recurrence of `BackupConfigurationTest`'s own order-dependent
+storage-pollution flake (already seen once at B5's own run, confirmed
+passing in isolation again here); no new failures.
 
 ### B10 — R3 pt.1: instructor payout schema + approval
 

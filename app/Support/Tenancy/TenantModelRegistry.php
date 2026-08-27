@@ -81,6 +81,7 @@ use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Fees\Models\FeeRefund;
 use App\Domains\Growth\Models\AffiliateCode;
+use App\Domains\Growth\Models\AffiliatePayoutRequest;
 use App\Domains\Growth\Models\AffiliateReferral;
 use App\Domains\Fees\Models\StudentMembershipPlan;
 use App\Domains\Fees\Models\StudentSubscription;
@@ -128,6 +129,7 @@ class TenantModelRegistry
         StudentSubscription::class,
         AffiliateCode::class,
         AffiliateReferral::class,
+        AffiliatePayoutRequest::class,
         ParentGuardianLink::class,
         ParentInviteCode::class,
         Assignment::class,
@@ -581,6 +583,18 @@ class TenantModelRegistry
                 ])->id,
                 'commission_amount' => 0,
                 'status' => 'pending',
+            ],
+            AffiliatePayoutRequest::class => [
+                'affiliate_code_id' => AffiliateCode::create([
+                    'owner_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'code' => 'PAY'.strtoupper(substr(uniqid(), -6)),
+                    'commission_type' => 'percentage',
+                    'commission_value' => 10,
+                    'status' => 'active',
+                ])->id,
+                'amount' => 100,
+                'status' => 'requested',
+                'requested_at' => now(),
             ],
             ParentGuardianLink::class => [
                 'parent_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
@@ -1280,6 +1294,7 @@ class TenantModelRegistry
             StudentSubscription::class => ['status' => 'tampered'],
             AffiliateCode::class => ['status' => 'disabled'],
             AffiliateReferral::class => ['status' => 'tampered'],
+            AffiliatePayoutRequest::class => ['status' => 'tampered'],
             ParentGuardianLink::class => ['relationship' => 'tampered'],
             ParentInviteCode::class => ['redeemed_at' => now()],
             Assignment::class => ['title' => 'tampered'],

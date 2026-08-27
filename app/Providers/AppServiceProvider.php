@@ -25,6 +25,7 @@ use App\Domains\Comms\Livewire\GeneralForum;
 use App\Domains\Comms\Livewire\HelpDeskTicketForm;
 use App\Domains\Comms\Livewire\NoticeBoard;
 use App\Domains\Comms\Livewire\SurveyRunner;
+use App\Domains\Growth\Livewire\AffiliateDashboard;
 use App\Domains\Planner\Livewire\Calendar;
 use App\Domains\Content\Livewire\CourseReviews;
 use App\Domains\Content\Livewire\LessonNotes;
@@ -235,6 +236,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('comms.survey-runner', SurveyRunner::class);
         Livewire::component('comms.help-desk-ticket-form', HelpDeskTicketForm::class);
         Livewire::component('planner.calendar', Calendar::class);
+        Livewire::component('growth.affiliate-dashboard', AffiliateDashboard::class);
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
         Livewire::component('analytics.gamification-widget', GamificationWidget::class);
