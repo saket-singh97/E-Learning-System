@@ -28,7 +28,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | ✅ done |
 | B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | ✅ done |
-| B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | not started |
+| B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | ✅ done |
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | not started |
 | B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | not started |
 | B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | not started |
@@ -124,17 +124,38 @@ method, mirroring the existing `createOrder()` coverage. Full suite:
 (`CourseSlugUniquenessTest`, plus the two order-dependent export-controller
 storage-pollution flakes), no new failures.
 
-### B2 — P8: grace period access restriction
+### B2 — P8: grace period access restriction — DONE
 
-- [ ] `tenants.fee_grace_period_days` migration.
-- [ ] `LessonAccess` gains one new check: an overdue `FeeInvoice` past the
+- [x] `tenants.fee_grace_period_days` migration.
+- [x] `LessonAccess` gains one new check: an overdue `FeeInvoice` past the
       tenant's own grace period blocks access to that invoice's own
       batch/course only (design doc §4 decision 2) — every other check
       (enrolment status, publish state) stays exactly as-is.
-- [ ] Tests: access blocked past grace period, access fine within it,
+- [x] Tests: access blocked past grace period, access fine within it,
       access fine when the tenant never configured a grace period, a
       student blocked on one batch still has access to a different batch
       they're current on.
+
+The new gate lives inside `canStream()` only — `isVisibleTo()`/
+`isCourseVisibleTo()` (syllabus/title visibility) are untouched, so an
+overdue student can still see the course exists and why, just not stream
+it, matching design doc §4 decision 2's own "not their whole account"
+framing. Checked directly against `FeeInvoice` (`status not in
+[paid,cancelled]` and `due_date` older than the grace cutoff), not against
+the `overdue` status flag `FlagOverdueInvoices` writes — that sweep runs
+on its own schedule, and gating on its output would let access lag behind
+the real due date by however long the sweep hasn't run yet. Resolves the
+grace window from the lesson's own `tenant_id` directly (`Tenant::find`),
+not ambient `CurrentTenant`, same reason `RefundEligibilityService`
+(B0) already made that call — this runs on stream/watch requests, which
+per CLAUDE.md's own tenant-context note always have `CurrentTenant` bound
+via the lenient `ResolveTenant` pass, but there's no reason for a pure
+lookup like this one to depend on that being true. Enrolment-scoped via a
+`whereHas('batch', ...course_id...)` join, not account-wide — the 4th test
+seeds two separate courses/batches/enrolments for the same student and
+confirms the overdue one blocks while the current one doesn't. Full suite:
+1731/1734 — same 3 pre-existing/unrelated failures as B0/B1's runs, no new
+failures.
 
 ### B3 — P9 pt.1: membership schema + builder
 

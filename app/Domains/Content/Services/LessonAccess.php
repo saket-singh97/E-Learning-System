@@ -6,6 +6,7 @@ use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\BandwidthQuotaExceededException;
 use App\Models\User;
@@ -116,8 +117,59 @@ class LessonAccess
             return true;
         }
 
+        if ($this->isBlockedByOverdueFee($lesson, $viewer)) {
+            return false;
+        }
+
         return $lesson->prerequisites->every(
             fn (Lesson $prerequisite) => $this->completion->isComplete($prerequisite, $viewer),
+        );
+    }
+
+    /**
+     * S20 P8 (design doc §4 decision 2) — enrolment-scoped, not
+     * account-wide: only the batch(es) offering *this lesson's own course*
+     * are checked, so a student overdue on one course keeps access to a
+     * different course they're current on (multiple Enrolment rows).
+     * `fee_grace_period_days` null (the default) turns this off entirely
+     * for a tenant that never configured one — same posture
+     * RefundEligibilityService already takes for `refund_window_days`.
+     * If the viewer holds more than one active enrolment into this same
+     * course (an edge case, not the common path), any one of them still
+     * being within its own grace window is enough to keep access — this
+     * only blocks when every relevant enrolment is overdue past grace.
+     */
+    protected function isBlockedByOverdueFee(Lesson $lesson, User $viewer): bool
+    {
+        $graceDays = Tenant::find($lesson->tenant_id)?->fee_grace_period_days;
+
+        if ($graceDays === null) {
+            return false;
+        }
+
+        $courseId = $lesson->section?->course?->id;
+
+        if ($courseId === null) {
+            return false;
+        }
+
+        $enrolmentIds = Enrolment::query()
+            ->where('user_id', $viewer->id)
+            ->where('status', 'active')
+            ->whereHas('batch', fn ($query) => $query->where('course_id', $courseId))
+            ->pluck('id');
+
+        if ($enrolmentIds->isEmpty()) {
+            return false;
+        }
+
+        $cutoff = now()->subDays($graceDays)->toDateString();
+
+        return $enrolmentIds->every(
+            fn (int $enrolmentId) => FeeInvoice::where('enrolment_id', $enrolmentId)
+                ->whereNotIn('status', ['paid', 'cancelled'])
+                ->where('due_date', '<', $cutoff)
+                ->exists(),
         );
     }
 

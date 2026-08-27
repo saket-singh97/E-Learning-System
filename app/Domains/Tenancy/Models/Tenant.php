@@ -52,6 +52,7 @@ class Tenant extends Model
         'at_risk_threshold_percent',
         'gamification_leaderboard_enabled',
         'refund_window_days',
+        'fee_grace_period_days',
     ];
 
     protected function casts(): array
@@ -61,6 +62,7 @@ class Tenant extends Model
             'at_risk_threshold_percent' => 'float',
             'gamification_leaderboard_enabled' => 'boolean',
             'refund_window_days' => 'integer',
+            'fee_grace_period_days' => 'integer',
         ];
     }
 
