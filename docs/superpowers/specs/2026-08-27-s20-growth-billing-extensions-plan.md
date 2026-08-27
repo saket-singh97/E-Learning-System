@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | ✅ done |
 | B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | ✅ done |
 | B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | ✅ done |
-| B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | not started |
+| B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | ✅ done |
 | B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | not started |
 | B14 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
@@ -486,15 +486,38 @@ database. Full suite: 1788/1789 — only the one long-standing
 `CourseSlugUniquenessTest` failure (carried since S1/S2); no new
 failures.
 
-### B12 — R6: course-interest capture
+### B12 — R6: course-interest capture — DONE
 
-- [ ] `course_interest_signups` migration + model (Growth), registered in
+- [x] `course_interest_signups` migration + model (Growth), registered in
       `TenantModelRegistry`.
-- [ ] Public, unauthenticated capture form (name/email/phone) on an
+- [x] Public, unauthenticated capture form (name/email/phone) on an
       upcoming/unpublished course's own page; admin-panel lead list.
-- [ ] Tests: a signup persists correctly, a duplicate email for the same
+- [x] Tests: a signup persists correctly, a duplicate email for the same
       course doesn't create a second row (updates instead), a different
       tenant's signups never leak into another tenant's lead list.
+
+Deliberately a brand-new route (`/courses/{course}/interest`,
+`ShowCourseInterestController`), not a change to the existing
+`ShowSyllabusController`/`LessonAccess::isCourseVisibleTo()` gate — that
+gate was hardened by the S5 B8 review specifically to 404 a draft course
+for guests, and re-opening it to serve interest-capture content would
+mean re-litigating a security fix this block's own checklist never asked
+to touch. The new page has no publish-status check at all (it exists
+*because* a course isn't open yet) and shows only title — no syllabus,
+no lesson content, so it can never leak more than the syllabus gate
+already refuses to. `CourseInterestSignupService::signup()` is the single
+write chokepoint — `firstOrNew(['course_id', 'email'])` means a repeat
+signup updates name/phone on the existing row rather than duplicating,
+backed by the same pair as a DB unique index (own test confirms this,
+plus a sibling test that the *same* email signing up for a *different*
+course correctly creates a second row — the constraint is scoped to the
+pair, not the email alone). `CourseInterestSignupResource` is browse-only,
+same "every row comes from the public form, never a manual admin entry"
+posture `FeePaymentResource` already established. Full suite: 1794/1795
+— only the one long-standing `CourseSlugUniquenessTest` failure (carried
+since S1/S2); no new failures. **All 9 of S20's real build-scope items
+(P6, P8, P9, P10, Q6, R1, R2, R3, R6) are now shipped** — B13/B14 remain:
+the `TenantModelRegistry` reverse-sweep and the final review/E2E pass.
 
 ### B13 — `TenantModelRegistry` sweep
 

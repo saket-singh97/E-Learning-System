@@ -83,6 +83,7 @@ use App\Domains\Fees\Models\FeeRefund;
 use App\Domains\Growth\Models\AffiliateCode;
 use App\Domains\Growth\Models\AffiliatePayoutRequest;
 use App\Domains\Growth\Models\AffiliateReferral;
+use App\Domains\Growth\Models\CourseInterestSignup;
 use App\Domains\Growth\Models\InstructorPayout;
 use App\Domains\Fees\Models\StudentMembershipPlan;
 use App\Domains\Fees\Models\StudentSubscription;
@@ -132,6 +133,7 @@ class TenantModelRegistry
         AffiliateReferral::class,
         AffiliatePayoutRequest::class,
         InstructorPayout::class,
+        CourseInterestSignup::class,
         ParentGuardianLink::class,
         ParentInviteCode::class,
         Assignment::class,
@@ -605,6 +607,11 @@ class TenantModelRegistry
                 'basis' => 'salaried',
                 'amount' => 5000,
                 'status' => 'pending',
+            ],
+            CourseInterestSignup::class => [
+                'course_id' => Course::create(['title' => 'Row', 'slug' => 'row-'.uniqid()])->id,
+                'name' => 'Row Prospect',
+                'email' => 'row-'.uniqid().'@example.com',
             ],
             ParentGuardianLink::class => [
                 'parent_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
@@ -1306,6 +1313,7 @@ class TenantModelRegistry
             AffiliateReferral::class => ['status' => 'tampered'],
             AffiliatePayoutRequest::class => ['status' => 'tampered'],
             InstructorPayout::class => ['status' => 'tampered'],
+            CourseInterestSignup::class => ['name' => 'tampered'],
             ParentGuardianLink::class => ['relationship' => 'tampered'],
             ParentInviteCode::class => ['redeemed_at' => now()],
             Assignment::class => ['title' => 'tampered'],
