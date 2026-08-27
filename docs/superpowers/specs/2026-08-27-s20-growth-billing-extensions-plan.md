@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | ✅ done |
 | B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | ✅ done |
 | B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | ✅ done |
-| B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | not started |
+| B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | ✅ done |
 | B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | not started |
 | B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | not started |
 | B14 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
@@ -457,17 +457,34 @@ Full suite: 1784/1785 — only the one long-standing
 `CourseSlugUniquenessTest` failure (carried since S1/S2); no new
 failures.
 
-### B11 — R3 pt.2: revenue-share computation
+### B11 — R3 pt.2: revenue-share computation — DONE
 
-- [ ] `revenue_share`-basis computation: sums an instructor's own batches'
+- [x] `revenue_share`-basis computation: sums an instructor's own batches'
       `FeePayment` rows for the payout period × their configured share
       percentage (design doc §4 decision 7).
-- [ ] Mark-paid action records the transfer happened outside this app —
+- [x] Mark-paid action records the transfer happened outside this app —
       no bank integration, by design (§4 decision 7).
-- [ ] Tests: revenue-share amount matches a known set of seeded payments
+- [x] Tests: revenue-share amount matches a known set of seeded payments
       for one instructor's own batches, a different instructor's payments
       never leak into the calculation, a batch outside the payout period
       is excluded.
+
+`InstructorPayoutService::createRevenueShare()` scopes the period by
+`FeePayment.webhook_verified_at` — the exact moment `PaymentReconciler::
+capture()` itself writes, i.e. when a payment actually settled — not
+`created_at`, which is when the order first opened and could sit unpaid
+across a period boundary. `approve()`/`reject()`/`markPaid()` already
+worked for either basis unchanged (built generically in B10), so "mark-paid
+action" here is a real, dedicated test proving that rather than new code —
+confirmed rather than assumed. Extended `InstructorPayoutResource`'s
+create form to actually offer `revenue_share` (a live `basis` Select
+switches between a direct `amount` field and a `share_percent` field);
+`CreateInstructorPayout::handleRecordCreation()` routes to whichever
+service method matches, so `amount` is never a value an admin can type
+directly for a `revenue_share` row — only the computed one lands in the
+database. Full suite: 1788/1789 — only the one long-standing
+`CourseSlugUniquenessTest` failure (carried since S1/S2); no new
+failures.
 
 ### B12 — R6: course-interest capture
 

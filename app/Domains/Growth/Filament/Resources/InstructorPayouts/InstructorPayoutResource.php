@@ -16,6 +16,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -23,11 +24,13 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 /**
- * S20 R3 pt.1 — salaried basis only, same shape B1's own
- * `FeeRefundResource`/B9's `AffiliatePayoutRequestResource` established:
- * a Filament queue over a service that does the real work. Revenue-share
- * creation (B11) gets its own computation, not a form field here — this
- * one only ever creates a `salaried` row.
+ * S20 R3 — same shape B1's own `FeeRefundResource`/B9's
+ * `AffiliatePayoutRequestResource` established: a Filament queue over a
+ * service that does the real work. `amount` is a direct entry for
+ * `salaried`; for `revenue_share` the admin enters a percentage instead
+ * and `CreateInstructorPayout` computes the real amount via
+ * `InstructorPayoutService::createRevenueShare()` — the form never lets
+ * `amount` be typed directly for that basis.
  */
 class InstructorPayoutResource extends Resource
 {
@@ -48,12 +51,27 @@ class InstructorPayoutResource extends Resource
                     ->all())
                 ->searchable()
                 ->required(),
+            Select::make('basis')
+                ->options(array_combine(InstructorPayout::BASES, InstructorPayout::BASES))
+                ->default(InstructorPayout::BASIS_SALARIED)
+                ->required()
+                ->live()
+                ->native(false),
             DatePicker::make('period_start')->required()->native(false),
             DatePicker::make('period_end')->required()->native(false)->afterOrEqual('period_start'),
             TextInput::make('amount')
                 ->numeric()
                 ->minValue(0.01)
-                ->required(),
+                ->visible(fn (Get $get): bool => $get('basis') === InstructorPayout::BASIS_SALARIED)
+                ->required(fn (Get $get): bool => $get('basis') === InstructorPayout::BASIS_SALARIED),
+            TextInput::make('share_percent')
+                ->label('Revenue share (%)')
+                ->numeric()
+                ->minValue(0.01)
+                ->maxValue(100)
+                ->helperText('Computed against this instructor\'s own batches\' captured payments for the period.')
+                ->visible(fn (Get $get): bool => $get('basis') === InstructorPayout::BASIS_REVENUE_SHARE)
+                ->required(fn (Get $get): bool => $get('basis') === InstructorPayout::BASIS_REVENUE_SHARE),
         ]);
     }
 
