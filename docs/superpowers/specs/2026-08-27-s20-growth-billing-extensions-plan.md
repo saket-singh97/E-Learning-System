@@ -1,0 +1,232 @@
+# Implementation Plan: S20 Growth & Billing Extensions
+
+Full design: `2026-08-27-s20-growth-billing-extensions-design.md`. This is
+the block-by-block build log — update the PROGRESS table as each block
+lands, same as every S1-S19 plan did. 15 blocks (B0-B14), finer-grained than
+the 9-item real build scope since P6/P9/R1 each split into two independent
+blocks, plus a registry sweep and a final review block.
+
+---
+
+## Per-block build command
+
+Use this for every block, swap `0` for block number:
+
+```
+Read docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md and
+docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-plan.md, then build
+Block 0 of the S20 plan. Update the PROGRESS table and check off that
+block's tasks when done, run composer test before marking it complete, then
+stop and report before starting the next block.
+```
+
+---
+
+## PROGRESS — read this first, update it last
+
+| Block | What | Status |
+|---|---|---|
+| B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | not started |
+| B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | not started |
+| B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | not started |
+| B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | not started |
+| B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | not started |
+| B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | not started |
+| B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | not started |
+| B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | not started |
+| B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | not started |
+| B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | not started |
+| B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | not started |
+| B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | not started |
+| B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | not started |
+| B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | not started |
+| B14 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
+
+**Test suite baseline:** 1718+/1719+ passing at slice start per S19's own
+final count (1 pre-existing, unrelated `CourseSlugUniquenessTest` failure
+carried since S1/S2, out of scope here same as every prior slice).
+
+---
+
+## Block detail (starting checklist — expand into a build narrative as each block actually lands, same as every prior plan file)
+
+### B0 — P6 pt.1: refund schema + eligibility
+
+- [ ] `fee_refunds` migration + `FeeRefund` model (Fees), registered in
+      `TenantModelRegistry`.
+- [ ] `tenants.refund_window_days` (nullable — null = institute hasn't
+      configured a window, same absence-turns-it-off shape `fee_grace_period_days`
+      (B2) will use).
+- [ ] `RefundEligibilityService` — a `FeePayment` is refundable only within
+      its own tenant's configured window from `paid_at`.
+- [ ] Tests: eligible within window, refused past it, refused when the
+      tenant never configured a window at all.
+
+### B1 — P6 pt.2: approval + gateway call
+
+- [ ] `PaymentProvider::refund()` (new interface method) + Razorpay driver
+      implementation.
+- [ ] Staff-facing request/approve/reject Filament actions on a
+      `FeeRefundResource` (or an existing invoice/payment resource's own
+      relation manager — decide against the real `FeePayment` UI once this
+      block starts, not guessed here).
+- [ ] Approval calls `RefundEligibilityService` again (client-settable
+      state re-verified at the point of action, same discipline every
+      prior slice's own review passes have had to add after the fact —
+      built in from B1's first draft this time).
+- [ ] Tests: approval processes the refund and updates status; rejection
+      leaves the original payment untouched; an admin can't approve a
+      refund past the eligibility window even if the request itself was
+      raised inside it.
+
+### B2 — P8: grace period access restriction
+
+- [ ] `tenants.fee_grace_period_days` migration.
+- [ ] `LessonAccess` gains one new check: an overdue `FeeInvoice` past the
+      tenant's own grace period blocks access to that invoice's own
+      batch/course only (design doc §4 decision 2) — every other check
+      (enrolment status, publish state) stays exactly as-is.
+- [ ] Tests: access blocked past grace period, access fine within it,
+      access fine when the tenant never configured a grace period, a
+      student blocked on one batch still has access to a different batch
+      they're current on.
+
+### B3 — P9 pt.1: membership schema + builder
+
+- [ ] `student_membership_plans`/`student_subscriptions` migrations +
+      models (Fees), registered in `TenantModelRegistry`.
+- [ ] Admin-panel plan builder (name/price/billing interval/trial days),
+      same resource shape `SurveyResource` (S19) established for an
+      institute authoring its own catalog.
+- [ ] Tests: creates a plan with each billing interval, lists only the
+      current tenant's own plans.
+
+### B4 — P9 pt.2: checkout + recurring billing
+
+- [ ] Student-facing checkout (trial start or immediate first payment) +
+      Razorpay recurring subscription wiring, reusing `PaymentProvider`
+      where its existing shape fits.
+- [ ] Proration calculation on plan upgrade/downgrade mid-cycle.
+- [ ] Tests: trial starts with no charge, subscription activates on first
+      successful payment, proration math on an upgrade matches a known
+      worked example, a cancelled subscription doesn't renew.
+
+### B5 — P10: multi-currency + tax generalization
+
+- [ ] `fee_invoices.currency`/`tenants.default_currency` migrations
+      (default `'INR'` — zero behavior change for every existing tenant).
+- [ ] `tenants.tax_rate`/`tax_label` migrations, `FeeInvoiceService` (or
+      wherever GST is currently computed — confirm the exact call site
+      before this block starts) reads the tenant's own configured rate
+      instead of a hardcoded percentage, falling back to the existing GST
+      default when unconfigured.
+- [ ] Tests: an invoice generated for a tenant with a configured non-INR
+      currency/non-GST tax label renders correctly; an unconfigured tenant
+      behaves byte-identical to today.
+
+### B6 — Q6: platform revenue analytics
+
+- [ ] Super-panel widget/page: MRR (sum of active `TenantSubscription`s'
+      own plan price), ARR (MRR × 12), per-institute revenue breakdown,
+      `FeePayment` success/failure rate — computed at read time (design
+      doc §4 decision 5).
+- [ ] Tests: MRR/ARR match a known set of active subscriptions, a
+      cancelled subscription doesn't count, success/failure rate matches a
+      known mix of `FeePayment` statuses.
+
+### B7 — R1 pt.1: Growth domain + affiliate schema
+
+- [ ] New `app/Domains/Growth/` domain — `affiliate_codes`/
+      `affiliate_referrals` migrations + models, registered in
+      `TenantModelRegistry`.
+- [ ] Code generation (unique per tenant) + attribution: a referred
+      signup/payment records which affiliate code was used at the point of
+      payment, same "single write chokepoint" discipline `ForumPostComposer`
+      (S19) established for its own shared write path.
+- [ ] Tests: a code attributes a payment to the right affiliate, an
+      unrecognized/disabled code attributes nothing, cross-tenant codes
+      never collide or leak.
+
+### B8 — R1 pt.2: commission + reversal
+
+- [ ] Commission calculation (percentage or fixed, per `AffiliateCode`'s
+      own configured type) on each attributed `AffiliateReferral`.
+- [ ] Listener on `FeeRefund`'s own completion (B1) flips a matching
+      referral's status to `reversed` (design doc §4 decision 6) — a real
+      event, not a manual reconciliation step.
+- [ ] Tests: commission computed correctly for both commission types, a
+      refunded payment's own referral reverses automatically, an
+      unaffiliated payment triggers nothing.
+
+### B9 — R2: affiliate dashboard + payout requests
+
+- [ ] Affiliate-facing Livewire view: their own codes, referral count,
+      confirmed vs. reversed commission, running balance.
+- [ ] `affiliate_payout_requests` migration + model, registered in
+      `TenantModelRegistry` — request/approve/reject, same shape B1's own
+      refund-approval flow established.
+- [ ] Tests: balance reflects only confirmed (not reversed or pending)
+      commission, a payout request can't exceed the available balance, an
+      affiliate never sees another affiliate's own numbers.
+
+### B10 — R3 pt.1: instructor payout schema + approval
+
+- [ ] `instructor_payouts` migration + model (Growth), registered in
+      `TenantModelRegistry`.
+- [ ] Admin-panel approval workflow for a `salaried`-basis payout (fixed
+      configured amount per period) — same "flag + admin action" shape
+      H13 (S16) established.
+- [ ] Tests: a salaried payout computes to exactly its configured amount,
+      status walks pending → approved → paid with each action gated on the
+      current status.
+
+### B11 — R3 pt.2: revenue-share computation
+
+- [ ] `revenue_share`-basis computation: sums an instructor's own batches'
+      `FeePayment` rows for the payout period × their configured share
+      percentage (design doc §4 decision 7).
+- [ ] Mark-paid action records the transfer happened outside this app —
+      no bank integration, by design (§4 decision 7).
+- [ ] Tests: revenue-share amount matches a known set of seeded payments
+      for one instructor's own batches, a different instructor's payments
+      never leak into the calculation, a batch outside the payout period
+      is excluded.
+
+### B12 — R6: course-interest capture
+
+- [ ] `course_interest_signups` migration + model (Growth), registered in
+      `TenantModelRegistry`.
+- [ ] Public, unauthenticated capture form (name/email/phone) on an
+      upcoming/unpublished course's own page; admin-panel lead list.
+- [ ] Tests: a signup persists correctly, a duplicate email for the same
+      course doesn't create a second row (updates instead), a different
+      tenant's signups never leak into another tenant's lead list.
+
+### B13 — `TenantModelRegistry` sweep
+
+- [ ] Reverse sweep (same anchored-grep method S19 B15 used, not a bare
+      substring match): grep every `app/Domains/*/Models/*.php` for a real
+      `use BelongsToTenant` declaration, diff against
+      `TenantModelRegistry::MODELS`, confirm zero gaps either direction.
+      All 8 new S20 models (`FeeRefund`, `StudentMembershipPlan`,
+      `StudentSubscription`, `AffiliateCode`, `AffiliateReferral`,
+      `AffiliatePayoutRequest`, `InstructorPayout`, `CourseInterestSignup`)
+      confirmed present with working `seedAttributes()`/`updateAttributes()`
+      entries.
+
+### B14 — Full test coverage, review pass
+
+- [ ] Lifecycle E2E (design doc §5): overdue instalment blocks batch
+      access → payment clears it → access restores, chained in one run; a
+      refund request → approval → affiliate commission reversal; an
+      instructor's revenue-share payout computed against real fee payments
+      end to end.
+- [ ] Dispatch a background review agent over the whole slice's diff, same
+      discipline every prior slice's final block established — expect
+      findings around refund-approval race conditions (two approvals of
+      the same request), cross-tenant affiliate/payout visibility, and
+      currency-mixing in Q6's aggregation first, same class of bug prior
+      slices' own review passes caught.
+- [ ] Update `HANDOVER.md` (S20 complete entry), `docs/PROJECT-STATUS.md`
+      (new S20 section), `docs/ROADMAP.md` (S20 row → Done, shipped-count
+      19→20).

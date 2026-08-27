@@ -15,8 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 19 (S1–S19) |
-| **In progress** | 0 |
-| **Proposed, not yet scoped** | 7 (S20–S26) |
+| **Designed, not built** | 1 (S20) |
+| **Proposed, not yet scoped** | 6 (S21–S26) |
 
 **Phase completion:**
 
@@ -55,17 +55,28 @@ Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-plat
 
 ---
 
-## Full roadmap — S20 onward (proposed)
+## Designed, not built — S20
+
+| Slice | Scope | Size | Designed | Status |
+|---|---|---|---|---|
+| S20 | Growth & Billing Extensions — refunds, fee-based access restriction, student subscriptions, multi-currency + regional tax, platform revenue analytics (MRR/ARR), affiliate program, instructor payouts, course-interest capture. Real scope is 9 items, not the row's own headline "12": Q7 already shipped (S8/S9's revenue-register export), R4/R5 cut (too broad / a separate product surface) — same verify-before-building boundary every prior slice drew | 15 blocks | Aug 27 | 📝 Designed, build not started |
+
+Full design/plan docs: `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
+`...-plan.md` — the plan file's own PROGRESS table will be the live source of
+truth once building starts, same as every prior slice.
+
+---
+
+## Full roadmap — S21 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S19 were each shaped only once they
+slice's turn comes, the same way S10-S20 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S20 | Growth & Billing Extensions — affiliate codes, instructor payouts, refunds, subscription plans, multi-currency, revenue analytics (MRR/ARR) | 12 | R1-R6, P6/P8-P10, Q6-Q7 |
 | S21 | Platform Scale & Migration — read replicas, horizontal scaling, per-tenant feature flags, org SSO, data-import tooling from an existing LMS | 10 | V6-V15 |
 | S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, Daily Practice Problems, ask-at-timestamp, auto formula sheets | 8 | U1-U8 |
 | S23 | Coaching-Market Differentiators — confusion-signal alerting, syllabus tracker, PYQ bank, scholarship tests, rank cards, backlog/catch-up mode | 10 | U9-U18 |
