@@ -67,7 +67,7 @@ class FeeRefundResource extends Resource
                 TextColumn::make('payment.invoice.invoice_number')->label('Invoice')->searchable(),
                 TextColumn::make('payment.invoice.user.name')->label('Student')->searchable(),
                 TextColumn::make('amount')
-                    ->formatStateUsing(fn (FeeRefund $record): string => '₹'.number_format((float) $record->amount, 2)),
+                    ->formatStateUsing(fn (FeeRefund $record): string => $record->payment->invoice->currencySymbol().number_format((float) $record->amount, 2)),
                 TextColumn::make('reason')->limit(60),
                 TextColumn::make('status')
                     ->badge()

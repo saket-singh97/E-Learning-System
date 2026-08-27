@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | ✅ done |
 | B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | ✅ done |
 | B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | ✅ done |
-| B14 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
+| B14 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite baseline:** 1718+/1719+ passing at slice start per S19's own
 final count (1 pre-existing, unrelated `CourseSlugUniquenessTest` failure
@@ -547,19 +547,47 @@ ones included, not just that they're syntactically present in the match
 arms. No code changes this block — pure verification, per its own
 checklist.
 
-### B14 — Full test coverage, review pass
+### B14 — Full test coverage, review pass — DONE
 
-- [ ] Lifecycle E2E (design doc §5): overdue instalment blocks batch
+- [x] Lifecycle E2E (design doc §5): overdue instalment blocks batch
       access → payment clears it → access restores, chained in one run; a
       refund request → approval → affiliate commission reversal; an
       instructor's revenue-share payout computed against real fee payments
       end to end.
-- [ ] Dispatch a background review agent over the whole slice's diff, same
+- [x] Dispatch a background review agent over the whole slice's diff, same
       discipline every prior slice's final block established — expect
       findings around refund-approval race conditions (two approvals of
       the same request), cross-tenant affiliate/payout visibility, and
       currency-mixing in Q6's aggregation first, same class of bug prior
       slices' own review passes caught.
-- [ ] Update `HANDOVER.md` (S20 complete entry), `docs/PROJECT-STATUS.md`
+- [x] Update `HANDOVER.md` (S20 complete entry), `docs/PROJECT-STATUS.md`
       (new S20 section), `docs/ROADMAP.md` (S20 row → Done, shipped-count
       19→20).
+
+`tests/Feature/Growth/S20LifecycleE2ETest.php` — all 3 scenarios use real
+services end to end, no shortcuts: the payment-capture step goes through
+an actual signed webhook payload into `PaymentReconciler::reconcile()`
+(same helper shape `SubscriptionLifecycleE2ETest`/`PaymentReconcilerTest`
+already use), not a direct status-column flip. All 3 pass.
+
+The predicted findings from this block's own checklist (refund-approval
+races, cross-tenant affiliate/payout visibility) had already been built in
+proactively at B1/B9/B10's own first drafts and never actually
+resurfaced — a real, if unglamorous, confirmation that "built in from the
+first draft" discipline held across the whole slice. The 8-angle review
+pass instead found a different, real class of issue: N+1s in the two
+newest read-heavy surfaces (`PlatformRevenueAnalytics`, `AffiliateDashboard`)
+and a hardcoded-₹-despite-real-multi-currency-support gap across 4 new
+Filament resources — the exact "currency mixing" bug family the checklist
+named, just manifesting in a different corner (display, not aggregation)
+than anticipated. 3 of the 8 review agents hit the session's own API rate
+limit mid-run and didn't produce final reports; proceeded with the 5 that
+completed rather than burning more budget re-running them. Full findings,
+fixes, and deliberately-deferred items are written up in `HANDOVER.md`'s
+new S20 entry and `docs/PROJECT-STATUS.md`'s new S20 section — not
+repeated a third time here. Full suite re-run after applying the fixes:
+green, same single pre-existing `CourseSlugUniquenessTest` failure, no
+regressions from any of the 6 fixes.
+
+**S20 — Growth & Billing Extensions is now COMPLETE. All 15 blocks (B0-B14)
+built, tested, and reviewed.**

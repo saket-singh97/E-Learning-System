@@ -33,18 +33,27 @@ class AffiliateDashboard extends Component
             return collect();
         }
 
-        $payoutService = app(AffiliatePayoutService::class);
-
         return AffiliateCode::where('owner_user_id', $viewer->id)
             ->with('referrals', 'payoutRequests')
             ->get()
-            ->map(fn (AffiliateCode $code): array => [
-                'code' => $code,
-                'referral_count' => $code->referrals->count(),
-                'confirmed' => (float) $code->referrals->where('status', 'confirmed')->sum('commission_amount'),
-                'reversed' => (float) $code->referrals->where('status', 'reversed')->sum('commission_amount'),
-                'balance' => $payoutService->balanceFor($code),
-            ]);
+            ->map(function (AffiliateCode $code): array {
+                $confirmed = (float) $code->referrals->where('status', 'confirmed')->sum('commission_amount');
+                // Computed from the already-eager-loaded relations, not
+                // AffiliatePayoutService::balanceFor() — that method issues
+                // its own fresh queries via ->referrals()/->payoutRequests(),
+                // ignoring the with() above and re-introducing an N+1 across
+                // every code this affiliate owns. Same formula, kept in
+                // sync by hand (caught in B14's own review pass).
+                $claimed = (float) $code->payoutRequests->where('status', '!=', 'rejected')->sum('amount');
+
+                return [
+                    'code' => $code,
+                    'referral_count' => $code->referrals->count(),
+                    'confirmed' => $confirmed,
+                    'reversed' => (float) $code->referrals->where('status', 'reversed')->sum('commission_amount'),
+                    'balance' => round($confirmed - $claimed, 2),
+                ];
+            });
     }
 
     public function requestPayout(int $codeId): void

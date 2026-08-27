@@ -5,7 +5,109 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-27)
+## Right now (2026-08-28)
+
+- **S20 — Growth & Billing Extensions: COMPLETE, all 15 blocks (2026-08-27–28).**
+  `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
+  `...-plan.md` (full per-block build log + B14's own review-pass notes
+  live there, not repeated here). Real build scope: 9 items across 3
+  domains (Fees/Billing extended, `Growth` new). Refunds — `fee_refunds`
+  request/approve/reject via `RefundApprovalService`, real Razorpay
+  `refund()` call, tenant-configured `refund_window_days` eligibility
+  window re-verified at approval time, not just request time (B0-B1).
+  Fee-based access restriction — `LessonAccess` gained one enrolment-scoped
+  overdue-instalment gate keyed off the tenant's own `fee_grace_period_days`
+  (B2). Student memberships — `student_membership_plans`/
+  `student_subscriptions`, trial-with-no-charge, checkout reusing the
+  existing Orders-API `FeeInvoiceService`/`PaymentReconciler` path (not
+  Billing's separate mandate-based `SubscriptionProvider`), mid-cycle
+  upgrade proration (B3-B4). Multi-currency + tax — `tenants.default_currency`/
+  `tax_rate`/`tax_label` generalize the hardcoded 18%/INR default at all 3
+  invoice-creation sites, byte-identical for any tenant that never
+  configures them (B5). Platform revenue analytics — `PlatformRevenueAnalytics`
+  (Super panel only): MRR/ARR, per-institute revenue explicitly grouped by
+  `(tenant, currency)` so two institutes or two currencies never blend into
+  one total, payment success/failure rate (B6). Affiliate program — new
+  `Growth` domain, tenant-unique code generation + payment attribution,
+  percentage/fixed commission calculation, automatic reversal via a real
+  `FeeRefundProcessed` event when the underlying payment is refunded, an
+  affiliate-facing dashboard scoped strictly to `owner_user_id`, and a
+  payout request/approve/reject flow (B7-B9). Instructor payouts —
+  salaried (flat admin-entered amount) and revenue-share (computed from an
+  instructor's own batches' captured `FeePayment` rows by settlement time,
+  not order-open time) bases, both walking the same pending → approved →
+  paid lifecycle (B10-B11). Course-interest capture — a public,
+  unauthenticated `/courses/{course}/interest` page deliberately separate
+  from the S5 B8-hardened `ShowSyllabusController` guest gate, upserting by
+  `(course_id, email)` so a repeat signup updates rather than duplicates
+  (B12). B13's reverse sweep confirmed 91-for-91 against every real
+  `BelongsToTenant` usage, zero gaps.
+  B14's lifecycle E2E (overdue instalment blocks batch access → real
+  webhook-captured payment restores it; refund request → approval →
+  affiliate commission reversal, chained through the real event/listener;
+  instructor revenue-share payout computed against real captured payments
+  → approved → paid) plus a multi-angle review pass over the whole slice's
+  diff found and fixed 6 real efficiency/correctness issues (3 of 8 review
+  angles hit the session's own API limit mid-run and didn't finish — acted
+  on what completed rather than re-running):
+  1. `PlatformRevenueAnalytics::perInstituteRevenue()` called `Tenant::find()`
+     once per (tenant, currency) group — an N+1 that would show up in a
+     slow-query audit on a platform with many institutes. Fixed with one
+     batched `whereIn`/`pluck` lookup before the mapping.
+  2. `PlatformRevenueAnalytics::paymentSuccessFailureRate()` ran two
+     separate `COUNT` queries where one grouped read does the job. Fixed
+     with a single `pluck('status')->countBy()` (no raw SQL — CLAUDE.md
+     bans `DB::raw`/`selectRaw`-shaped queries under `app/Domains/`).
+  3. `PlatformRevenue::form()` called `mrr()` then `arr()`, and `arr()`
+     internally recomputes `mrr()` from scratch — the full active-subscriptions
+     query ran twice on every page load for a value that's just `mrr * 12`.
+     Fixed by computing `mrr` once and reusing it.
+  4. `AffiliateDashboard::codes()` eager-loaded `referrals`/`payoutRequests`
+     via `with()`, but called `AffiliatePayoutService::balanceFor($code)`
+     for the balance figure — that method queries via `$code->referrals()`/
+     `$code->payoutRequests()` (the relation-as-query-builder form), issuing
+     fresh queries that ignored the eager load entirely: 2 extra queries
+     per code owned, unbounded by dashboard render. Fixed by computing the
+     balance from the already-loaded collections directly.
+  5. Four new S20 Filament resources (`FeeRefundResource`,
+     `StudentMembershipPlanResource`, `InstructorPayoutResource`,
+     `AffiliatePayoutRequestResource`) hardcoded `₹` in their amount
+     columns despite this same slice adding real multi-currency support —
+     once a tenant configures a non-INR `default_currency`, staff approving
+     real refunds/payouts would see mislabeled amounts. Fixed with a new
+     `Tenant::currencySymbol()` helper (reuses `FeeInvoice::CURRENCY_SYMBOLS`,
+     one map, not two) and `FeeRefundResource`'s own linked-invoice currency
+     where a real one exists.
+  6. `RazorpayProvider::createOrder()` (the real, not-yet-bound driver)
+     still sent `'currency' => 'INR'` unconditionally to Razorpay's API
+     even though `FeeInvoiceService` now stamps every invoice with the
+     tenant's own `default_currency` — dead in production today (this
+     driver isn't the bound `PaymentProvider`, `FakeRazorpayDriver` is) but
+     would have silently charged the wrong currency the day real
+     credentials land. Fixed to send `$invoice->currency`.
+  Confirmed, not newly found: `FeeCheckout` (the real student checkout
+  Livewire component) never calls `AffiliateAttributionService::attribute()`
+  — a real payment made with an affiliate code today creates no
+  `AffiliateReferral` at all. This was a documented, deliberate B7 scope
+  cut (wiring a code-entry field into checkout UI was never named in any
+  block's own checklist), not a bug introduced this slice — flagged here so
+  it isn't mistaken for one. Deferred as fast-follow, not fixed this slice:
+  `RefundApprovalService`/`AffiliatePayoutService`/`InstructorPayoutService`
+  independently implement the identical row-lock-verify-status-throw shape
+  three times (a fix to one's race-condition handling has to be
+  hand-applied to the other two); `FeeInvoiceService`'s three
+  `FeeInvoice::create()` call sites (`invoicesFor`/`invoiceForProgram`/
+  `invoiceForMembership`) repeat the same 12-field array; `AffiliateCodeService`'s
+  code-generation alphabet/loop duplicates `ParentInviteCodeService`'s own,
+  acknowledged in its own docblock rather than extracted; three separate
+  same-day tenant-column migrations (`refund_window_days`/
+  `fee_grace_period_days`/`default_currency`+`tax_rate`+`tax_label`) could
+  have been one. None of these are correctness bugs — noted for whoever
+  next touches these files, same as every prior slice's own deferred list.
+  Tests green: **1794+/1795+** (same 1 pre-existing, unrelated
+  `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+  scope) — full suite re-run after this block's own fixes to confirm no
+  regression.
 
 - **S19 — Communication Platform: COMPLETE, all 17 blocks (2026-08-26–27).**
   `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,

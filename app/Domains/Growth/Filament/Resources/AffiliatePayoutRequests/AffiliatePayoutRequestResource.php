@@ -6,6 +6,7 @@ use App\Domains\Growth\Filament\Resources\AffiliatePayoutRequests\Pages\ListAffi
 use App\Domains\Growth\Models\AffiliatePayoutRequest;
 use App\Domains\Growth\Services\AffiliatePayoutService;
 use App\Exceptions\AffiliatePayoutActionException;
+use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -35,7 +36,7 @@ class AffiliatePayoutRequestResource extends Resource
                 TextColumn::make('affiliateCode.code')->label('Affiliate code')->searchable(),
                 TextColumn::make('affiliateCode.owner.name')->label('Affiliate')->searchable(),
                 TextColumn::make('amount')
-                    ->formatStateUsing(fn (AffiliatePayoutRequest $record): string => '₹'.number_format((float) $record->amount, 2)),
+                    ->formatStateUsing(fn (AffiliatePayoutRequest $record): string => app(CurrentTenant::class)->get()->currencySymbol().number_format((float) $record->amount, 2)),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {

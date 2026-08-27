@@ -30,7 +30,13 @@ class RazorpayProvider implements PaymentProvider
         $response = Http::withBasicAuth($keyId, $keySecret)
             ->post('https://api.razorpay.com/v1/orders', [
                 'amount' => (int) round($invoice->total_amount * 100), // paise
-                'currency' => 'INR',
+                // S20 P10 (B14 review pass) — this invoice's own stamped
+                // currency, not a hardcoded 'INR': FeeInvoiceService now
+                // sets it from the tenant's own default_currency, and this
+                // is the field that actually determines what Razorpay
+                // charges in, unlike the informational 'currency' key on
+                // the returned array below.
+                'currency' => $invoice->currency,
                 // Razorpay's Orders API idempotency lives here, not in a
                 // header (S9 B8 — verified against Razorpay's own API docs
                 // at build time): a receipt already used on this account is
@@ -49,7 +55,7 @@ class RazorpayProvider implements PaymentProvider
         return [
             'order_id' => $response['id'],
             'amount' => (float) $invoice->total_amount,
-            'currency' => 'INR',
+            'currency' => $invoice->currency,
         ];
     }
 

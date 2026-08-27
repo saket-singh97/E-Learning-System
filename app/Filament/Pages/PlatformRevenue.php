@@ -35,14 +35,18 @@ class PlatformRevenue extends Page implements HasForms
     {
         $analytics = app(PlatformRevenueAnalytics::class);
         $rate = $analytics->paymentSuccessFailureRate();
+        // Computed once and reused for ARR — calling both mrr() and arr()
+        // would run the same active-subscriptions query twice, caught in
+        // B14's own review pass.
+        $mrr = $analytics->mrr();
 
         return $schema->components([
             Placeholder::make('mrr')
                 ->label('MRR')
-                ->content('₹'.number_format($analytics->mrr(), 2)),
+                ->content('₹'.number_format($mrr, 2)),
             Placeholder::make('arr')
                 ->label('ARR')
-                ->content('₹'.number_format($analytics->arr(), 2)),
+                ->content('₹'.number_format($mrr * 12, 2)),
             Placeholder::make('success_rate')
                 ->label('Payment success rate')
                 ->content($rate['success_rate'] === null

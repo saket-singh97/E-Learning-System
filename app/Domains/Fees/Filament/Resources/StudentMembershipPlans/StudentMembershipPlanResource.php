@@ -6,6 +6,7 @@ use App\Domains\Fees\Filament\Resources\StudentMembershipPlans\Pages\CreateStude
 use App\Domains\Fees\Filament\Resources\StudentMembershipPlans\Pages\EditStudentMembershipPlan;
 use App\Domains\Fees\Filament\Resources\StudentMembershipPlans\Pages\ListStudentMembershipPlans;
 use App\Domains\Fees\Models\StudentMembershipPlan;
+use App\Support\Tenancy\CurrentTenant;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -69,7 +70,7 @@ class StudentMembershipPlanResource extends Resource
             ->columns([
                 TextColumn::make('name')->searchable(),
                 TextColumn::make('price')
-                    ->formatStateUsing(fn (StudentMembershipPlan $record): string => '₹'.number_format((float) $record->price, 2)),
+                    ->formatStateUsing(fn (StudentMembershipPlan $record): string => app(CurrentTenant::class)->get()->currencySymbol().number_format((float) $record->price, 2)),
                 TextColumn::make('billing_interval')->badge(),
                 TextColumn::make('trial_days')->label('Trial days'),
                 TextColumn::make('status')

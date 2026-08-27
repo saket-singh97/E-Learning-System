@@ -84,7 +84,7 @@ class InstructorPayoutResource extends Resource
                 TextColumn::make('period_end')->label('to')->date(),
                 TextColumn::make('basis')->badge(),
                 TextColumn::make('amount')
-                    ->formatStateUsing(fn (InstructorPayout $record): string => '₹'.number_format((float) $record->amount, 2)),
+                    ->formatStateUsing(fn (InstructorPayout $record): string => app(CurrentTenant::class)->get()->currencySymbol().number_format((float) $record->amount, 2)),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {

@@ -3,6 +3,7 @@
 namespace App\Domains\Tenancy\Models;
 
 use App\Domains\Billing\Models\Plan;
+use App\Domains\Fees\Models\FeeInvoice;
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -84,6 +85,18 @@ class Tenant extends Model
     public function isPaidTier(): bool
     {
         return $this->plan_tier === self::PLAN_TIER_PAID;
+    }
+
+    /**
+     * S20 B14 (review pass) — several new admin screens (refund/payout/
+     * membership-plan resources) display an amount that has no currency
+     * column of its own; they're always this tenant's own
+     * `default_currency`. Reuses `FeeInvoice::CURRENCY_SYMBOLS` rather than
+     * a second map, so the two stay in sync by construction.
+     */
+    public function currencySymbol(): string
+    {
+        return FeeInvoice::CURRENCY_SYMBOLS[$this->default_currency] ?? "{$this->default_currency} ";
     }
 
     /**

@@ -54,17 +54,26 @@ class PlatformRevenueAnalytics
      */
     public function perInstituteRevenue(): Collection
     {
-        return FeePayment::withoutGlobalScope('tenant')
+        $payments = FeePayment::withoutGlobalScope('tenant')
             ->where('status', 'captured')
             ->with('invoice:id,currency')
-            ->get()
+            ->get();
+
+        // One batched lookup for every tenant name involved, not one
+        // Tenant::find() per group — B14's own review pass caught this as
+        // an N+1 that would show up in a slow-query audit once the
+        // platform has many institutes.
+        $tenantNames = Tenant::whereIn('id', $payments->pluck('tenant_id')->unique())
+            ->pluck('name', 'id');
+
+        return $payments
             ->groupBy(fn (FeePayment $payment): string => $payment->tenant_id.'|'.($payment->invoice->currency ?? 'INR'))
-            ->map(function (Collection $payments): array {
+            ->map(function (Collection $payments) use ($tenantNames): array {
                 $first = $payments->first();
 
                 return [
                     'tenant_id' => $first->tenant_id,
-                    'tenant_name' => Tenant::find($first->tenant_id)?->name ?? 'Unknown institute',
+                    'tenant_name' => $tenantNames->get($first->tenant_id, 'Unknown institute'),
                     'currency' => $first->invoice->currency ?? 'INR',
                     'amount' => (float) $payments->sum(fn (FeePayment $payment): float => (float) $payment->amount),
                 ];
@@ -83,8 +92,17 @@ class PlatformRevenueAnalytics
      */
     public function paymentSuccessFailureRate(): array
     {
-        $captured = FeePayment::withoutGlobalScope('tenant')->where('status', 'captured')->count();
-        $failed = FeePayment::withoutGlobalScope('tenant')->where('status', 'failed')->count();
+        // One query for both counts, no raw-SQL fragment of any kind
+        // (this app's own security baseline bans that under app/Domains/),
+        // rather than two separate count() queries — caught in B14's own
+        // review pass.
+        $counts = FeePayment::withoutGlobalScope('tenant')
+            ->whereIn('status', ['captured', 'failed'])
+            ->pluck('status')
+            ->countBy();
+
+        $captured = $counts->get('captured', 0);
+        $failed = $counts->get('failed', 0);
         $total = $captured + $failed;
 
         return [

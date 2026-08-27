@@ -14,19 +14,19 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 19 (S1–S19) |
-| **Designed, not built** | 1 (S20) |
+| **Shipped** | 20 (S1–S20) |
+| **Designed, not built** | 0 |
 | **Proposed, not yet scoped** | 6 (S21–S26) |
 
 **Phase completion:**
 
 - **P1 — Institute Zero** (~102 features, the sellable core): **complete**, S1–S9.
-- **P2 — Depth & extras** (~75 features): **68 shipped** (S10, S11, S12, S13, S14, S15, S17, S18, plus S19's own N11/N12/N15/N16), plus S16's own P2 items (I6/I10/H10) — S16 itself is a mixed P2/P3 grab-bag, not a phase-boundary slice.
-- **P3 — Scale & enterprise** (~55 features): 2 shipped early — S19's own N14 (general forum) and N18 (gamification), both explicitly named in the roadmap headline so pulled forward same as S16's own P3 items — otherwise not started, by design, until paying customers exist.
+- **P2 — Depth & extras** (~75 features): **70 shipped** (S10, S11, S12, S13, S14, S15, S17, S18, plus S19's own N11/N12/N15/N16), plus S16's own P2 items (I6/I10/H10) and S20's own P6/P8 (refunds, fee-based access restriction) — S16/S20 both mixed P2/P3 grab-bags, not phase-boundary slices.
+- **P3 — Scale & enterprise** (~55 features): 9 shipped early — S19's own N14 (general forum) and N18 (gamification), plus S20's own P9/P10/Q6/R1/R2/R3/R6 (student subscriptions, multi-currency/tax, revenue analytics, affiliate program, instructor payouts, course-interest capture), all explicitly named in each slice's own roadmap headline so pulled forward same as S16's own P3 items — otherwise not started, by design, until paying customers exist.
 
 ---
 
-## Shipped — S1 to S19
+## Shipped — S1 to S20
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -49,21 +49,11 @@ regenerate it from this file.
 | S17 | AI Layer, Round 2 — course outline generator, revision notes, semantic search, weak-topic detection, photo-based doubt solving. Real scope is 5 items, not the row's headline "7": L10 (auto-subtitles) already shipped in S14, L15 (AI content-generation assist) is P3 and cut for now — same "not named in the headline, not in scope" boundary S16 drew the other way | 14 blocks | Aug 25–26 | ✅ Done |
 | S18 | Analytics & Parent Engagement — engagement ratio + speed profile, rewatch heatmap, drop-off tracking, missed-class-replay + weak-topic-practice nudges, monthly parent report card on WhatsApp. Real scope is 5 items, not the row's headline "8": M15's 3-day-inactivity nudge already shipped in S9, M14/O5 are the same report-card feature counted twice, O6 (parent-teacher thread) is P3 and largely already covered by the existing generic `DirectMessage` — cut for now | 13 blocks | Aug 26 | ✅ Done |
 | S19 | Communication Platform — real-time WebSockets (Reverb), general forum, feedback surveys, help desk, study planner + calendar (incl. signed `.ics` export), gamification. Real scope is 6 items, matching the row's own headline exactly | 17 blocks | Aug 26–27 | ✅ Done |
+| S20 | Growth & Billing Extensions — refunds, fee-based access restriction, student subscriptions, multi-currency + regional tax, platform revenue analytics (MRR/ARR), affiliate program, instructor payouts, course-interest capture. Real scope is 9 items, not the row's own headline "12": Q7 already shipped (S8/S9's revenue-register export), R4/R5 cut (too broad / a separate product surface) — same verify-before-building boundary every prior slice drew | 15 blocks | Aug 27–28 | ✅ Done |
 
 Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
+`...-plan.md`; `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
 `...-plan.md`.
-
----
-
-## Designed, not built — S20
-
-| Slice | Scope | Size | Designed | Status |
-|---|---|---|---|---|
-| S20 | Growth & Billing Extensions — refunds, fee-based access restriction, student subscriptions, multi-currency + regional tax, platform revenue analytics (MRR/ARR), affiliate program, instructor payouts, course-interest capture. Real scope is 9 items, not the row's own headline "12": Q7 already shipped (S8/S9's revenue-register export), R4/R5 cut (too broad / a separate product surface) — same verify-before-building boundary every prior slice drew | 15 blocks | Aug 27 | 📝 Designed, build not started |
-
-Full design/plan docs: `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
-`...-plan.md` — the plan file's own PROGRESS table will be the live source of
-truth once building starts, same as every prior slice.
 
 ---
 

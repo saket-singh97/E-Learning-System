@@ -2164,3 +2164,151 @@ poll-based surface (`NoticeBoard`, `PhotoDoubtUpload`) remain cut, same as
 the design doc documents.
 
 **All 17 S19 blocks are now built, tested, and reviewed.**
+
+## S20 — Growth & Billing Extensions: COMPLETE (all 15 blocks, 2026-08-28)
+
+`docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`
+and `...-plan.md` cover B0-B14 in full per-block detail — not repeated
+here. Real build scope was 9 items (P6/P8/P9/P10/Q6/R1/R2/R3/R6) across 3
+domains — `Fees` and `Billing` extended, new `Growth` domain — 15 build
+blocks. Refunds — `fee_refunds` request/approve/reject via
+`RefundApprovalService` (row-locked, re-verifies eligibility at approval
+rather than trusting request-time state), a real `PaymentProvider::refund()`
+Razorpay call, tenant-configured `refund_window_days` (B0-B1). Fee-based
+access restriction — `LessonAccess` gained one new enrolment-scoped check
+keyed off `fee_grace_period_days`, checked directly against `FeeInvoice`
+rather than the async overdue-flag sweep so access never lags the real due
+date (B2). Student memberships — `student_membership_plans`/
+`student_subscriptions`, trial start with zero charge, checkout reusing
+the existing Orders-API `FeeInvoiceService`/`PaymentReconciler` path rather
+than Billing's separate mandate-based `SubscriptionProvider`, mid-cycle
+upgrade proration verified against a hand-worked example (B3-B4).
+Multi-currency + tax — `tenants.default_currency`/`tax_rate`/`tax_label`
+generalize the hardcoded 18%/INR default at all 3 invoice-creation sites,
+confirmed byte-identical for an unconfigured tenant (B5). Platform revenue
+analytics — `PlatformRevenueAnalytics` (Super panel only, computed at read
+time, no rollup table): MRR/ARR from active `TenantSubscription`s,
+per-institute revenue explicitly grouped by `(tenant, currency)` so
+institutes/currencies never blend into one total, payment success/failure
+rate (B6). Affiliate program — new `Growth` domain (`Models`/`Services`
+only at first, `Filament`/`Livewire` added as later blocks needed them):
+tenant-unique code generation, a single attribution chokepoint at payment
+time, percentage/fixed commission calculation, automatic reversal via a
+real `FeeRefundProcessed` event (not a manual reconciliation step) when
+the underlying payment is refunded, an affiliate-facing dashboard scoped
+strictly to `owner_user_id`, and a payout request/approve/reject flow
+mirroring `RefundApprovalService`'s own row-locked shape (B7-B9).
+Instructor payouts — salaried (flat admin-entered amount, no computation)
+and revenue-share (computed from an instructor's own batches' captured
+`FeePayment` rows, scoped by settlement time not order-open time) bases,
+both walking the same pending → approved → paid lifecycle (B10-B11).
+Course-interest capture — a public, unauthenticated
+`/courses/{course}/interest` page deliberately kept separate from the S5
+B8-hardened `ShowSyllabusController` guest gate rather than reopening it,
+upserting by `(course_id, email)` so a repeat signup updates instead of
+duplicating (B12). 8 new `BelongsToTenant` models, all registered in
+`TenantModelRegistry` immediately on creation, confirmed exact-complete in
+B13's reverse sweep (91 real usages, 91 registry entries).
+
+- **B0-B1** — Refunds: `RefundEligibilityService.isEligible()` reads
+  `FeeInvoice.paid_at` (confirmed no such column exists on `FeePayment`
+  itself before writing this) against the tenant's own
+  `refund_window_days`; `RefundApprovalService::approve()` re-locks and
+  re-checks eligibility rather than trusting the state the request was
+  raised in, since a tenant can shorten its own window between request and
+  approval.
+- **B2** — Access restriction: enrolment-scoped, not account-wide — a
+  student overdue on one course keeps access to a different course they're
+  current on. Checked against `FeeInvoice` directly, independent of
+  whichever cadence `FlagOverdueInvoices` happens to run on.
+- **B3-B4** — Student memberships: `StudentSubscriptionService::
+  activateFromPayment()` is called directly from `PaymentReconciler`'s own
+  capture path, not via an event — both classes live in `Fees`, and
+  CLAUDE.md's "events only" rule is about crossing a *domain* boundary,
+  which this never does (unlike the adjacent Program→Content branch, which
+  genuinely does and stays event-driven). Two fast-follows flagged rather
+  than silently dropped: charging the proration delta, and scheduling
+  `renew()` on a cadence.
+- **B5** — Multi-currency + tax: `FeeInvoiceService::taxRateFor()` is the
+  one new helper all 3 invoice-creation methods call instead of the
+  hardcoded `GST_RATE` constant directly. Internal Filament amount columns
+  (the pre-existing `FeeCoupon`/`FeePayment`/`FeeInvoice` resource lists)
+  stayed INR-formatted — a deliberate scope cut, not named in this block's
+  own checklist, revisited in B14 only for the 4 *new* S20 resources.
+- **B6** — Revenue analytics: every query explicitly calls
+  `withoutGlobalScope('tenant')` rather than leaning on the Super panel's
+  ambient unbound `CurrentTenant` — `InstituteSubscriptions` (S11 B12)
+  already paid for that lesson twice before. `perInstituteRevenue()`'s own
+  `(tenant, currency)` grouping was the proactive fix for the exact
+  "currency-mixing" bug class B14's own checklist named as an expected
+  finding.
+- **B7-B9** — Affiliate program: `AffiliateAttributionService::attribute()`
+  is the single chokepoint that creates a `pending` referral (commission
+  computed later, at confirmation); `AffiliatePayoutService` mirrors
+  `RefundApprovalService`'s exact lock-verify-status shape, scoped per
+  `AffiliateCode`, not an owner-wide aggregate.
+- **B10-B11** — Instructor payouts: `approve()`/`reject()`/`markPaid()`
+  work identically regardless of basis (built generically in B10, proven
+  by a dedicated B11 test rather than assumed). Caught and fixed one real
+  bug before shipping: the create form's instructor dropdown used
+  `User::role('instructor')`, which is not itself tenant-scoped — needed
+  the same explicit `->where('tenant_id', ...)` `BatchResource`/
+  `TeacherAttendanceFlagResource` already required for the identical
+  dropdown.
+- **B12** — Course-interest capture: a brand-new route rather than a
+  change to `ShowSyllabusController`, specifically to avoid re-litigating
+  the S5 B8 security fix that hardened it. The page shows only a course
+  title — never syllabus/lesson content — so it can't leak more than the
+  syllabus gate already refuses to.
+- **B13** — Registry reverse sweep: 91 real `BelongsToTenant` usages, 91
+  registry entries, exact match (anchored grep, not a bare substring
+  match). `tests/Isolation/CrossTenantTest.php` run directly — 92/92
+  passing — confirmed every registered model's `seedAttributes()`/
+  `updateAttributes()` actually works at runtime, the 8 new ones included.
+- **B14** — Lifecycle E2E (overdue instalment blocks batch access → a real
+  webhook-captured payment restores it; refund request → approval →
+  affiliate commission reversal chained through the real event/listener;
+  instructor revenue-share payout computed against real captured payments
+  → approved → paid) plus a multi-angle review pass over the whole slice's
+  diff. 3 of 8 review angles hit the session's own API rate limit mid-run
+  and didn't produce a final report; acted on the 5 that completed rather
+  than re-running. Found and fixed 6 real efficiency/correctness issues:
+  1. `PlatformRevenueAnalytics::perInstituteRevenue()`'s `Tenant::find()`
+     per group → one batched `whereIn`/`pluck` lookup.
+  2. `paymentSuccessFailureRate()`'s two `COUNT` queries → one
+     `pluck('status')->countBy()` (no raw SQL, per CLAUDE.md).
+  3. `PlatformRevenue::form()` calling `mrr()` then `arr()` (which
+     recomputes `mrr()` internally) → `mrr` computed once and reused.
+  4. `AffiliateDashboard::codes()` eager-loading relations that
+     `AffiliatePayoutService::balanceFor()` then ignored, querying fresh
+     per code → balance computed from the already-loaded collections.
+  5. 4 new S20 Filament resources hardcoding `₹` despite this same slice
+     adding real multi-currency support → new `Tenant::currencySymbol()`
+     helper (reuses `FeeInvoice::CURRENCY_SYMBOLS`), plus `FeeRefundResource`
+     reading its own linked invoice's real currency.
+  6. `RazorpayProvider::createOrder()` (the real, not-yet-bound driver)
+     still hardcoded `'currency' => 'INR'` to the Razorpay API call itself
+     → sends `$invoice->currency` now, before real credentials ever make
+     this driver reachable.
+  Confirmed, not newly found: `FeeCheckout` never calls
+  `AffiliateAttributionService::attribute()` — a documented B7 scope cut
+  (no block's checklist ever named checkout-UI code-entry wiring), not a
+  bug introduced this slice. Deferred as fast-follow: `RefundApprovalService`/
+  `AffiliatePayoutService`/`InstructorPayoutService` independently
+  implement the identical row-lock-verify-status shape three times;
+  `FeeInvoiceService`'s three `FeeInvoice::create()` call sites repeat the
+  same 12-field array; `AffiliateCodeService`'s code generator duplicates
+  `ParentInviteCodeService`'s own rather than sharing it; three same-day
+  tenant-column migrations could have been one.
+
+**What's still rough, on purpose:** revenue-share/salaried instructor
+payouts compute an amount but never move money — `markPaid` records that a
+transfer happened outside this app, same posture refunds' own gateway call
+doesn't extend to payouts. Affiliate commission confirmation
+(`confirmCommission()`) isn't wired to fire automatically on payment
+capture — the obvious hook (`PaymentCaptured`) would silently skip
+program/membership-linked payments, so live wiring is a fast-follow, not
+this slice's own scope. `student_subscriptions`' `renew()` has no
+scheduled trigger yet, same reasoning.
+
+**All 15 S20 blocks are now built, tested, and reviewed.**
