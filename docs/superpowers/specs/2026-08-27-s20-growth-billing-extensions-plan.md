@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | ✅ done |
 | B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | ✅ done |
 | B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | ✅ done |
-| B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | not started |
+| B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | ✅ done |
 | B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | not started |
 | B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | not started |
 | B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | not started |
@@ -267,15 +267,51 @@ flake, same class as the two `DownloadCompletionExportControllerTest`/
 `DownloadEnrolmentExportControllerTest` cases already carried; nothing in
 this block's diff touches backups) before marking this block done.
 
-### B6 — Q6: platform revenue analytics
+### B6 — Q6: platform revenue analytics — DONE
 
-- [ ] Super-panel widget/page: MRR (sum of active `TenantSubscription`s'
+- [x] Super-panel widget/page: MRR (sum of active `TenantSubscription`s'
       own plan price), ARR (MRR × 12), per-institute revenue breakdown,
       `FeePayment` success/failure rate — computed at read time (design
       doc §4 decision 5).
-- [ ] Tests: MRR/ARR match a known set of active subscriptions, a
+- [x] Tests: MRR/ARR match a known set of active subscriptions, a
       cancelled subscription doesn't count, success/failure rate matches a
       known mix of `FeePayment` statuses.
+
+`PlatformRevenueAnalytics` (Billing) owns all three figures, each computed
+at read time with no rollup table, same posture `TestSeriesRankingService`/
+`LeaderboardService` already established. Every query explicitly calls
+`withoutGlobalScope('tenant')` rather than leaning on the Super panel's own
+`CurrentTenant` being unbound — `InstituteSubscriptions` (S11 B12) already
+paid for that lesson twice (S9 B10, S10 B13 both shipped a cross-tenant
+read relying on ambient state first, caught only in a later review pass);
+built in from this block's own first draft instead, and a dedicated test
+proves MRR is unaffected by whichever tenant happens to be bound at query
+time. `perInstituteRevenue()` groups by **(tenant, currency)**, never
+summing two institutes or two currencies into one blended figure — the
+proactive fix for the exact "currency-mixing in Q6's aggregation" bug class
+B14's own checklist names as an expected finding, verified by its own test
+seeding one INR institute and one USD institute. MRR/ARR read `Plan.
+price_inr_per_month` directly with no currency conversion at all — `Plan`
+is the platform's own INR-only tier catalog (design doc §2.3), so P10's
+currency work has nothing to convert there; the note in the plan about
+"converting via P10's currency work where relevant" turned out to apply
+only to the per-institute figures, not MRR/ARR itself, confirmed by
+re-reading `Plan`'s own schema before assuming otherwise. Success/failure
+rate reads `FeePayment.status` directly (`captured` vs `failed` only —
+`created` is still in flight, `refunded` reflects a later reversal of an
+already-settled outcome, not the original attempt's own verdict). Landed as
+a new `App\Filament\Pages\PlatformRevenue` page (Super panel's own
+`app/Filament/Pages/` home, same directory `InstituteSubscriptions` already
+uses despite the naming mismatch with Admin/Teach's own convention) —
+`Placeholder`-based, no interactive Filament table, since
+`perInstituteRevenue()` returns a plain array rather than an Eloquent
+query; a static HTML table (same `HtmlString` idiom `BillingOverview::
+usageBar()` already established) renders it instead of forcing Filament's
+table component onto a non-Eloquent-backed dataset. Full suite: 1752/1753
+— only the one long-standing `CourseSlugUniquenessTest` failure (carried
+since S1/S2); the storage-pollution flakes B5's own writeup noted didn't
+reproduce this run, consistent with them being timing/order-dependent
+rather than something this block's diff touches.
 
 ### B7 — R1 pt.1: Growth domain + affiliate schema
 
