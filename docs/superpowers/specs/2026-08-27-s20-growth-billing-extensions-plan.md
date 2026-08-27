@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | ✅ done |
 | B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | ✅ done |
 | B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | ✅ done |
-| B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | not started |
+| B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | ✅ done |
 | B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | not started |
 | B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | not started |
 | B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | not started |
@@ -157,15 +157,27 @@ confirms the overdue one blocks while the current one doesn't. Full suite:
 1731/1734 — same 3 pre-existing/unrelated failures as B0/B1's runs, no new
 failures.
 
-### B3 — P9 pt.1: membership schema + builder
+### B3 — P9 pt.1: membership schema + builder — DONE
 
-- [ ] `student_membership_plans`/`student_subscriptions` migrations +
+- [x] `student_membership_plans`/`student_subscriptions` migrations +
       models (Fees), registered in `TenantModelRegistry`.
-- [ ] Admin-panel plan builder (name/price/billing interval/trial days),
+- [x] Admin-panel plan builder (name/price/billing interval/trial days),
       same resource shape `SurveyResource` (S19) established for an
       institute authoring its own catalog.
-- [ ] Tests: creates a plan with each billing interval, lists only the
+- [x] Tests: creates a plan with each billing interval, lists only the
       current tenant's own plans.
+
+`student_subscriptions` gets its migration + model + registry entry now
+(FK target for B4's own checkout flow to write into) but no Filament
+resource yet — B3's own checklist only names a plan *builder*, and there's
+nothing for staff to author on a subscription row before B4 exists to
+create any. `StudentMembershipPlanResource` mirrors `SurveyResource`'s
+shape exactly: plain CRUD, tenant-scoped list via the existing
+`BelongsToTenant` global scope (no manual `where tenant_id` needed — the
+tenant-isolation test just confirms the scope actually holds for this new
+model, same as every other resource's own list test does). Full suite:
+1736/1739 — same 3 pre-existing/unrelated failures as B0-B2's runs, no new
+failures.
 
 ### B4 — P9 pt.2: checkout + recurring billing
 

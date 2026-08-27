@@ -80,6 +80,8 @@ use App\Domains\Planner\Models\PlannerEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Fees\Models\FeeRefund;
+use App\Domains\Fees\Models\StudentMembershipPlan;
+use App\Domains\Fees\Models\StudentSubscription;
 use App\Domains\Security\Models\AccountSharingFlag;
 use App\Domains\Security\Models\DeviceSession;
 use App\Domains\Security\Models\GdprDeletionRequest;
@@ -120,6 +122,8 @@ class TenantModelRegistry
         FeeInvoice::class,
         FeePayment::class,
         FeeRefund::class,
+        StudentMembershipPlan::class,
+        StudentSubscription::class,
         ParentGuardianLink::class,
         ParentInviteCode::class,
         Assignment::class,
@@ -518,6 +522,26 @@ class TenantModelRegistry
                 'requested_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'amount' => 118,
                 'reason' => 'Row reason',
+            ],
+            StudentMembershipPlan::class => [
+                'name' => 'Row Plan',
+                'price' => 499,
+                'billing_interval' => 'monthly',
+                'trial_days' => 7,
+                'status' => 'active',
+            ],
+            StudentSubscription::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'student_membership_plan_id' => StudentMembershipPlan::create([
+                    'name' => 'Parent Plan',
+                    'price' => 499,
+                    'billing_interval' => 'monthly',
+                    'trial_days' => 7,
+                    'status' => 'active',
+                ])->id,
+                'status' => 'active',
+                'current_period_start' => now(),
+                'current_period_end' => now()->addMonth(),
             ],
             ParentGuardianLink::class => [
                 'parent_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
@@ -1213,6 +1237,8 @@ class TenantModelRegistry
             FeeInvoice::class => ['status' => 'tampered'],
             FeePayment::class => ['status' => 'tampered'],
             FeeRefund::class => ['status' => 'tampered'],
+            StudentMembershipPlan::class => ['name' => 'tampered'],
+            StudentSubscription::class => ['status' => 'tampered'],
             ParentGuardianLink::class => ['relationship' => 'tampered'],
             ParentInviteCode::class => ['redeemed_at' => now()],
             Assignment::class => ['title' => 'tampered'],
