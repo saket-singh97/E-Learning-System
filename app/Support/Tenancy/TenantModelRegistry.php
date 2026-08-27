@@ -8,7 +8,10 @@ use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
+use App\Domains\Analytics\Models\Badge;
+use App\Domains\Analytics\Models\GamificationProfile;
 use App\Domains\Analytics\Models\MonthlyReportCard;
+use App\Domains\Analytics\Models\StudentBadge;
 use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
@@ -175,6 +178,9 @@ class TenantModelRegistry
         HelpDeskTicket::class,
         HelpDeskTicketReply::class,
         PlannerEvent::class,
+        GamificationProfile::class,
+        Badge::class,
+        StudentBadge::class,
     ];
 
     /**
@@ -1101,6 +1107,25 @@ class TenantModelRegistry
                 'title' => 'Row event',
                 'starts_at' => now()->addDay(),
             ],
+            GamificationProfile::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'xp_total' => 0,
+                'level' => 1,
+            ],
+            Badge::class => [
+                'key' => 'row-badge-'.uniqid(),
+                'name' => 'Row Badge',
+                'xp_threshold' => 100,
+            ],
+            StudentBadge::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'badge_id' => Badge::create([
+                    'key' => 'parent-badge-'.uniqid(),
+                    'name' => 'Parent Badge',
+                    'xp_threshold' => 100,
+                ])->id,
+                'awarded_at' => now(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1199,6 +1224,9 @@ class TenantModelRegistry
             HelpDeskTicket::class => ['subject' => 'tampered'],
             HelpDeskTicketReply::class => ['body' => 'tampered'],
             PlannerEvent::class => ['title' => 'tampered'],
+            GamificationProfile::class => ['xp_total' => 999999],
+            Badge::class => ['name' => 'tampered'],
+            StudentBadge::class => ['awarded_at' => now()->subDay()],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

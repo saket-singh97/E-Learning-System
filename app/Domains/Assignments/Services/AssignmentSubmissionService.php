@@ -2,6 +2,7 @@
 
 namespace App\Domains\Assignments\Services;
 
+use App\Domains\Assignments\Events\AssignmentSubmitted;
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
 use App\Domains\Billing\Services\StorageQuota;
@@ -142,7 +143,7 @@ class AssignmentSubmissionService
         // deleted, so there is nothing to release later.
         $this->storageQuota->adjust($tenant, $incomingBytes);
 
-        return AssignmentSubmission::create([
+        $submission = AssignmentSubmission::create([
             'assignment_id' => $assignment->id,
             'user_id' => $user->id,
             'version_number' => $versionNumber,
@@ -157,5 +158,12 @@ class AssignmentSubmissionService
             // already has (a different row, never touched here), so grading
             // history is never overwritten, only added to.
         ]);
+
+        // S19 B13 (N18) — one insert per version (unique index on
+        // (assignment_id, user_id, version_number)), so this cannot
+        // double-fire for the same version.
+        event(new AssignmentSubmitted($submission->user_id, $submission->tenant_id, $submission->id));
+
+        return $submission;
     }
 }

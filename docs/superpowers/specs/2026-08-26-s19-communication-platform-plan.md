@@ -42,7 +42,7 @@ stop and report before starting the next block.
 | B10 | N12 pt.1 — `Planner` domain scaffold + `planner_events` schema + `PlannerAggregator` service | ✅ done |
 | B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | ✅ done |
 | B12 | N12 pt.3 — signed iCal feed export | ✅ done |
-| B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | not started |
+| B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | ✅ done |
 | B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | not started |
 | B15 | `TenantModelRegistry` sweep — all 10 new `BelongsToTenant` models confirmed registered | not started |
 | B16 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
@@ -545,16 +545,18 @@ target.
 
 ### B13 — N18 pt.1: gamification schema + XP
 
-- [ ] `gamification_profiles`/`badges`/`student_badges` migrations +
+- [x] `gamification_profiles`/`badges`/`student_badges` migrations +
       models, registered in `TenantModelRegistry`.
-- [ ] Listeners on `AttendanceRecorded`, quiz-submission, and
+- [x] Listeners on `AttendanceRecorded`, quiz-submission, and
       assignment-submission events — award fixed XP, update
       `last_activity_date`/streak (increment on consecutive day, reset on a
-      missed day).
-- [ ] `BadgeEvaluator` — runs after every XP award, checks the tenant's own
+      missed day). `QuizAttemptSubmitted` (Assessments) and
+      `AssignmentSubmitted` (Assignments) are two new events this block
+      adds — neither domain fired anything on submit before this.
+- [x] `BadgeEvaluator` — runs after every XP award, checks the tenant's own
       badge catalog against the updated profile, awards at most once per
       badge per user.
-- [ ] Tests: XP awarded exactly once per qualifying event (no double-award
+- [x] Tests: XP awarded exactly once per qualifying event (no double-award
       on a retried job), streak increments/resets correctly, a badge
       auto-awards exactly once when its criteria is first met.
 

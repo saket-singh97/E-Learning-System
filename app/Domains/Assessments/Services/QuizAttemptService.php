@@ -6,6 +6,7 @@ use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
 use App\Domains\Assessments\Models\QuizAttempt;
+use App\Domains\Assessments\Events\QuizAttemptSubmitted;
 use App\Exceptions\QuizAttemptAlreadySubmittedException;
 use App\Exceptions\QuizAttemptLimitExceededException;
 use App\Exceptions\QuizNotAvailableException;
@@ -131,6 +132,11 @@ class QuizAttemptService
         ]);
 
         $this->bustCachesFor($attempt);
+
+        // S19 B13 (N18) — fires only on this genuine in_progress -> submitted
+        // transition (the guard clause above throws on any later call for
+        // the same attempt), so Analytics' XP listener can never double-award.
+        event(new QuizAttemptSubmitted($attempt->user_id, $attempt->tenant_id, $attempt->id));
 
         return $attempt->fresh();
     }

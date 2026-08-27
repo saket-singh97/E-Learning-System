@@ -41,6 +41,11 @@ use App\Domains\Security\Listeners\ReconcileCookieConsent;
 use App\Domains\Security\Listeners\RecordLoginHistory;
 use App\Domains\Security\Listeners\RegisterDeviceOnLogin;
 use App\Domains\AI\Services\AiSpendCap;
+use App\Domains\Analytics\Listeners\AwardXpOnAssignmentSubmission;
+use App\Domains\Analytics\Listeners\AwardXpOnAttendance;
+use App\Domains\Analytics\Listeners\AwardXpOnQuizSubmission;
+use App\Domains\Assessments\Events\QuizAttemptSubmitted;
+use App\Domains\Assignments\Events\AssignmentSubmitted;
 use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
 use App\Integrations\DnsResolver;
@@ -178,6 +183,13 @@ class AppServiceProvider extends ServiceProvider
         // (aggregate-cache invalidation), not merged into either alert
         // listener above.
         Event::listen(AttendanceRecorded::class, BustAggregateCacheOnAttendance::class);
+
+        // S19 B13 (N18) — a fourth listener on the same event: XP/streak
+        // gamification, its own concern, Analytics listening without Batches
+        // knowing it exists (design doc §4 decision 8).
+        Event::listen(AttendanceRecorded::class, AwardXpOnAttendance::class);
+        Event::listen(QuizAttemptSubmitted::class, AwardXpOnQuizSubmission::class);
+        Event::listen(AssignmentSubmitted::class, AwardXpOnAssignmentSubmission::class);
 
         // S12 B1 — the one point every login surface already funnels
         // through (password, TOTP, Google OAuth, all three Filament
