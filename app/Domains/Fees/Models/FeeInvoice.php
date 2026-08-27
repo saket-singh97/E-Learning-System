@@ -28,6 +28,7 @@ class FeeInvoice extends Model
         'batch_id',
         'enrolment_id',
         'program_id',
+        'student_membership_plan_id',
         'user_id',
         'coupon_id',
         'sequence_number',
@@ -70,6 +71,11 @@ class FeeInvoice extends Model
     public function program(): BelongsTo
     {
         return $this->belongsTo(Program::class);
+    }
+
+    public function membershipPlan(): BelongsTo
+    {
+        return $this->belongsTo(StudentMembershipPlan::class, 'student_membership_plan_id');
     }
 
     public function user(): BelongsTo

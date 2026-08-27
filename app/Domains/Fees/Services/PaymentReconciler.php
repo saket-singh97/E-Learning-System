@@ -81,6 +81,12 @@ class PaymentReconciler
             $invoice = $payment->invoice;
             $invoice->update(['status' => 'paid', 'paid_at' => now()]);
 
+            // A membership invoice activates its own StudentSubscription
+            // directly (S20 B4) — both classes live in Fees, so unlike the
+            // program/enrolment branches below this is a same-domain call,
+            // not an event; CLAUDE.md's "events only" rule is about
+            // crossing a domain boundary, and this never does.
+            //
             // A program-linked invoice has no single enrolment_id to carry
             // (S13 B8, design doc decision 4), so it can't reuse
             // PaymentCaptured's shape — but this still dispatches an
@@ -89,7 +95,9 @@ class PaymentReconciler
             // which caught the original direct-call version of this line
             // as a CLAUDE.md violation: "Domains talk to each other
             // through Events/ only").
-            if ($invoice->program_id !== null) {
+            if ($invoice->student_membership_plan_id !== null) {
+                app(StudentSubscriptionService::class)->activateFromPayment($invoice->fresh());
+            } elseif ($invoice->program_id !== null) {
                 ProgramInvoicePaid::dispatch($invoice->id, $invoice->tenant_id);
             } else {
                 PaymentCaptured::dispatch($invoice->enrolment_id, $invoice->tenant_id);

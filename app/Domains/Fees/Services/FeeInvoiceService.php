@@ -8,6 +8,7 @@ use App\Domains\Content\Models\Program;
 use App\Domains\Fees\Models\FeeCoupon;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
+use App\Domains\Fees\Models\StudentMembershipPlan;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use App\Exceptions\CouponNotRedeemableException;
@@ -89,6 +90,41 @@ class FeeInvoiceService
                 'sequence_number' => $sequenceNumber,
                 'invoice_number' => $this->invoiceNumber($tenant, $sequenceNumber),
                 'description' => "Program: {$program->title}",
+                'amount' => $amount,
+                'gst_rate' => self::GST_RATE,
+                'gst_amount' => $gstAmount,
+                'total_amount' => $amount + $gstAmount,
+                'discount_amount' => 0,
+                'due_date' => now()->toDateString(),
+                'status' => 'pending',
+                'gstin_snapshot' => $tenant->gstin,
+            ]);
+        });
+    }
+
+    /**
+     * S20 P9 (B4) — same "no batch/enrolment, routed by its own linkage
+     * instead" shape invoiceForProgram() already established, this time for
+     * a membership plan rather than a course bundle. `StudentSubscriptionService`
+     * is what turns a paid one of these into an active `StudentSubscription`
+     * (PaymentReconciler calls it directly — both live in Fees, no event
+     * needed, unlike the Program/Content case which genuinely crosses a
+     * domain boundary).
+     */
+    public function invoiceForMembership(StudentMembershipPlan $plan, User $user): FeeInvoice
+    {
+        return DB::transaction(function () use ($plan, $user) {
+            $tenant = app(CurrentTenant::class)->get();
+            $amount = (float) $plan->price;
+            $gstAmount = round($amount * self::GST_RATE / 100, 2);
+            $sequenceNumber = $this->nextSequenceNumber($tenant);
+
+            return FeeInvoice::create([
+                'student_membership_plan_id' => $plan->id,
+                'user_id' => $user->id,
+                'sequence_number' => $sequenceNumber,
+                'invoice_number' => $this->invoiceNumber($tenant, $sequenceNumber),
+                'description' => "Membership: {$plan->name}",
                 'amount' => $amount,
                 'gst_rate' => self::GST_RATE,
                 'gst_amount' => $gstAmount,

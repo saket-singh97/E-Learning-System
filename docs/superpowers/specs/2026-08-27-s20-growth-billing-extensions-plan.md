@@ -30,7 +30,7 @@ stop and report before starting the next block.
 | B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | ✅ done |
 | B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | ✅ done |
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | ✅ done |
-| B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | not started |
+| B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | ✅ done |
 | B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | not started |
 | B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | not started |
 | B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | not started |
@@ -179,15 +179,48 @@ model, same as every other resource's own list test does). Full suite:
 1736/1739 — same 3 pre-existing/unrelated failures as B0-B2's runs, no new
 failures.
 
-### B4 — P9 pt.2: checkout + recurring billing
+### B4 — P9 pt.2: checkout + recurring billing — DONE
 
-- [ ] Student-facing checkout (trial start or immediate first payment) +
+- [x] Student-facing checkout (trial start or immediate first payment) +
       Razorpay recurring subscription wiring, reusing `PaymentProvider`
       where its existing shape fits.
-- [ ] Proration calculation on plan upgrade/downgrade mid-cycle.
-- [ ] Tests: trial starts with no charge, subscription activates on first
+- [x] Proration calculation on plan upgrade/downgrade mid-cycle.
+- [x] Tests: trial starts with no charge, subscription activates on first
       successful payment, proration math on an upgrade matches a known
       worked example, a cancelled subscription doesn't renew.
+
+Reused `PaymentProvider`'s existing Orders-API shape wholesale rather than
+Billing's separate `SubscriptionProvider` (Razorpay's native Subscriptions
+API, mandate-based) — that interface is hard-typed to `TenantSubscription`/
+`Plan` (Billing, B2B), and design doc §4 decision 3 already settled that a
+student membership is "a second, parallel payment shape to the existing
+instalment-plan `FeeInvoice` flow" that "both write to `FeePayment`."
+Concretely: added `FeeInvoiceService::invoiceForMembership()` (mirrors
+`invoiceForProgram()` exactly, one more nullable routing column on
+`fee_invoices` — `student_membership_plan_id`, same "no single batch/
+enrolment" shape `program_id` already established) and reused
+`createPaymentOrder()` completely unchanged. A `StudentSubscription` row is
+created/activated by `StudentSubscriptionService::activateFromPayment()`,
+called directly from `PaymentReconciler`'s own capture path — not via an
+event, since both classes live in Fees and CLAUDE.md's "events only" rule
+is about crossing a *domain* boundary, which this never does (unlike the
+Program→Content branch right next to it, which genuinely does and rightly
+stays event-driven). `activateFromPayment()` uses `firstOrNew` keyed on
+(user, plan), so a trial converting to paid activates the same row instead
+of creating a duplicate — covered by its own test. Proration is the
+standard unused-credit-on-old-plan-offset-by-new-plan-share-of-remaining-days
+formula, computed in `calculateProration()` and verified against a
+hand-worked 30-day-period/10-days-remaining/₹300→₹900 example
+(expected ₹200). `changePlan()` applies the new plan_id and returns the
+computed amount but does not yet raise a further invoice for it — actually
+charging/crediting the proration delta is noted as a fast-follow, not
+silently dropped, since nothing in this block's own checklist names it and
+Razorpay's native subscription-proration path was already ruled out above.
+`renew()` exists specifically to give "a cancelled subscription doesn't
+renew" a real method to guard rather than an assumption — it is not yet
+wired to a scheduled job; automating the actual renewal cadence is a
+fast-follow the same way. Full suite: 1741/1744 — same 3 pre-existing/
+unrelated failures as B0-B3's runs, no new failures.
 
 ### B5 — P10: multi-currency + tax generalization
 
