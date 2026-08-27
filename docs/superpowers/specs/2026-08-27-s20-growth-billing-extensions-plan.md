@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | ✅ done |
 | B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | ✅ done |
 | B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | ✅ done |
-| B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | not started |
+| B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | ✅ done |
 | B11 | R3 pt.2 — revenue-share computation against real `FeePayment` rows + mark-paid action | not started |
 | B12 | R6 — public course-interest capture form + `course_interest_signups` + admin lead list | not started |
 | B13 | `TenantModelRegistry` sweep — all 8 new `BelongsToTenant` models confirmed registered | not started |
@@ -423,16 +423,39 @@ one recurrence of `BackupConfigurationTest`'s own order-dependent
 storage-pollution flake (already seen once at B5's own run, confirmed
 passing in isolation again here); no new failures.
 
-### B10 — R3 pt.1: instructor payout schema + approval
+### B10 — R3 pt.1: instructor payout schema + approval — DONE
 
-- [ ] `instructor_payouts` migration + model (Growth), registered in
+- [x] `instructor_payouts` migration + model (Growth), registered in
       `TenantModelRegistry`.
-- [ ] Admin-panel approval workflow for a `salaried`-basis payout (fixed
+- [x] Admin-panel approval workflow for a `salaried`-basis payout (fixed
       configured amount per period) — same "flag + admin action" shape
       H13 (S16) established.
-- [ ] Tests: a salaried payout computes to exactly its configured amount,
+- [x] Tests: a salaried payout computes to exactly its configured amount,
       status walks pending → approved → paid with each action gated on the
       current status.
+
+`InstructorPayoutService::createSalaried()` stores exactly the
+admin-entered amount, no computation at all — matching design doc §4
+decision 7's own "flat configured amount" wording literally; there's no
+separate instructor-salary-rate table anywhere in scope, so the amount is
+whatever the admin types into `InstructorPayoutResource`'s create form.
+`approve()`/`reject()`/`markPaid()` mirror `RefundApprovalService`/
+`AffiliatePayoutService`'s exact row-locked shape (`lockForUpdate()` +
+re-verify the expected status before acting) — a third near-identical
+copy of the same guard by now, all three closing the same double-decision
+race class from each one's own first draft rather than a later review
+pass. `basis: revenue_share` computation is B11's own scope — this
+block's create form only ever produces a `salaried` row (`basis` is
+force-set server-side in `CreateInstructorPayout::mutateFormDataBeforeCreate()`,
+not a form field a client could tamper with). Caught and fixed one real
+bug before writing tests: `User::role('instructor')` (Spatie's macro) is
+not itself tenant-scoped, so the create form's instructor dropdown needed
+an explicit `->where('tenant_id', ...)` — confirmed by finding the exact
+same explicit filter already required in `BatchResource`/
+`TeacherAttendanceFlagResource` for the identical dropdown, not assumed.
+Full suite: 1784/1785 — only the one long-standing
+`CourseSlugUniquenessTest` failure (carried since S1/S2); no new
+failures.
 
 ### B11 — R3 pt.2: revenue-share computation
 

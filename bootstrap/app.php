@@ -31,6 +31,7 @@ use App\Exceptions\ConcurrentStreamLimitExceededException;
 use App\Exceptions\CouponNotRedeemableException;
 use App\Exceptions\DeviceLimitExceededException;
 use App\Exceptions\AffiliatePayoutActionException;
+use App\Exceptions\InstructorPayoutActionException;
 use App\Exceptions\RefundActionException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Exceptions\GdprDeletionRequestNotPendingException;
@@ -240,6 +241,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (CouponNotRedeemableException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (RefundActionException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (AffiliatePayoutActionException $e) => abort(422, $e->getMessage()));
+        $exceptions->render(fn (InstructorPayoutActionException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (BandwidthQuotaExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (ConcurrentStreamLimitExceededException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (AiSpendCapExceededException $e) => abort(409, $e->getMessage()));
