@@ -67,7 +67,29 @@ it('computes amount, 18% GST, and total_amount from the batchs price', function 
         ->and((float) $invoice->gst_rate)->toBe(18.0)
         ->and((float) $invoice->gst_amount)->toBe(180.0)
         ->and((float) $invoice->total_amount)->toBe(1180.0)
-        ->and($invoice->description)->toBe('Full fee');
+        ->and($invoice->description)->toBe('Full fee')
+        ->and($invoice->currency)->toBe('INR');
+});
+
+it('falls back to the 18% GST default and INR when the tenant has not configured its own tax/currency', function () {
+    // Byte-identical to pre-S20-B5 behavior for every tenant that never
+    // touches the new tax_rate/tax_label/default_currency columns.
+    $invoice = ($this->makeInvoice)(1000);
+
+    expect((float) $invoice->gst_rate)->toBe(18.0)
+        ->and($invoice->currency)->toBe('INR');
+});
+
+it('reads the tenants own configured tax rate and currency instead of the hardcoded default', function () {
+    $this->tenant->update(['tax_rate' => 20, 'tax_label' => 'VAT', 'default_currency' => 'USD']);
+
+    $invoice = ($this->makeInvoice)(1000);
+
+    expect((float) $invoice->gst_rate)->toBe(20.0)
+        ->and((float) $invoice->gst_amount)->toBe(200.0)
+        ->and((float) $invoice->total_amount)->toBe(1200.0)
+        ->and($invoice->currency)->toBe('USD')
+        ->and($invoice->currencySymbol())->toBe('$');
 });
 
 it('snapshots the tenants GSTIN at issue time, immune to a later change', function () {

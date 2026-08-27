@@ -41,11 +41,13 @@ class FeeInvoiceService
             $amounts = $this->splitAmounts($totalAmount, $lines);
             $lineCount = count($lines);
 
+            $taxRate = $this->taxRateFor($tenant);
+
             return collect($lines)->values()->map(function (array $line, int $index) use (
-                $enrolment, $batch, $tenant, $amounts, $lineCount
+                $enrolment, $batch, $tenant, $amounts, $lineCount, $taxRate
             ): FeeInvoice {
                 $amount = $amounts[$index];
-                $gstAmount = round($amount * self::GST_RATE / 100, 2);
+                $gstAmount = round($amount * $taxRate / 100, 2);
                 $sequenceNumber = $this->nextSequenceNumber($tenant);
 
                 return FeeInvoice::create([
@@ -56,10 +58,11 @@ class FeeInvoiceService
                     'invoice_number' => $this->invoiceNumber($tenant, $sequenceNumber),
                     'description' => $lineCount > 1 ? 'Instalment '.($index + 1).' of '.$lineCount : 'Full fee',
                     'amount' => $amount,
-                    'gst_rate' => self::GST_RATE,
+                    'gst_rate' => $taxRate,
                     'gst_amount' => $gstAmount,
                     'total_amount' => $amount + $gstAmount,
                     'discount_amount' => 0,
+                    'currency' => $tenant->default_currency,
                     'due_date' => now()->addDays((int) ($line['days_after_enrolment'] ?? 0))->toDateString(),
                     'status' => 'pending',
                     'gstin_snapshot' => $tenant->gstin,
@@ -81,7 +84,8 @@ class FeeInvoiceService
         return DB::transaction(function () use ($program, $user) {
             $tenant = app(CurrentTenant::class)->get();
             $amount = (float) $program->price;
-            $gstAmount = round($amount * self::GST_RATE / 100, 2);
+            $taxRate = $this->taxRateFor($tenant);
+            $gstAmount = round($amount * $taxRate / 100, 2);
             $sequenceNumber = $this->nextSequenceNumber($tenant);
 
             return FeeInvoice::create([
@@ -91,10 +95,11 @@ class FeeInvoiceService
                 'invoice_number' => $this->invoiceNumber($tenant, $sequenceNumber),
                 'description' => "Program: {$program->title}",
                 'amount' => $amount,
-                'gst_rate' => self::GST_RATE,
+                'gst_rate' => $taxRate,
                 'gst_amount' => $gstAmount,
                 'total_amount' => $amount + $gstAmount,
                 'discount_amount' => 0,
+                'currency' => $tenant->default_currency,
                 'due_date' => now()->toDateString(),
                 'status' => 'pending',
                 'gstin_snapshot' => $tenant->gstin,
@@ -116,7 +121,8 @@ class FeeInvoiceService
         return DB::transaction(function () use ($plan, $user) {
             $tenant = app(CurrentTenant::class)->get();
             $amount = (float) $plan->price;
-            $gstAmount = round($amount * self::GST_RATE / 100, 2);
+            $taxRate = $this->taxRateFor($tenant);
+            $gstAmount = round($amount * $taxRate / 100, 2);
             $sequenceNumber = $this->nextSequenceNumber($tenant);
 
             return FeeInvoice::create([
@@ -126,15 +132,28 @@ class FeeInvoiceService
                 'invoice_number' => $this->invoiceNumber($tenant, $sequenceNumber),
                 'description' => "Membership: {$plan->name}",
                 'amount' => $amount,
-                'gst_rate' => self::GST_RATE,
+                'gst_rate' => $taxRate,
                 'gst_amount' => $gstAmount,
                 'total_amount' => $amount + $gstAmount,
                 'discount_amount' => 0,
+                'currency' => $tenant->default_currency,
                 'due_date' => now()->toDateString(),
                 'status' => 'pending',
                 'gstin_snapshot' => $tenant->gstin,
             ]);
         });
+    }
+
+    /**
+     * S20 P10 (design doc §4 decision 4) — generalizes the hardcoded
+     * `GST_RATE` constant into a per-tenant configurable value.
+     * `tenants.tax_rate` is nullable and falls back to the same 18%
+     * default every tenant already had, so an institute that never
+     * configures one sees byte-identical invoices to before this block.
+     */
+    protected function taxRateFor(Tenant $tenant): float
+    {
+        return $tenant->tax_rate ?? self::GST_RATE;
     }
 
     /**

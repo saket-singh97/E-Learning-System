@@ -111,6 +111,41 @@ it('shows a discount line and the coupon code once one has been applied', functi
         ->assertSee('100.00');
 });
 
+it('renders the tenants own configured tax label and currency once set, instead of GST/rupees', function () {
+    $vatTenant = Tenant::factory()->create([
+        'subdomain' => 'chemistry',
+        'tax_rate' => 20,
+        'tax_label' => 'VAT',
+        'default_currency' => 'USD',
+    ]);
+    app(CurrentTenant::class)->set($vatTenant);
+
+    $course = Course::create(['title' => 'Chem 101', 'slug' => 'chem-101', 'status' => 'published']);
+    $batch = Batch::create([
+        'course_id' => $course->id,
+        'title' => 'Batch',
+        'slug' => 'batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'self_enrol_direct',
+        'status' => 'published',
+        'is_paid' => true,
+        'price' => 1000,
+    ]);
+    $student = User::factory()->create(['tenant_id' => $vatTenant->id]);
+    $student->assignRole('student');
+    $enrolment = app(BatchEnrolmentService::class)->enrol($student, $batch);
+    $invoice = FeeInvoice::where('enrolment_id', $enrolment->id)->sole();
+
+    $this->actingAs($student)
+        ->get("http://chemistry.lms.test/invoices/{$invoice->id}")
+        ->assertOk()
+        ->assertSee('VAT (20%)')
+        ->assertSee('$1,200.00')
+        ->assertDontSee('GST (')
+        ->assertDontSee('₹');
+});
+
 it('renders "Not registered" instead of a blank GSTIN for a tenant that has not set one', function () {
     $bareTenant = Tenant::factory()->create(['subdomain' => 'chemistry', 'gstin' => null]);
     app(CurrentTenant::class)->set($bareTenant);

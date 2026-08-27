@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | ✅ done |
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | ✅ done |
 | B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | ✅ done |
-| B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | not started |
+| B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | ✅ done |
 | B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | not started |
 | B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | not started |
 | B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | not started |
@@ -222,18 +222,50 @@ wired to a scheduled job; automating the actual renewal cadence is a
 fast-follow the same way. Full suite: 1741/1744 — same 3 pre-existing/
 unrelated failures as B0-B3's runs, no new failures.
 
-### B5 — P10: multi-currency + tax generalization
+### B5 — P10: multi-currency + tax generalization — DONE
 
-- [ ] `fee_invoices.currency`/`tenants.default_currency` migrations
+- [x] `fee_invoices.currency`/`tenants.default_currency` migrations
       (default `'INR'` — zero behavior change for every existing tenant).
-- [ ] `tenants.tax_rate`/`tax_label` migrations, `FeeInvoiceService` (or
+- [x] `tenants.tax_rate`/`tax_label` migrations, `FeeInvoiceService` (or
       wherever GST is currently computed — confirm the exact call site
       before this block starts) reads the tenant's own configured rate
       instead of a hardcoded percentage, falling back to the existing GST
       default when unconfigured.
-- [ ] Tests: an invoice generated for a tenant with a configured non-INR
+- [x] Tests: an invoice generated for a tenant with a configured non-INR
       currency/non-GST tax label renders correctly; an unconfigured tenant
       behaves byte-identical to today.
+
+Confirmed the exact GST call sites before touching anything (not guessed):
+`FeeInvoiceService::GST_RATE` was read in exactly three places —
+`invoicesFor()`, `invoiceForProgram()`, and B4's own new
+`invoiceForMembership()` — all three now call one new
+`taxRateFor(Tenant $tenant): float` helper (`$tenant->tax_rate ??
+self::GST_RATE`) instead of the constant directly, and all three now also
+stamp `currency` from `$tenant->default_currency`. `gst_rate`/`gst_amount`
+column names are untouched per design doc §4 decision 4 — they still hold
+whatever tax rate actually applied, just sourced from the tenant now
+instead of a hardcoded literal. `resources/views/fees/invoice.blade.php`
+(the actual rendered tax invoice a student/admin sees — confirmed this is
+what "renders correctly" means here, not the internal Filament list
+columns, which stay INR-formatted as a deliberate scope cut: nothing in
+this block's checklist names them, and generalizing every internal amount
+column across the app is a different, much bigger task than P10's own
+"an institute can configure its own currency/tax" scope) now reads
+`$tenant->tax_label ?? 'GST'` for the line-item name and a new
+`FeeInvoice::currencySymbol()` helper (small `CURRENCY_SYMBOLS` map,
+INR/USD/EUR/GBP, falls back to `"{code} "` for anything else) instead of a
+hardcoded ₹ in all four places it appeared. `Tenant`/`FeeInvoice` both gained
+an in-memory `$attributes` default for their own new `currency`-ish column
+(mirroring the existing `gamification_leaderboard_enabled` fix) — Eloquent
+doesn't re-fetch a server-side column default after `create()`, so a
+freshly-created instance would otherwise read the new column as `null`
+until the next query. Full suite: 1743/1747 — the same 3 pre-existing/
+unrelated failures as B0-B4's runs, plus one newly-surfaced one,
+`BackupConfigurationTest::it_does_not_zip_up_its_own_previous_archive_on_a_second_run`
+— confirmed it passes in isolation (order-dependent storage-accumulation
+flake, same class as the two `DownloadCompletionExportControllerTest`/
+`DownloadEnrolmentExportControllerTest` cases already carried; nothing in
+this block's diff touches backups) before marking this block done.
 
 ### B6 — Q6: platform revenue analytics
 

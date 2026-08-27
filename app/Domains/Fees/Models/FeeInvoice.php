@@ -23,6 +23,22 @@ class FeeInvoice extends Model
 
     public const STATUSES = ['pending', 'paid', 'overdue', 'cancelled'];
 
+    /** @var array<string, string> ISO 4217 code => display symbol, falls back to "{code} " for anything not listed. */
+    public const CURRENCY_SYMBOLS = [
+        'INR' => '₹',
+        'USD' => '$',
+        'EUR' => '€',
+        'GBP' => '£',
+    ];
+
+    // Matches the DB column default — same reason Tenant's own
+    // `gamification_leaderboard_enabled` needs this: Eloquent doesn't
+    // re-fetch a server-side default after create(), so a freshly-created
+    // (not re-queried) instance would otherwise read `currency` as null.
+    protected $attributes = [
+        'currency' => 'INR',
+    ];
+
     protected $fillable = [
         'tenant_id',
         'batch_id',
@@ -38,6 +54,7 @@ class FeeInvoice extends Model
         'gst_rate',
         'gst_amount',
         'total_amount',
+        'currency',
         'discount_amount',
         'due_date',
         'status',
@@ -91,5 +108,10 @@ class FeeInvoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(FeePayment::class);
+    }
+
+    public function currencySymbol(): string
+    {
+        return self::CURRENCY_SYMBOLS[$this->currency] ?? "{$this->currency} ";
     }
 }

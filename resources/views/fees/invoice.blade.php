@@ -59,21 +59,21 @@
             <tr>
                 <td>{{ $invoice->description }} — {{ $invoice->batch->course->title }} ({{ $invoice->batch->title }})</td>
                 <td>9992</td>
-                <td>&#8377;{{ number_format((float) $invoice->amount, 2) }}</td>
+                <td>{{ $invoice->currencySymbol() }}{{ number_format((float) $invoice->amount, 2) }}</td>
             </tr>
             @if ((float) $invoice->discount_amount > 0)
                 <tr>
                     <td colspan="2">Discount{{ $invoice->coupon ? ' ('.$invoice->coupon->code.')' : '' }}</td>
-                    <td>&minus;&#8377;{{ number_format((float) $invoice->discount_amount, 2) }}</td>
+                    <td>&minus;{{ $invoice->currencySymbol() }}{{ number_format((float) $invoice->discount_amount, 2) }}</td>
                 </tr>
             @endif
             <tr>
-                <td colspan="2">GST ({{ rtrim(rtrim(number_format((float) $invoice->gst_rate, 2), '0'), '.') }}%)</td>
-                <td>&#8377;{{ number_format((float) $invoice->gst_amount, 2) }}</td>
+                <td colspan="2">{{ $tenant->tax_label ?? 'GST' }} ({{ rtrim(rtrim(number_format((float) $invoice->gst_rate, 2), '0'), '.') }}%)</td>
+                <td>{{ $invoice->currencySymbol() }}{{ number_format((float) $invoice->gst_amount, 2) }}</td>
             </tr>
             <tr class="total-row">
                 <td colspan="2">Total</td>
-                <td>&#8377;{{ number_format((float) $invoice->total_amount, 2) }}</td>
+                <td>{{ $invoice->currencySymbol() }}{{ number_format((float) $invoice->total_amount, 2) }}</td>
             </tr>
         </tbody>
     </table>

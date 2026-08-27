@@ -34,6 +34,7 @@ class Tenant extends Model
     // null, not true.
     protected $attributes = [
         'gamification_leaderboard_enabled' => true,
+        'default_currency' => 'INR',
     ];
 
     protected $fillable = [
@@ -53,6 +54,9 @@ class Tenant extends Model
         'gamification_leaderboard_enabled',
         'refund_window_days',
         'fee_grace_period_days',
+        'default_currency',
+        'tax_rate',
+        'tax_label',
     ];
 
     protected function casts(): array
@@ -63,6 +67,7 @@ class Tenant extends Model
             'gamification_leaderboard_enabled' => 'boolean',
             'refund_window_days' => 'integer',
             'fee_grace_period_days' => 'integer',
+            'tax_rate' => 'float',
         ];
     }
 
