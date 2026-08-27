@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | ✅ done |
 | B5 | P10 — multi-currency columns + tenant-configurable tax rate/label, generalizing the hardcoded GST fields | ✅ done |
 | B6 | Q6 — Super-panel MRR/ARR + per-institute revenue + payment success/failure rate widget | ✅ done |
-| B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | not started |
+| B7 | R1 pt.1 — `Growth` domain scaffold + `affiliate_codes`/`affiliate_referrals` schema + code generation + attribution at payment time | ✅ done |
 | B8 | R1 pt.2 — commission calculation + reversal-on-refund listener (fires off B1's own refund completion) | not started |
 | B9 | R2 — affiliate-facing earnings dashboard + `affiliate_payout_requests` flow | not started |
 | B10 | R3 pt.1 — `instructor_payouts` schema + admin approval workflow (salaried basis) | not started |
@@ -313,18 +313,40 @@ since S1/S2); the storage-pollution flakes B5's own writeup noted didn't
 reproduce this run, consistent with them being timing/order-dependent
 rather than something this block's diff touches.
 
-### B7 — R1 pt.1: Growth domain + affiliate schema
+### B7 — R1 pt.1: Growth domain + affiliate schema — DONE
 
-- [ ] New `app/Domains/Growth/` domain — `affiliate_codes`/
+- [x] New `app/Domains/Growth/` domain — `affiliate_codes`/
       `affiliate_referrals` migrations + models, registered in
       `TenantModelRegistry`.
-- [ ] Code generation (unique per tenant) + attribution: a referred
+- [x] Code generation (unique per tenant) + attribution: a referred
       signup/payment records which affiliate code was used at the point of
       payment, same "single write chokepoint" discipline `ForumPostComposer`
       (S19) established for its own shared write path.
-- [ ] Tests: a code attributes a payment to the right affiliate, an
+- [x] Tests: a code attributes a payment to the right affiliate, an
       unrecognized/disabled code attributes nothing, cross-tenant codes
       never collide or leak.
+
+`Growth` gets only `Models/`/`Services/` for now — `Filament/`/`Livewire/`/
+`Jobs/`/`Policies/`/`Events/` stay unscaffolded until a later block actually
+needs one (R2's dashboard, R3's payouts), same "don't scaffold for later"
+posture every prior slice's own domain introduction took. Two services,
+split along the same "generation vs. attribution" line the checklist
+itself draws: `AffiliateCodeService::createFor()` mints a code
+(`ParentInviteCodeService`'s own generator pattern, adapted — unique
+**per tenant** here via the DB's `(tenant_id, code)` composite index,
+not globally unique the way an invite code is, since two institutes
+running separate affiliate programs may legitimately mint the same code
+text); `AffiliateAttributionService::attribute()` is the actual
+"at the point of payment" chokepoint the checklist names — takes a
+`FeePayment` and a raw code string, creates one `pending`
+`AffiliateReferral` (`commission_amount` starts at 0; B8 computes the real
+figure and confirms it) if the code resolves to an `active` row for the
+*current* tenant, returns `null` and writes nothing otherwise. Wiring an
+actual code-entry field into the checkout UI is left for whichever block
+needs it (not named in this one's own checklist — B7 only names "code
+generation + attribution" as a service capability, not a UI). Full suite:
+1762/1763 — only the one long-standing `CourseSlugUniquenessTest` failure
+(carried since S1/S2); no new failures.
 
 ### B8 — R1 pt.2: commission + reversal
 

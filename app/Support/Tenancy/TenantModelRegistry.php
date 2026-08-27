@@ -80,6 +80,8 @@ use App\Domains\Planner\Models\PlannerEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Fees\Models\FeePayment;
 use App\Domains\Fees\Models\FeeRefund;
+use App\Domains\Growth\Models\AffiliateCode;
+use App\Domains\Growth\Models\AffiliateReferral;
 use App\Domains\Fees\Models\StudentMembershipPlan;
 use App\Domains\Fees\Models\StudentSubscription;
 use App\Domains\Security\Models\AccountSharingFlag;
@@ -124,6 +126,8 @@ class TenantModelRegistry
         FeeRefund::class,
         StudentMembershipPlan::class,
         StudentSubscription::class,
+        AffiliateCode::class,
+        AffiliateReferral::class,
         ParentGuardianLink::class,
         ParentInviteCode::class,
         Assignment::class,
@@ -542,6 +546,41 @@ class TenantModelRegistry
                 'status' => 'active',
                 'current_period_start' => now(),
                 'current_period_end' => now()->addMonth(),
+            ],
+            AffiliateCode::class => [
+                'owner_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'code' => 'ROW'.strtoupper(substr(uniqid(), -6)),
+                'commission_type' => 'percentage',
+                'commission_value' => 10,
+                'status' => 'active',
+            ],
+            AffiliateReferral::class => [
+                'affiliate_code_id' => AffiliateCode::create([
+                    'owner_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                    'code' => 'PAR'.strtoupper(substr(uniqid(), -6)),
+                    'commission_type' => 'percentage',
+                    'commission_value' => 10,
+                    'status' => 'active',
+                ])->id,
+                'referred_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'fee_payment_id' => FeePayment::create([
+                    'fee_invoice_id' => FeeInvoice::create([
+                        'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                        'sequence_number' => 1,
+                        'invoice_number' => 'INV-ROW-'.uniqid(),
+                        'description' => 'Row',
+                        'amount' => 100,
+                        'gst_amount' => 18,
+                        'total_amount' => 118,
+                        'due_date' => now()->toDateString(),
+                    ])->id,
+                    'provider_order_id' => 'order_row_'.uniqid(),
+                    'idempotency_key' => 'idem_'.uniqid(),
+                    'amount' => 118,
+                    'status' => 'captured',
+                ])->id,
+                'commission_amount' => 0,
+                'status' => 'pending',
             ],
             ParentGuardianLink::class => [
                 'parent_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
@@ -1239,6 +1278,8 @@ class TenantModelRegistry
             FeeRefund::class => ['status' => 'tampered'],
             StudentMembershipPlan::class => ['name' => 'tampered'],
             StudentSubscription::class => ['status' => 'tampered'],
+            AffiliateCode::class => ['status' => 'disabled'],
+            AffiliateReferral::class => ['status' => 'tampered'],
             ParentGuardianLink::class => ['relationship' => 'tampered'],
             ParentInviteCode::class => ['redeemed_at' => now()],
             Assignment::class => ['title' => 'tampered'],
