@@ -43,7 +43,7 @@ stop and report before starting the next block.
 | B11 | N12 pt.2 — student-facing calendar Livewire view + custom event CRUD | ✅ done |
 | B12 | N12 pt.3 — signed iCal feed export | ✅ done |
 | B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | ✅ done |
-| B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | not started |
+| B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | ✅ done |
 | B15 | `TenantModelRegistry` sweep — all 10 new `BelongsToTenant` models confirmed registered | not started |
 | B16 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
@@ -560,18 +560,66 @@ target.
       on a retried job), streak increments/resets correctly, a badge
       auto-awards exactly once when its criteria is first met.
 
-### B14 — N18 pt.2: XP UI + leaderboard
+### B14 — N18 pt.2: XP UI + leaderboard — done
 
-- [ ] Student-facing widget — XP total, level, current streak, earned
-      badges.
-- [ ] Per-batch leaderboard, computed at read time (no materialized rank
-      column, same posture as `TestSeriesRankingService`).
-- [ ] `tenants.gamification_leaderboard_enabled` migration + toggle;
-      leaderboard hidden tenant-wide when off, profile/badges still visible
-      to the student themself.
-- [ ] Tests: widget shows the right XP/level/streak/badges; leaderboard
-      ranks correctly within a batch; opt-out hides the leaderboard but not
-      the student's own profile.
+- [x] `App\Domains\Analytics\Livewire\GamificationWidget` — own
+      `GamificationProfile` (XP total, level, current/longest streak) and
+      earned `StudentBadge` list, both always visible regardless of the
+      leaderboard opt-out. No profile row yet (no XP awarded) reads as the
+      same level-1/0-XP defaults `GamificationService` would create on
+      first award, not an error — built as a throwaway in-memory
+      `GamificationProfile` instance, never persisted. Routed `GET
+      /gamification` (`routes/analytics.php`, no `auth` middleware, same
+      "guest sees a log-in prompt inside the component" shape `Calendar`'s
+      own route already established), registered as
+      `analytics.gamification-widget`.
+- [x] `App\Domains\Analytics\Services\LeaderboardService::rankingsFor()` —
+      same "PHP-side sort, no raw SQL, no materialized rank column,
+      computed at read time" posture `TestSeriesRankingService` (S16)
+      already established (this app's security baseline forbids raw-SQL
+      query methods in `app/Domains/`). Scoped to one batch's own `active`
+      enrolments, tenant-matched explicitly off the batch
+      (`Enrolment::where('tenant_id', $batch->tenant_id)`), not trusted to
+      `CurrentTenant`'s own binding — same belt-and-suspenders
+      `TestSeriesRankingService` already takes. A student never awarded any
+      XP has no `GamificationProfile` row and so doesn't appear on the
+      board at all (no zero-fill entry) — same "no zero-fill penalty"
+      judgment call `TestSeriesRankingService` already made for a student
+      who never attempted a series quiz. The widget's own batch picker
+      only ever lists batches the viewer holds an active enrolment in, so
+      a viewer can't name an arbitrary batch id to view another batch's
+      board.
+- [x] `tenants.gamification_leaderboard_enabled` migration (boolean,
+      default true) + `Tenant::$fillable`/cast. **Real bug caught by the
+      opt-out test itself, before it shipped**: `Tenant::factory()->create()`
+      never sets this new column, so the in-memory model read the
+      attribute as `null` (Eloquent doesn't re-fetch a server-side column
+      default into memory after an `INSERT` — `$attributes` not present in
+      the payload just stay unset in memory even though the DB row itself
+      correctly defaults to `true`), and `null` fails the widget's
+      `$tenant->gamification_leaderboard_enabled` truthiness check the
+      same way `false` would — every freshly-created-and-not-refetched
+      tenant silently rendered "leaderboard disabled" regardless of the
+      real column value. Fixed at the model, not the test: `Tenant` gained
+      a `protected $attributes = ['gamification_leaderboard_enabled' =>
+      true]` class-level default, matching the DB column default, so a
+      brand-new in-memory instance (factory or `::create()`) and a
+      DB-hydrated one now agree. Leaderboard hidden tenant-wide when off;
+      the widget's own profile/badges section reads `$tenant` only for the
+      leaderboard section, so it never disappears with it.
+- [x] Tests (8 total — 5 `GamificationWidgetTest`, 3 `LeaderboardServiceTest`):
+      widget shows XP/level/streak from a real profile and the level-1/0-XP
+      default with none yet; earned badges list by name; leaderboard ranks
+      two batchmates by XP descending; opt-out hides the leaderboard
+      section but not the profile; `LeaderboardService` ranks by XP
+      descending, excludes a non-`active` enrolment, and never leaks a
+      different tenant's own batch/student into the ranking.
+- `composer test`: 1714/1716 pass (8 new tests; the 2 failures are both
+  pre-existing/environmental — the standing `CourseSlugUniquenessTest`
+  (carried since S1/S2) and `BackupConfigurationTest`'s archive-size
+  assertion (accumulated stray export files from repeated full-suite
+  reruns this session, same class logged in S16 B7/B11/B17 and B0's own
+  note above) — neither caused by this block.
 
 ### B15 — `TenantModelRegistry` sweep
 

@@ -28,6 +28,14 @@ class Tenant extends Model
 
     public const PLAN_TIER_PAID = 'paid';
 
+    // Matches the DB column default — Eloquent doesn't re-fetch a
+    // server-side default into memory after create(), so without this a
+    // freshly-created (not re-queried) instance reads this attribute as
+    // null, not true.
+    protected $attributes = [
+        'gamification_leaderboard_enabled' => true,
+    ];
+
     protected $fillable = [
         'name',
         'subdomain',
@@ -42,6 +50,7 @@ class Tenant extends Model
         'plan_tier',
         'plan_id',
         'at_risk_threshold_percent',
+        'gamification_leaderboard_enabled',
     ];
 
     protected function casts(): array
@@ -49,6 +58,7 @@ class Tenant extends Model
         return [
             'custom_domain_verified_at' => 'datetime',
             'at_risk_threshold_percent' => 'float',
+            'gamification_leaderboard_enabled' => 'boolean',
         ];
     }
 

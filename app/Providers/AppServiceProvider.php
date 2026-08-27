@@ -44,6 +44,7 @@ use App\Domains\AI\Services\AiSpendCap;
 use App\Domains\Analytics\Listeners\AwardXpOnAssignmentSubmission;
 use App\Domains\Analytics\Listeners\AwardXpOnAttendance;
 use App\Domains\Analytics\Listeners\AwardXpOnQuizSubmission;
+use App\Domains\Analytics\Livewire\GamificationWidget;
 use App\Domains\Assessments\Events\QuizAttemptSubmitted;
 use App\Domains\Assignments\Events\AssignmentSubmitted;
 use App\Integrations\AiProvider;
@@ -231,6 +232,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('planner.calendar', Calendar::class);
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
+        Livewire::component('analytics.gamification-widget', GamificationWidget::class);
 
         // Unscoped (no third $scopes argument) — applies to all three
         // Filament panels (admin/teach/super) with one registration,
