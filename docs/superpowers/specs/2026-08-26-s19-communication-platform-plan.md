@@ -44,7 +44,7 @@ stop and report before starting the next block.
 | B12 | N12 pt.3 — signed iCal feed export | ✅ done |
 | B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | ✅ done |
 | B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | ✅ done |
-| B15 | `TenantModelRegistry` sweep — all 10 new `BelongsToTenant` models confirmed registered | not started |
+| B15 | `TenantModelRegistry` sweep — all 10 new `BelongsToTenant` models confirmed registered | ✅ done |
 | B16 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
 **Test suite baseline:** 1517+/1518+ passing at slice start per S16/S17/S18's
@@ -621,16 +621,34 @@ target.
   reruns this session, same class logged in S16 B7/B11/B17 and B0's own
   note above) — neither caused by this block.
 
-### B15 — `TenantModelRegistry` sweep
+### B15 — `TenantModelRegistry` sweep — done
 
-- [ ] Reverse sweep (same method S16 B16/S17 B12 used): grep every
+- [x] Reverse sweep (same method S16 B16/S17 B12 used): grepped every
       `app/Domains/*/Models/*.php` for a real `use BelongsToTenant`
-      declaration, diff against `TenantModelRegistry::MODELS`, confirm zero
-      gaps either direction. All 10 new S19 models
-      (`Survey`, `SurveyQuestion`, `SurveyResponse`, `SurveyAnswer`,
-      `HelpDeskTicket`, `HelpDeskTicketReply`, `PlannerEvent`,
-      `GamificationProfile`, `Badge`, `StudentBadge`) confirmed present with
-      working `seedAttributes()`/`updateAttributes()` entries.
+      declaration — anchored to a line starting with `use` (either the
+      `use App\Support\Tenancy\BelongsToTenant;` import or the in-class
+      `use BelongsToTenant[, OtherTrait];` statement), not a bare substring
+      match. A naive substring grep for `"use BelongsToTenant"` first
+      flagged `ImpersonationAudit` as an apparent gap — a false positive:
+      its own docblock literally contains the sentence "Deliberately does
+      NOT use BelongsToTenant..." (explained there since `tenant_id` is set
+      explicitly by `ImpersonationService` from the target user's own
+      tenant, never resolved from `CurrentTenant`), which a substring match
+      can't tell apart from real code. The anchored re-grep found exactly
+      **83** models with a genuine trait declaration, diffed 1:1 against
+      `TenantModelRegistry::MODELS`' own 83 entries — zero gaps either
+      direction. All 10 new S19 models (`Survey`, `SurveyQuestion`,
+      `SurveyResponse`, `SurveyAnswer`, `HelpDeskTicket`,
+      `HelpDeskTicketReply`, `PlannerEvent`, `GamificationProfile`,
+      `Badge`, `StudentBadge`) confirmed present in `MODELS`,
+      `seedAttributes()`, and `updateAttributes()` alike (all three
+      sections checked, not just the `MODELS` list) — already wired
+      correctly by B7/B10/B13, nothing to add.
+- No code changes this block — pure verification, per the plan's own
+  scope. `composer test`: 1714/1716 pass (unchanged from B14 — no diff
+  introduced here; the 2 failures are the same standing pre-existing/
+  environmental ones — `CourseSlugUniquenessTest` and
+  `BackupConfigurationTest`'s archive-size assertion).
 
 ### B16 — Full test coverage, review pass
 
