@@ -3,6 +3,7 @@
 namespace App\Integrations\Drivers;
 
 use App\Domains\Fees\Models\FeeInvoice;
+use App\Domains\Fees\Models\FeePayment;
 use App\Integrations\PaymentProvider;
 
 /**
@@ -40,5 +41,12 @@ class FakeRazorpayDriver implements PaymentProvider
     public function verifyWebhookSignature(string $payload, string $signature): bool
     {
         return hash_equals(hash_hmac('sha256', $payload, self::FAKE_SECRET), $signature);
+    }
+
+    public function refund(FeePayment $payment, float $amount, string $idempotencyKey): array
+    {
+        return [
+            'refund_id' => 'rfnd_fake_'.dechex(crc32("payment#{$payment->id}#{$idempotencyKey}#".uniqid('', true))),
+        ];
     }
 }

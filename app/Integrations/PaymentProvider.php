@@ -3,6 +3,7 @@
 namespace App\Integrations;
 
 use App\Domains\Fees\Models\FeeInvoice;
+use App\Domains\Fees\Models\FeePayment;
 
 interface PaymentProvider
 {
@@ -32,4 +33,16 @@ interface PaymentProvider
      * enough to mark an invoice paid.
      */
     public function verifyWebhookSignature(string $payload, string $signature): bool;
+
+    /**
+     * Refunds part or all of an already-captured payment, against its own
+     * gateway payment id (never the order id — Razorpay's Refunds API is
+     * scoped to a payment, not an order). $idempotencyKey is sent as
+     * Razorpay's own `X-Refund-Idempotency` header (confirmed against
+     * Razorpay's Refunds API docs, not assumed) so a retried approval
+     * click can never double-refund the same request.
+     *
+     * @return array{refund_id: string}
+     */
+    public function refund(FeePayment $payment, float $amount, string $idempotencyKey): array;
 }

@@ -3,6 +3,7 @@
 namespace App\Integrations\Drivers;
 
 use App\Domains\Fees\Models\FeeInvoice;
+use App\Domains\Fees\Models\FeePayment;
 use App\Integrations\PaymentProvider;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -50,6 +51,31 @@ class RazorpayProvider implements PaymentProvider
             'amount' => (float) $invoice->total_amount,
             'currency' => 'INR',
         ];
+    }
+
+    /**
+     * POST /v1/payments/:id/refund (confirmed against Razorpay's own Refunds
+     * API docs, not assumed) — `amount` in paise, `X-Refund-Idempotency`
+     * header carries the idempotency key so a retried approval click can
+     * never issue a second refund for the same request.
+     */
+    public function refund(FeePayment $payment, float $amount, string $idempotencyKey): array
+    {
+        [$keyId, $keySecret] = $this->credentials();
+
+        $response = Http::withBasicAuth($keyId, $keySecret)
+            ->withHeaders(['X-Refund-Idempotency' => $idempotencyKey])
+            ->post("https://api.razorpay.com/v1/payments/{$payment->provider_payment_id}/refund", [
+                'amount' => (int) round($amount * 100), // paise
+                'notes' => [
+                    'tenant_id' => (string) $payment->tenant_id,
+                    'fee_payment_id' => (string) $payment->id,
+                ],
+            ])
+            ->throw()
+            ->json();
+
+        return ['refund_id' => $response['id']];
     }
 
     public function verifyWebhookSignature(string $payload, string $signature): bool

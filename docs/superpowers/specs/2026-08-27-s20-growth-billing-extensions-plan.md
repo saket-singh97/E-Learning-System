@@ -27,7 +27,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | P6 pt.1 — `fee_refunds` schema + refund-eligibility service (institute-configured window) | ✅ done |
-| B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | not started |
+| B1 | P6 pt.2 — staff approval Filament action + `PaymentProvider::refund()` + gateway call | ✅ done |
 | B2 | P8 — `tenants.fee_grace_period_days` + `LessonAccess` overdue-instalment gate, enrolment-scoped | not started |
 | B3 | P9 pt.1 — `student_membership_plans`/`student_subscriptions` schema + institute-side plan builder | not started |
 | B4 | P9 pt.2 — student checkout/trial flow + Razorpay recurring subscription + proration on upgrade | not started |
@@ -77,22 +77,52 @@ S1/S2; two `DownloadCompletionExportControllerTest`/
 storage-pollution flakes already flagged in S19 B16 — both pass in
 isolation, confirmed before marking this block done).
 
-### B1 — P6 pt.2: approval + gateway call
+### B1 — P6 pt.2: approval + gateway call — DONE
 
-- [ ] `PaymentProvider::refund()` (new interface method) + Razorpay driver
+- [x] `PaymentProvider::refund()` (new interface method) + Razorpay driver
       implementation.
-- [ ] Staff-facing request/approve/reject Filament actions on a
+- [x] Staff-facing request/approve/reject Filament actions on a
       `FeeRefundResource` (or an existing invoice/payment resource's own
       relation manager — decide against the real `FeePayment` UI once this
       block starts, not guessed here).
-- [ ] Approval calls `RefundEligibilityService` again (client-settable
+- [x] Approval calls `RefundEligibilityService` again (client-settable
       state re-verified at the point of action, same discipline every
       prior slice's own review passes have had to add after the fact —
       built in from B1's first draft this time).
-- [ ] Tests: approval processes the refund and updates status; rejection
+- [x] Tests: approval processes the refund and updates status; rejection
       leaves the original payment untouched; an admin can't approve a
       refund past the eligibility window even if the request itself was
       raised inside it.
+
+Went with a standalone `FeeRefundResource` (request/approve/reject queue),
+not a relation manager on `FeePaymentResource` — a flat admin queue of
+open requests reads more naturally than one buried per-payment (same shape
+`MessageReportResource` established for a similar "flag, staff decides"
+resource). Endpoint/header confirmed against Razorpay's own Refunds API
+docs before writing, not assumed: `POST /v1/payments/:id/refund`,
+idempotency via the `X-Refund-Idempotency` header (distinct from Orders,
+which has no header and relies on its own `receipt` field instead — the
+two APIs differ here, so `createOrder()`'s own idiom wasn't just copied
+over blind). `CircuitBreakerGuardedPaymentDriver` wraps `refund()` too,
+same as `createOrder()` — both are real outbound vendor calls. Approval and
+rejection both go through one `RefundApprovalService` that
+`lockForUpdate()`s the `FeeRefund` row and re-checks `status === 'pending'`
+before acting, closing the "two approvals of the same request" race B14's
+own checklist flags as an expected finding — built in now rather than
+patched after a future review pass, with its own test. A single `approve`
+action carries a request straight from `pending` to `processed` (calling
+the gateway synchronously), matching design doc §4 decision 1's own
+wording; `approved` stays a defined status on the model without being a
+separate step, since nothing in this block's scope needs an
+approved-but-not-yet-processed intermediate state. Fixed a pre-existing
+anonymous `PaymentProvider` implementation in
+`tests/Feature/Support/CircuitBreakerGuardedPaymentDriverTest.php` that
+would have hit a fatal "must implement refund()" once the interface grew a
+new method — added `refund()` to it plus a breaker-trip test for the new
+method, mirroring the existing `createOrder()` coverage. Full suite:
+1727/1730 — same 3 pre-existing/unrelated failures as B0's run
+(`CourseSlugUniquenessTest`, plus the two order-dependent export-controller
+storage-pollution flakes), no new failures.
 
 ### B2 — P8: grace period access restriction
 
