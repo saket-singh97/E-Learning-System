@@ -45,7 +45,7 @@ stop and report before starting the next block.
 | B13 | N18 pt.1 — gamification schema + XP-award listeners on existing events + streak computation | ✅ done |
 | B14 | N18 pt.2 — student-facing XP/level/badges/streak widget + per-batch leaderboard + tenant opt-out | ✅ done |
 | B15 | `TenantModelRegistry` sweep — all 10 new `BelongsToTenant` models confirmed registered | ✅ done |
-| B16 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
+| B16 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite baseline:** 1517+/1518+ passing at slice start per S16/S17/S18's
 own final counts (1 pre-existing, unrelated `CourseSlugUniquenessTest`
@@ -650,18 +650,68 @@ target.
   environmental ones — `CourseSlugUniquenessTest` and
   `BackupConfigurationTest`'s archive-size assertion).
 
-### B16 — Full test coverage, review pass
+### B16 — Full test coverage, review pass — done
 
-- [ ] Lifecycle E2E: a student raises a help-desk ticket → staff replies →
-      requester sees the reply in real time → resolves, chained in one run;
-      a full survey lifecycle — admin publishes → two students respond →
-      aggregation/CSV correct; a general-forum thread created and replied
-      to by two different-batch students, both seeing it live.
-- [ ] Dispatch a background review agent over the whole slice's diff, same
-      discipline every prior slice's final block established — expect
-      findings around channel-authorization edge cases and cross-tenant
-      leaderboard/forum visibility first, same class of bug S15/S16's own
-      review passes caught.
-- [ ] Update `HANDOVER.md` (S19 complete entry), `docs/PROJECT-STATUS.md`
-      (new S19 section), `docs/ROADMAP.md` (S19 row → Done, shipped-count
-      18→19).
+- [x] Lifecycle E2E (`tests/Feature/S19LifecycleTest.php`, 3 tests): a
+      student raises a help-desk ticket → staff reply broadcasts on the
+      ticket's own channel → requester sees it → resolved, chained in one
+      run; a full survey lifecycle — published → two students respond via
+      `SurveyRunner` → `SurveyResponseAggregator`/CSV export correct; a
+      general-forum thread created by a student in one batch and replied to
+      by a student in a *different* batch, both post-created broadcasts
+      firing on the shared `forum-thread.{id}` channel (proving the forum
+      is genuinely batch-agnostic, not just "works for the same batch").
+- [x] Dispatched an 8-angle background review pass (`/code-review high`)
+      over the full slice diff (`35418ce..HEAD`, the design/plan commit
+      through B15). One angle (H, conventions) hit a transient API error
+      mid-run before finishing rules 3-8; the other 7 (correctness ×2,
+      removed-behavior, cross-file tracer, reuse, simplification,
+      efficiency, altitude) completed. Three real, independently-corroborated
+      bugs found and fixed:
+      1. **`DirectMessages::catchUp()`** (B1) — the reconnect-recovery path
+         omitted `threadMessages()`'s own `whereDoesntHave('reports', ...)`
+         moderation-hide filter, so a message reported-and-`actioned`
+         (hidden from the normal thread view) could resurface if the
+         viewer's socket dropped and reconnected mid-session. Fixed by
+         adding the identical filter. Flagged independently by 2 angles
+         (removed-behavior, reuse).
+      2. **`GeneralForum::canParticipate()`** (B2) — hand-rolled
+         `$viewer !== null` instead of delegating to
+         `ForumThreadAccess::canParticipateInThread()` the way `BatchForum`
+         correctly does (B3), dropping the explicit tenant check that class
+         performs. Masked today by `ForumThread`'s own global scope, but
+         CLAUDE.md documents exactly why that scope alone isn't trusted as
+         a sole boundary. Fixed: `openThread()`/`reply()` now pass their
+         already-fetched thread through to `ForumThreadAccess`; the two
+         call sites with no thread yet (`createThread`, the initial
+         `render()` gate) fall back to an explicit `CurrentTenant`
+         tenant-match check. Flagged independently by 3 angles (altitude,
+         reuse, removed-behavior).
+      3. **`AwardXpOnAttendance`** (B13) — awarded XP to *any*
+         `AttendanceRecorded` event with `status === 'present'`, including
+         the instructor's own presence fired by
+         `BatchSessionsRelationManager::markMyAttendance` (S16 B5) — a
+         student-facing feature silently leaking onto teaching-staff
+         accounts. Fixed with a `hasRole('student')` guard on the event's
+         own user; `GamificationListenersTest` gained a regression test and
+         its `beforeEach` now assigns the `student` role (needed for the
+         new guard to pass on the existing tests). Flagged by the
+         cross-file tracer angle.
+      Deferred as fast-follow, not fixed this slice (documented, not
+      silently dropped): `GamificationService::awardXp()`'s check-then-insert
+      has a narrow concurrent-same-user race window — the unique
+      `(user_id)` index prevents data corruption but not an uncaught
+      `QueryException` mid-batch; `HelpDeskSlaSweep`/
+      `SurveyResponseAggregator`/`BadgeEvaluator`/`GamificationWidget` each
+      have an N+1-query pattern worth batching once volume makes it slow;
+      `GeneralForum`/`BatchForum` and 7 page-wrapper Blade views duplicate
+      structure a shared base class/layout would remove; `config/broadcasting.php`/
+      `config/reverb.php` carry unused multi-driver/scaling stub config.
+- [x] Updated `HANDOVER.md` (S19 complete entry), `docs/PROJECT-STATUS.md`
+      (S19 section rewritten complete), `docs/ROADMAP.md` (S19 row → Done,
+      shipped-count 18→19, P2/P3 phase counts adjusted for N11/N12/N15/N16
+      and N14/N18 respectively).
+- `composer test`: 1718+/1719+ pass (11 new tests this block — 3 lifecycle
+  E2E + 1 attendance-XP regression + others from the earlier B0-B15 count;
+  sole failure the pre-existing unrelated `CourseSlugUniquenessTest`).
+  **S19 Communication Platform fully done — all 17 blocks (B0-B16) shipped.**

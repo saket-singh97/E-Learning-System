@@ -18,6 +18,7 @@ use App\Exceptions\QuizAttemptAlreadySubmittedException;
 use App\Livewire\AssignmentSubmit;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -26,10 +27,13 @@ use Livewire\Livewire;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
+    $this->seed(RoleSeeder::class);
+
     $this->tenant = Tenant::factory()->create();
     app(CurrentTenant::class)->set($this->tenant);
 
     $this->student = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $this->student->assignRole('student');
 });
 
 it('awards xp when AttendanceRecorded fires present but not absent', function () {
@@ -42,6 +46,15 @@ it('awards xp when AttendanceRecorded fires present but not absent', function ()
 
     expect(GamificationProfile::where('user_id', $this->student->id)->sole()->xp_total)
         ->toBe(GamificationService::XP_ATTENDANCE);
+});
+
+it('never awards xp when AttendanceRecorded fires for a non-student (e.g. an instructor marking their own attendance)', function () {
+    $instructor = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $instructor->assignRole('instructor');
+
+    event(new AttendanceRecorded($instructor->id, $this->tenant->id, 'present'));
+
+    expect(GamificationProfile::where('user_id', $instructor->id)->exists())->toBeFalse();
 });
 
 it('awards xp exactly once for a quiz attempt submit, never on a rejected resubmit', function () {

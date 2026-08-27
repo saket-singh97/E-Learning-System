@@ -2070,12 +2070,12 @@ documents — `DirectMessage` already covers the underlying capability.
 
 **All 13 S18 blocks are now built, tested, and reviewed.**
 
-## S19 — Communication Platform: IN PROGRESS (12 of 17 blocks, as of 2026-08-27)
+## S19 — Communication Platform: COMPLETE (all 17 blocks, 2026-08-27)
 
 `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`
-and `...-plan.md` cover B0-B16 in full per-block detail — the plan file's
-own PROGRESS table is the live source of truth, not this section. New
-`laravel/reverb` broadcasting foundation (B0), first proven on
+and `...-plan.md` cover B0-B16 in full per-block detail — not repeated
+here. Real build scope was 6 items (N11/N12/N14/N15/N16/N18), 17 build
+blocks. New `laravel/reverb` broadcasting foundation (B0), first proven on
 `DirectMessages` (B1) and reused for forum threads (B3) and help-desk
 replies (B9) with no new channel-auth pattern needed each time. New
 institute-wide `GeneralForum` alongside the existing per-batch one (B2).
@@ -2086,15 +2086,81 @@ raise-a-ticket flow, staff queue (assign/reply/resolve), SLA breach sweep
 (B7-B9). New `Planner` domain — `planner_events` + `PlannerAggregator`
 (merges custom events with existing `BatchSession`/`Assignment` due dates),
 student calendar view with custom event CRUD, and a permanently-signed
-per-user `.ics` feed export for external calendar apps (B10-B12).
+per-user `.ics` feed export for external calendar apps (B10-B12). New
+`Analytics` gamification — XP-award listeners on existing attendance/quiz/
+assignment events, daily-streak counter, tenant badge catalog auto-awarded
+by `BadgeEvaluator`, student widget + per-batch `LeaderboardService` with a
+`tenants.gamification_leaderboard_enabled` opt-out (B13-B14). 10 new
+`BelongsToTenant` models, all registered in `TenantModelRegistry`
+immediately on creation, confirmed exact-complete in B15's reverse sweep
+(83 real usages, 83 registry entries).
 
-- **Remaining**: B13-B14 (gamification — XP awards on existing
-  attendance/quiz/assignment events, streaks, badge catalog, per-batch
-  leaderboard with a tenant-wide opt-out), B15 (`TenantModelRegistry`
-  reverse sweep for the slice's 10 new `BelongsToTenant` models), B16
-  (lifecycle E2E tests, dedicated review pass, this file's own
-  completion update).
-- Tests green: **1694/1695** (same 1 pre-existing, unrelated
-  `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
-  scope) — new tests across B0-B12 not yet tallied here, see the plan
-  file's own per-block counts.
+- **B13/B14** — Gamification: `GamificationService::awardXp()` is the
+  single write path for XP/streaks (design doc §4 decision 8) — three thin
+  listeners (`AwardXpOnAttendance`, `AwardXpOnQuizSubmission`,
+  `AwardXpOnAssignmentSubmission`) call it, no existing domain service
+  gained gamification logic inline. Two new events this slice added since
+  neither domain fired anything on submit before (`QuizAttemptSubmitted`,
+  `AssignmentSubmitted`). `BadgeEvaluator` runs after every award, checking
+  a badge's `xp_threshold` OR `criteria['streak_days']` generically. B14's
+  `GamificationWidget` shows the viewer's own XP/level/streak/badges
+  (always visible) plus a `LeaderboardService`-ranked per-batch board
+  (computed at read time, no raw SQL, same posture `TestSeriesRankingService`
+  already established) gated by the tenant opt-out. A real bug was caught
+  and fixed by the opt-out test itself before shipping: a freshly-created
+  `Tenant` read the new boolean column as `null`, not its own DB default of
+  `true`, because Eloquent doesn't re-fetch a server-side default after
+  `create()` — fixed with a `Tenant::$attributes` class-level default
+  matching the migration.
+- **B15** — Registry reverse sweep: 83 real `BelongsToTenant` usages, 83
+  registry entries, exact match. A naive substring grep first flagged
+  `ImpersonationAudit` as a gap — a false positive, its own docblock prose
+  literally contains "does NOT use BelongsToTenant"; an anchored re-grep
+  (real code line only) resolved it.
+- **B16** — Lifecycle E2E (help-desk ticket raised → staff reply pushed
+  live → resolved; survey published → two students respond → aggregation +
+  CSV correct; a general-forum thread created and replied to by students
+  from two different batches, both pushed live) plus an 8-angle review pass
+  over the whole slice's diff, which found and fixed 3 real bugs:
+  1. `DirectMessages::catchUp()` (the reconnect-recovery path, B1) queried
+     the same sender/recipient pair `threadMessages()` does but omitted its
+     `whereDoesntHave('reports', ...)` moderation-hide filter — a message
+     reported and marked `actioned` (hidden from the normal thread view)
+     could resurface if the viewer's socket dropped and reconnected
+     mid-session. Fixed by adding the identical filter.
+  2. `GeneralForum::canParticipate()` (B2) hand-rolled `$viewer !== null`
+     instead of delegating to `ForumThreadAccess::canParticipateInThread()`
+     the way `BatchForum` was correctly refactored to (B3) — dropping the
+     explicit tenant check that class performs. Currently masked by
+     `ForumThread`'s own global scope, but CLAUDE.md documents exactly why
+     that scope alone isn't trusted as the sole boundary (a `CurrentTenant`
+     binding failure silently stops it from filtering). Fixed by passing
+     the resolved thread through to `ForumThreadAccess` wherever one exists
+     (`openThread`/`reply`), falling back to an explicit `CurrentTenant`
+     tenant-match check for the two call sites with no thread yet
+     (`createThread`, the initial `render()` gate).
+  3. `AwardXpOnAttendance` (B13) awarded XP to *any* `AttendanceRecorded`
+     event with `status === 'present'`, including the instructor's own
+     presence fired by `BatchSessionsRelationManager::markMyAttendance`
+     (S16 B5) — a student-facing feature silently leaking onto teaching
+     staff. Fixed with a `hasRole('student')` guard on the event's own
+     user.
+  Deferred as fast-follow, not fixed this slice: `GamificationService`'s
+  check-then-insert has a narrow concurrent-same-user race window (the
+  unique `(user_id)` index prevents data corruption but not an uncaught
+  exception mid-batch); `HelpDeskSlaSweep`/`SurveyResponseAggregator`/
+  `BadgeEvaluator`/`GamificationWidget` each have an N+1-query pattern
+  worth batching if volume ever makes them slow; `GeneralForum`/`BatchForum`
+  and 7 page-wrapper Blade views duplicate structure a shared base
+  class/layout would remove.
+
+**What's still rough, on purpose:** gamification XP amounts are fixed
+per-source, not tenant-configurable, same "single hardcoded value" starting
+point H10 took before S16 gave it one. The iCal feed is hand-rolled RFC5545
+text, not a package (`sabre/vobject`/`spatie/icalendar-generator` etc. —
+none were already installed, checked before writing it by hand). N13
+(Google Calendar sync) and O6-shaped forum retrofits onto every existing
+poll-based surface (`NoticeBoard`, `PhotoDoubtUpload`) remain cut, same as
+the design doc documents.
+
+**All 17 S19 blocks are now built, tested, and reviewed.**

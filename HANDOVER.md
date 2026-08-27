@@ -7,21 +7,47 @@ at the source.
 
 ## Right now (2026-08-27)
 
-- **S19 — Communication Platform: IN PROGRESS, 12 of 17 blocks
-  (2026-08-26–27).** `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
-  `...-plan.md` (full per-block build log lives there — the PROGRESS table
-  is the source of truth, not this entry). New `laravel/reverb` broadcasting
-  foundation (B0) wired into `DirectMessages` (B1) and forum threads (B3);
-  general institute-wide forum (B2); surveys — schema/builder, response
-  collection, aggregation + CSV export (B4-B6); help desk — ticket schema +
-  raise-a-ticket, staff queue, SLA sweep + real-time replies (B7-B9); new
-  `Planner` domain — `planner_events` + `PlannerAggregator`, student
-  calendar view + custom event CRUD, signed permanently-valid `.ics` feed
-  export (B10-B12). Remaining: B13-B14 gamification (XP/streaks/badges/
-  leaderboard), B15 `TenantModelRegistry` sweep, B16 lifecycle E2E + review
-  pass + this file's own completion update. Tests green: **1694/1695**
-  (same 1 pre-existing, unrelated `CourseSlugUniquenessTest` failure carried
-  since S1/S2, still out of scope).
+- **S19 — Communication Platform: COMPLETE, all 17 blocks (2026-08-26–27).**
+  `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
+  `...-plan.md` (full per-block build log + B16's own review-pass notes
+  live there, not repeated here). New `laravel/reverb` broadcasting
+  foundation (B0) wired into `DirectMessages` (B1), forum threads (B3), and
+  help-desk replies (B9) with no new channel-auth pattern needed each time.
+  New institute-wide `GeneralForum` alongside the existing per-batch one
+  (B2). New `surveys`/`survey_questions`/`survey_responses`/`survey_answers`
+  schema — Admin builder, student `SurveyRunner`, per-question aggregation +
+  CSV export (B4-B6). New `help_desk_tickets`/`help_desk_ticket_replies` —
+  raise-a-ticket flow, staff queue, SLA breach sweep + real-time replies
+  (B7-B9). New `Planner` domain — `planner_events` + `PlannerAggregator`,
+  student calendar view + custom event CRUD, permanently-signed `.ics` feed
+  export (B10-B12). Gamification — XP/streak listeners on existing
+  attendance/quiz/assignment events, badge catalog, student widget +
+  per-batch leaderboard with tenant opt-out (B13-B14). B15's reverse sweep
+  confirmed 83-for-83 against every real `BelongsToTenant` usage, zero gaps.
+  B16's lifecycle E2E (help-desk raise→reply→resolve, survey publish→two
+  responses→aggregate/CSV, cross-batch general-forum thread) plus an 8-angle
+  review pass found and fixed 3 real bugs: `DirectMessages::catchUp()`'s
+  reconnect path resurfaced a moderation-hidden (`actioned`-report) message
+  because it lacked `threadMessages()`'s own `whereDoesntHave` filter;
+  `GeneralForum::canParticipate()` hand-rolled `$viewer !== null` instead of
+  delegating to `ForumThreadAccess::canParticipateInThread()` the way
+  `BatchForum` correctly does, dropping an explicit tenant check that
+  matters if `CurrentTenant` binding ever fails (CLAUDE.md's own documented
+  risk); `AwardXpOnAttendance` awarded XP to an *instructor* marking their
+  own attendance via `BatchSessionsRelationManager::markMyAttendance` (S16),
+  since the listener only checked `status === 'present'`, not the actor's
+  role — a student-facing feature was silently leaking onto teaching-staff
+  accounts. Fixed with a `hasRole('student')` guard. Deferred as fast-follow
+  (documented in the plan file, not fixed this slice): `GamificationService`'s
+  check-then-insert has a narrow concurrent-same-user race window (the
+  unique index prevents corruption but not an uncaught exception);
+  `HelpDeskSlaSweep`/`SurveyResponseAggregator`/`BadgeEvaluator`/
+  `GamificationWidget` each have N+1-query patterns worth batching if volume
+  ever makes them slow; `GeneralForum`/`BatchForum` and 7 page-wrapper Blade
+  views duplicate structure that a shared base class/layout would remove.
+  Tests green: **1718+/1719+** (same 1 pre-existing, unrelated
+  `CourseSlugUniquenessTest` failure carried since S1/S2, still out of
+  scope).
 
 - **S18 — Analytics & Parent Engagement: COMPLETE, all 13 blocks (2026-08-26).**
   `docs/superpowers/specs/2026-08-26-s18-analytics-parent-engagement-design.md`,

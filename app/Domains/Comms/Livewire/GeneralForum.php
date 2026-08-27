@@ -5,8 +5,10 @@ namespace App\Domains\Comms\Livewire;
 use App\Domains\Comms\Models\ForumPost;
 use App\Domains\Comms\Models\ForumThread;
 use App\Domains\Comms\Services\ForumPostComposer;
+use App\Domains\Comms\Services\ForumThreadAccess;
 use App\Exceptions\ForumReplyDepthExceededException;
 use App\Models\User;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -47,13 +49,9 @@ class GeneralForum extends Component
 
     public function openThread(int $threadId): void
     {
-        if (! $this->canParticipate(auth()->user())) {
-            return;
-        }
-
         $thread = ForumThread::whereNull('batch_id')->find($threadId);
 
-        if ($thread !== null) {
+        if ($thread !== null && $this->canParticipate(auth()->user(), $thread)) {
             $this->openThreadId = $thread->id;
         }
     }
@@ -104,13 +102,18 @@ class GeneralForum extends Component
     {
         $viewer = auth()->user();
 
-        if (! $viewer || ! $this->canParticipate($viewer) || $this->openThreadId === null) {
+        if (! $viewer || $this->openThreadId === null) {
+            return;
+        }
+
+        $thread = ForumThread::whereNull('batch_id')->findOrFail($this->openThreadId);
+
+        if (! $this->canParticipate($viewer, $thread)) {
             return;
         }
 
         $this->validate(["replyBodies.{$parentPostId}" => 'required|string|max:5000']);
 
-        $thread = ForumThread::whereNull('batch_id')->findOrFail($this->openThreadId);
         $parent = ForumPost::where('forum_thread_id', $thread->id)->findOrFail($parentPostId);
 
         try {
@@ -156,9 +159,29 @@ class GeneralForum extends Component
             ->values();
     }
 
-    protected function canParticipate(?User $viewer): bool
+    /**
+     * Delegates to `ForumThreadAccess` (same "single source of truth"
+     * discipline `LessonAccess` established, CLAUDE.md) whenever a thread is
+     * already in hand — `openThread()`/`reply()` both have one. `createThread()`
+     * and the initial `render()` gate have no thread yet (one doesn't exist
+     * until this method already said yes), so they fall back to the same
+     * "any tenant user" rule `ForumThreadAccess::canParticipateInThread()`
+     * applies to a null-`batch_id` thread, checked against `CurrentTenant`
+     * explicitly rather than trusting `ForumThread`'s own global scope alone.
+     */
+    protected function canParticipate(?User $viewer, ?ForumThread $thread = null): bool
     {
-        return $viewer !== null;
+        if ($viewer === null) {
+            return false;
+        }
+
+        if ($thread !== null) {
+            return ForumThreadAccess::canParticipateInThread($thread, $viewer);
+        }
+
+        $tenant = app(CurrentTenant::class);
+
+        return $tenant->isBound() && $viewer->tenant_id === $tenant->id();
     }
 
     public function render(): View

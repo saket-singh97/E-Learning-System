@@ -242,6 +242,7 @@ class DirectMessages extends Component
                 ->orWhere(fn ($q) => $q
                     ->where('sender_id', $this->recipientId)
                     ->where('recipient_id', $viewer->id)))
+            ->whereDoesntHave('reports', fn ($query) => $query->where('status', 'actioned'))
             ->orderBy('created_at')
             ->get()
             ->toArray();
