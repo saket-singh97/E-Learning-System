@@ -29,7 +29,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | V10 pt.1 — `feature_flags` schema + `FeatureFlag` model | ✅ done |
 | B1 | V10 pt.2 — `FeatureGate` service + middleware enforcement on one real gated route | ✅ done |
-| B2 | V10 pt.3 — Admin/Super panel flag toggle UI | not started |
+| B2 | V10 pt.3 — Admin/Super panel flag toggle UI | ✅ done |
 | B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | not started |
 | B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | not started |
 | B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | not started |
@@ -106,14 +106,38 @@ Comms domain, untouched by this block's diff) — both pass cleanly in
 isolation, confirming a pre-existing test-order flake, not a regression from
 this block.
 
-### B2 — V10 pt.3: toggle UI
+### B2 — V10 pt.3: toggle UI — done 2026-08-28
 
-- [ ] Admin-panel view (read-only: which flags this tenant has) + Super-
+- [x] Admin-panel view (read-only: which flags this tenant has) + Super-
       panel resource (grant/revoke per tenant per key) — same "Super
       grants, tenant sees" shape `plan_id`/`TenantPlanLimits` already
       established for a similar platform-controlled-per-tenant value.
-- [ ] Tests: institute admin cannot self-grant a flag, Super admin can
+- [x] Tests: institute admin cannot self-grant a flag, Super admin can
       toggle it, list is scoped correctly cross-tenant.
+
+Built: single `FeatureFlagResource` (`app/Domains/Tenancy/Filament/Resources/FeatureFlags/`),
+discovered by both Admin and Super panels (same directory both panel
+providers already scan) — `canCreate()` gates the Create page to the Super
+panel only; List is shared, with `ToggleColumn::disabled()` outside Super
+and a `tenant.subdomain` column visible only on Super (Admin's own tenant is
+implicit via `BelongsToTenant`'s global scope — no CurrentTenant bound on
+Super, so it naturally sees every tenant instead, no `withoutGlobalScope`
+needed). `CreateFeatureFlag::handleRecordCreation()` uses
+`FeatureFlag::withoutEvents(fn () => FeatureFlag::create($data))` — same
+"withoutEvents + explicit tenant_id" idiom `PlanChangeService::subscribe()`
+already established for creating a `BelongsToTenant` row from the Super
+panel's unscoped position (its `creating()` hook would otherwise overwrite
+`tenant_id` from an unbound `CurrentTenant` and throw). Added
+`FeatureFlag::tenant(): BelongsTo` for the list column.
+Tests: `tests/Feature/Tenancy/FeatureFlagToggleUiTest.php` (4: institute
+admin 403s on the create route, super admin creates for a chosen tenant,
+super admin toggles an existing flag off, list scoped correctly — admin
+sees only its own tenant's row, super sees every tenant's).
+Full suite: 1813 tests, 1809 passed. 4 failures, all pre-existing and
+unrelated to this block's diff (Tenancy/Filament only) — 1 baseline
+(`CourseSlugUniquenessTest`, carried since S1/S2) + 3 test-order flakes
+(`DownloadCompletionExportControllerTest`, `DownloadEnrolmentExportControllerTest`,
+`BackupConfigurationTest`) that all pass cleanly in isolation.
 
 ### B3 — T5 pt.1: API key issuance
 
