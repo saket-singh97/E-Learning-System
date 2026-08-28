@@ -92,6 +92,7 @@ use App\Domains\Security\Models\DeviceSession;
 use App\Domains\Security\Models\GdprDeletionRequest;
 use App\Domains\Security\Models\GdprExportRequest;
 use App\Domains\Security\Models\LoginHistory;
+use App\Domains\Tenancy\Models\FeatureFlag;
 use App\Domains\Tenancy\Models\InstructorInvitation;
 use App\Domains\Tenancy\Models\RoleAssignmentAudit;
 use App\Models\User;
@@ -197,6 +198,7 @@ class TenantModelRegistry
         GamificationProfile::class,
         Badge::class,
         StudentBadge::class,
+        FeatureFlag::class,
     ];
 
     /**
@@ -1273,6 +1275,7 @@ class TenantModelRegistry
                 ])->id,
                 'awarded_at' => now(),
             ],
+            FeatureFlag::class => ['key' => 'row-flag-'.uniqid(), 'enabled' => false],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1382,6 +1385,7 @@ class TenantModelRegistry
             GamificationProfile::class => ['xp_total' => 999999],
             Badge::class => ['name' => 'tampered'],
             StudentBadge::class => ['awarded_at' => now()->subDay()],
+            FeatureFlag::class => ['enabled' => true],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
