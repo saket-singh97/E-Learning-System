@@ -27,8 +27,8 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | V10 pt.1 — `feature_flags` schema + `FeatureFlag` model | done |
-| B1 | V10 pt.2 — `FeatureGate` service + middleware enforcement on one real gated route | not started |
+| B0 | V10 pt.1 — `feature_flags` schema + `FeatureFlag` model | ✅ done |
+| B1 | V10 pt.2 — `FeatureGate` service + middleware enforcement on one real gated route | ✅ done |
 | B2 | V10 pt.3 — Admin/Super panel flag toggle UI | not started |
 | B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | not started |
 | B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | not started |
@@ -70,16 +70,41 @@ Full suite: 1803 tests, 1802 passed, 1 pre-existing unrelated failure
 (`CourseSlugUniquenessTest`, carried since S1/S2, out of scope per plan's own
 baseline note).
 
-### B1 — V10 pt.2: FeatureGate + first real gate
+### B1 — V10 pt.2: FeatureGate + first real gate — done 2026-08-28
 
-- [ ] `FeatureGate::enabled(Tenant $tenant, string $key): bool` — the one
+- [x] `FeatureGate::enabled(Tenant $tenant, string $key): bool` — the one
       place a flag is ever checked (design doc §4 decision 2), defaults
       `false` for an unset key.
-- [ ] Wire it into one real existing route as the proof case — confirm
+- [x] Wire it into one real existing route as the proof case — confirm
       the actual call site before this block starts (doubt chat, per
       V10's own FEATURES.md example), not guessed here.
-- [ ] Tests: gate blocks when unset, blocks when explicitly `false`,
+- [x] Tests: gate blocks when unset, blocks when explicitly `false`,
       allows when `true`, a different tenant's flag never leaks across.
+
+Built: `app/Domains/Tenancy/Services/FeatureGate.php` — bypasses the
+`BelongsToTenant` global scope on purpose (explicit `tenant_id` param lets a
+Super-panel-style caller check a tenant other than the currently-bound one,
+needed by B2). Call site: `App\Domains\AI\Livewire\DoubtChat` (embedded via
+`<livewire:ai.doubt-chat>` in `content/watch.blade.php`) — gated in
+`mount()`/`ask()` directly, **not** via HTTP route middleware. Reason:
+CLAUDE.md's own documented gotcha — Livewire actions post to
+`/livewire/update` with no relation to the page route, so a route-level
+middleware would leave `ask()` unprotected; the component itself is the only
+call site that can actually enforce this, same reasoning `LessonAccess`
+already established for a different question. View shows "Doubt chat isn't
+available on this plan." when gated off instead of the form.
+Tests: `tests/Feature/Tenancy/FeatureGateTest.php` (4: unset→false,
+false→false, true→true, cross-tenant isolation) +
+`tests/Feature/AI/DoubtChatTest.php` (2 new: blocks unset, blocks explicit
+false; 2 existing tests updated to seed the flag `true`, since the feature
+is opt-in-by-default now).
+Full suite: 1809 tests, 1806 passed. 3 failures: 1 pre-existing
+(`CourseSlugUniquenessTest`, carried since S1/S2, out of scope per this
+plan's own baseline). 2 more
+(`DownloadCompletionExportControllerTest`/`DownloadEnrolmentExportControllerTest`,
+Comms domain, untouched by this block's diff) — both pass cleanly in
+isolation, confirming a pre-existing test-order flake, not a regression from
+this block.
 
 ### B2 — V10 pt.3: toggle UI
 

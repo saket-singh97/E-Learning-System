@@ -7,6 +7,8 @@ use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Services\DoubtChatService;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Tenancy\Services\FeatureGate;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -17,14 +19,17 @@ class DoubtChat extends Component
 
     public string $question = '';
 
+    public bool $featureEnabled = false;
+
     /** @var Collection<int, DoubtChatMessage> */
     public Collection $messages;
 
     public function mount(Lesson $lesson): void
     {
         $this->lesson = $lesson;
+        $this->featureEnabled = app(FeatureGate::class)->enabled(app(CurrentTenant::class)->get(), 'doubt_chat');
 
-        $this->messages = auth()->check()
+        $this->messages = $this->featureEnabled && auth()->check()
             ? DoubtChatMessage::where('lesson_id', $lesson->id)
                 ->where('user_id', auth()->id())
                 ->orderBy('created_at')
@@ -36,7 +41,7 @@ class DoubtChat extends Component
     {
         $user = auth()->user();
 
-        if (! $user) {
+        if (! $user || ! $this->featureEnabled) {
             return;
         }
 

@@ -8,6 +8,7 @@ use App\Domains\AI\Services\DoubtChatService;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Tenancy\Models\FeatureFlag;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\AiSpendCapExceededException;
 use App\Integrations\AiProvider;
@@ -160,9 +161,10 @@ it('refuses to ask once the tenant is over its daily AI spend cap (S9 B12)', fun
         ->toThrow(AiSpendCapExceededException::class);
 });
 
-it('renders the doubt chat component and lets an authenticated student ask a question', function () {
+it('renders the doubt chat component and lets an authenticated student ask a question when the flag is on', function () {
     [$tenant, , $lesson] = gateFixture();
     $student = gateStaff($tenant, 'student');
+    FeatureFlag::create(['tenant_id' => $tenant->id, 'key' => 'doubt_chat', 'enabled' => true]);
 
     $this->actingAs($student);
 
@@ -175,7 +177,35 @@ it('renders the doubt chat component and lets an authenticated student ask a que
 });
 
 it('does not let a guest ask a question', function () {
-    [, , $lesson] = gateFixture([], ['is_free_preview' => true]);
+    [$tenant, , $lesson] = gateFixture([], ['is_free_preview' => true]);
+    FeatureFlag::create(['tenant_id' => $tenant->id, 'key' => 'doubt_chat', 'enabled' => true]);
+
+    Livewire::test(DoubtChat::class, ['lesson' => $lesson])
+        ->set('question', 'What is velocity?')
+        ->call('ask');
+
+    expect(DoubtChatMessage::count())->toBe(0);
+});
+
+it('blocks asking when the doubt_chat flag is unset for the tenant (opt-in default)', function () {
+    [$tenant, , $lesson] = gateFixture();
+    $student = gateStaff($tenant, 'student');
+
+    $this->actingAs($student);
+
+    Livewire::test(DoubtChat::class, ['lesson' => $lesson])
+        ->set('question', 'What is velocity?')
+        ->call('ask');
+
+    expect(DoubtChatMessage::count())->toBe(0);
+});
+
+it('blocks asking when the doubt_chat flag is explicitly false for the tenant', function () {
+    [$tenant, , $lesson] = gateFixture();
+    $student = gateStaff($tenant, 'student');
+    FeatureFlag::create(['tenant_id' => $tenant->id, 'key' => 'doubt_chat', 'enabled' => false]);
+
+    $this->actingAs($student);
 
     Livewire::test(DoubtChat::class, ['lesson' => $lesson])
         ->set('question', 'What is velocity?')
