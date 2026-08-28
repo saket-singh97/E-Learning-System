@@ -15,8 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 20 (S1–S20) |
-| **Designed, not built** | 0 |
-| **Proposed, not yet scoped** | 6 (S21–S26) |
+| **Designed, not built** | 1 (S21) |
+| **Proposed, not yet scoped** | 5 (S22–S26) |
 
 **Phase completion:**
 
@@ -57,17 +57,28 @@ Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-plat
 
 ---
 
-## Full roadmap — S21 onward (proposed)
+## Designed, not built — S21
+
+| Slice | Scope | Size | Designed | Status |
+|---|---|---|---|---|
+| S21 | Platform Scale & Migration — stateless-readiness audit, per-tenant feature flags, institute API keys + outbound webhooks, bearer-token auth on `/api/v1/`, Google Workspace SSO, Card EMI, data-import tooling (courses/enrolments/payment history). Real scope is 6 items, not the row's own headline "5 sentences" (V12 splits into two tracked deliverables): read replicas (V8) and server hardening (V7) are cut — infra/ops or "no concrete deliverable yet," not application code; SAML (half of V13) is cut — no library installed, no buyer signal | 16 blocks | Aug 28 | 📝 Designed, build not started |
+
+Full design/plan docs: `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,
+`...-plan.md` — the plan file's own PROGRESS table will be the live source
+of truth once building starts, same as every prior slice.
+
+---
+
+## Full roadmap — S22 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S20 were each shaped only once they
+slice's turn comes, the same way S10-S21 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S21 | Platform Scale & Migration — read replicas, horizontal scaling, per-tenant feature flags, org SSO, data-import tooling from an existing LMS | 10 | V6-V15 |
 | S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, Daily Practice Problems, ask-at-timestamp, auto formula sheets | 8 | U1-U8 |
 | S23 | Coaching-Market Differentiators — confusion-signal alerting, syllabus tracker, PYQ bank, scholarship tests, rank cards, backlog/catch-up mode | 10 | U9-U18 |
 | S24 | WhatsApp-Native AI & Ops — WhatsApp doubt bot, voice-note doubts, photo doubt over WhatsApp, auto-scheduler, fee analytics, peer comparison | 7 | U19-U25 |
