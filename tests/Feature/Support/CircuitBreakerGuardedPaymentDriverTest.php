@@ -14,7 +14,7 @@ function failingPaymentProvider(): PaymentProvider
     {
         public bool $webhookChecked = false;
 
-        public function createOrder(FeeInvoice $invoice, string $idempotencyKey): array
+        public function createOrder(FeeInvoice $invoice, string $idempotencyKey, ?int $emiDurationMonths = null): array
         {
             throw new RuntimeException('provider down');
         }

@@ -26,9 +26,9 @@ class CircuitBreakerGuardedPaymentDriver implements PaymentProvider
         private readonly CircuitBreaker $breaker,
     ) {}
 
-    public function createOrder(FeeInvoice $invoice, string $idempotencyKey): array
+    public function createOrder(FeeInvoice $invoice, string $idempotencyKey, ?int $emiDurationMonths = null): array
     {
-        return $this->breaker->call(self::BREAKER_KEY, fn (): array => $this->inner->createOrder($invoice, $idempotencyKey));
+        return $this->breaker->call(self::BREAKER_KEY, fn (): array => $this->inner->createOrder($invoice, $idempotencyKey, $emiDurationMonths));
     }
 
     public function verifyWebhookSignature(string $payload, string $signature): bool

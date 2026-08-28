@@ -145,6 +145,23 @@ it('reuses the same still-open FeePayment on a second checkout call instead of c
     expect(FeePayment::where('fee_invoice_id', $invoice->id)->count())->toBe(1);
 });
 
+it('leaves emi_duration_months null for a non-EMI checkout order (S21 B8)', function () {
+    $invoice = ($this->makeInvoice)(1000);
+
+    $payment = $this->service->createPaymentOrder($invoice);
+
+    expect($payment->emi_duration_months)->toBeNull();
+});
+
+it('carries the EMI duration through to the created FeePayment (S21 B8)', function () {
+    $invoice = ($this->makeInvoice)(1000);
+
+    $payment = $this->service->createPaymentOrder($invoice, 6);
+
+    expect($payment->emi_duration_months)->toBe(6)
+        ->and($payment->fresh()->emi_duration_months)->toBe(6);
+});
+
 it('starts a genuinely new attempt with its own idempotency key once the previous one failed', function () {
     $invoice = ($this->makeInvoice)(1000);
 

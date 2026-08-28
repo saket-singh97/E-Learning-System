@@ -23,9 +23,16 @@ interface PaymentProvider
      * needs to be reproducible enough that a genuine retry of the *same*
      * attempt (not a fresh one) never varies.
      *
+     * $emiDurationMonths (S21 B8, design doc §4 decision 6) — Razorpay's
+     * own Orders API takes EMI as an order-creation option (`method: emi`
+     * + `emi_duration`), not a separate endpoint, so this extends the
+     * existing signature rather than adding a fourth interface method the
+     * way `refund()` (S20) genuinely needed one. Null (the default) is
+     * byte-identical to every call site before this block.
+     *
      * @return array{order_id: string, amount: float, currency: string}
      */
-    public function createOrder(FeeInvoice $invoice, string $idempotencyKey): array;
+    public function createOrder(FeeInvoice $invoice, string $idempotencyKey, ?int $emiDurationMonths = null): array;
 
     /**
      * Verify a webhook payload was genuinely signed by the vendor, using

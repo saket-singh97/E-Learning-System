@@ -23,7 +23,7 @@ use RuntimeException;
  */
 class RazorpayProvider implements PaymentProvider
 {
-    public function createOrder(FeeInvoice $invoice, string $idempotencyKey): array
+    public function createOrder(FeeInvoice $invoice, string $idempotencyKey, ?int $emiDurationMonths = null): array
     {
         [$keyId, $keySecret] = $this->credentials();
 
@@ -48,6 +48,17 @@ class RazorpayProvider implements PaymentProvider
                     'tenant_id' => (string) $invoice->tenant_id,
                     'fee_invoice_id' => (string) $invoice->id,
                 ],
+                // S21 B8 (V11, design doc §4 decision 6) — Razorpay's own
+                // EMI order-creation option, verified against Razorpay's
+                // Orders API docs at design time: 'method' => 'emi' plus
+                // 'emi_duration' (months) is how EMI is requested at
+                // order-creation, not a separate API surface. Omitted
+                // entirely for a non-EMI order, so the request payload a
+                // non-EMI call sends is byte-identical to before this block.
+                ...($emiDurationMonths !== null ? [
+                    'method' => 'emi',
+                    'emi_duration' => $emiDurationMonths,
+                ] : []),
             ])
             ->throw()
             ->json();

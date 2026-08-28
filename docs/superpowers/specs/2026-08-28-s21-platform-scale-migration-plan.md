@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | ✅ done |
 | B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | ✅ done |
 | B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | ✅ done |
-| B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | not started |
+| B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | ✅ done |
 | B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | not started |
 | B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | not started |
 | B11 | V14 pt.2 — enrolment CSV import | not started |
@@ -334,14 +334,48 @@ unrelated to this block's diff (`Tenant` model, `GoogleOAuthAuthenticator`,
 (`CourseSlugUniquenessTest`) + 1 already-confirmed test-order flake
 (`DownloadEnrolmentExportControllerTest`).
 
-### B8 — V11 pt.1: Card EMI eligibility + order creation
+### B8 — V11 pt.1: Card EMI eligibility + order creation — done 2026-08-28
 
-- [ ] `fee_payments.emi_duration_months` migration (nullable).
-- [ ] `PaymentProvider::createOrder()` gains an optional EMI parameter
+- [x] `fee_payments.emi_duration_months` migration (nullable).
+- [x] `PaymentProvider::createOrder()` gains an optional EMI parameter
       (design doc §4 decision 6, not a new interface method) — confirm
       Razorpay's own EMI order-option shape before this block starts.
-- [ ] Tests: a non-EMI order is byte-identical to today, an EMI order
+- [x] Tests: a non-EMI order is byte-identical to today, an EMI order
       carries the duration through to the created `FeePayment`.
+
+Built: `fee_payments.emi_duration_months` (nullable, `$fillable`).
+`PaymentProvider::createOrder()` signature gains `?int $emiDurationMonths =
+null` (all 3 implementations — `RazorpayProvider`,
+`CircuitBreakerGuardedPaymentDriver`, `FakeRazorpayDriver` — updated to
+match). `RazorpayProvider` adds `'method' => 'emi', 'emi_duration' =>
+$months` to the order payload only when set — omitted entirely for null,
+so a non-EMI request body is byte-identical to before this block.
+`FeeInvoiceService::createPaymentOrder()` gains the same optional param,
+threaded straight to `createOrder()` and stamped onto the created
+`FeePayment` row. No eligibility threshold was added — the plan's own
+checklist names only the parameter + schema + tests, nothing about a
+minimum order value, and the design doc's own decision 6 doesn't mention
+one either; "eligibility" here is simply "can this call request EMI at
+all," which the optional parameter itself is.
+**Real PHP gotcha caught by the test run:** an interface can't have an
+implementing class silently drop a trailing optional parameter — PHP's own
+interface-compliance check is stricter than assumed; `Declaration ... must
+be compatible` fatal errored on the codebase's one anonymous
+`PaymentProvider` test double
+(`tests/Feature/Support/CircuitBreakerGuardedPaymentDriverTest.php`) until
+its `createOrder()` signature was updated to match.
+Tests: `RazorpayProviderTest` (2: non-EMI request sends no
+`method`/`emi_duration` keys at all, an EMI request sends Razorpay's own
+`method: emi` + `emi_duration`) + `FeeInvoiceServiceTest` (2: non-EMI
+leaves the column null, EMI carries the duration through to the row).
+Full suite: 1845 tests, 1842 passed. 2 failures (1 baseline
+`CourseSlugUniquenessTest`, 1 already-confirmed flake
+`BackupConfigurationTest`) + 1 DB-connection-timeout error
+(`SubscriptionInvoiceResourceTest`, an untouched Billing-domain test) during
+an unusually long (~3h) run — re-ran that one test in isolation
+immediately after and it passed clean, confirming a transient
+infra/connection-pool hiccup during the long run, not a regression from
+this block's diff (`Fees`/`Integrations` files + 1 migration only).
 
 ### B9 — V11 pt.2: EMI checkout + webhook handling
 

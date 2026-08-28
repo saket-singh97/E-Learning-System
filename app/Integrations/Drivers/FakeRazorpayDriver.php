@@ -23,7 +23,7 @@ class FakeRazorpayDriver implements PaymentProvider
 {
     public const FAKE_SECRET = 'fake-razorpay-webhook-secret';
 
-    public function createOrder(FeeInvoice $invoice, string $idempotencyKey): array
+    public function createOrder(FeeInvoice $invoice, string $idempotencyKey, ?int $emiDurationMonths = null): array
     {
         return [
             'order_id' => 'order_fake_'.dechex(crc32("invoice#{$invoice->id}#{$idempotencyKey}#".uniqid('', true))),

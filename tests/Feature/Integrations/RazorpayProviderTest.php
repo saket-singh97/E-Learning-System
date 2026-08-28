@@ -75,7 +75,26 @@ it('creates a real order via the Razorpay API, amount in paise, tenant/invoice i
         return $request->url() === 'https://api.razorpay.com/v1/orders'
             && $request['amount'] === 118000
             && $request['currency'] === 'INR'
-            && $request['notes']['fee_invoice_id'] === (string) $this->invoice->id;
+            && $request['notes']['fee_invoice_id'] === (string) $this->invoice->id
+            // S21 B8 — a non-EMI order sends no method/emi_duration keys at
+            // all, byte-identical to the request this driver sent before
+            // the EMI parameter existed.
+            && ! isset($request['method'])
+            && ! isset($request['emi_duration']);
+    });
+});
+
+it('requests EMI via Razorpay\'s own order-creation option when a duration is given', function () {
+    config(['services.razorpay.key_id' => 'test-key', 'services.razorpay.key_secret' => 'test-secret']);
+
+    Http::fake([
+        'api.razorpay.com/v1/orders' => Http::response(['id' => 'order_live_emi1'], 200),
+    ]);
+
+    $this->driver->createOrder($this->invoice, 'INV-TEST-1-EMI', 6);
+
+    Http::assertSent(function ($request) {
+        return $request['method'] === 'emi' && $request['emi_duration'] === 6;
     });
 });
 

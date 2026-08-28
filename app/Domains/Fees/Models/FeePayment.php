@@ -27,6 +27,7 @@ class FeePayment extends Model
         'provider_payment_id',
         'idempotency_key',
         'amount',
+        'emi_duration_months',
         'status',
         'failure_reason',
         'webhook_verified_at',

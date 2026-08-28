@@ -215,9 +215,16 @@ class FeeInvoiceService
      * (two browser tabs) both reading "no existing row yet" before either
      * writes would otherwise both create one.
      */
-    public function createPaymentOrder(FeeInvoice $invoice): FeePayment
+    /**
+     * $emiDurationMonths (S21 B8) — null (the default) is byte-identical to
+     * every call site before this block; threaded straight through to the
+     * provider's own order-creation call and stamped onto the created
+     * FeePayment so PaymentReconciler/the invoice's own history can see an
+     * EMI payment was requested without re-deriving it from the provider.
+     */
+    public function createPaymentOrder(FeeInvoice $invoice, ?int $emiDurationMonths = null): FeePayment
     {
-        return DB::transaction(function () use ($invoice): FeePayment {
+        return DB::transaction(function () use ($invoice, $emiDurationMonths): FeePayment {
             FeeInvoice::whereKey($invoice->id)->lockForUpdate()->first();
 
             $existing = FeePayment::where('fee_invoice_id', $invoice->id)
@@ -238,7 +245,7 @@ class FeeInvoiceService
             $attemptNumber = FeePayment::where('fee_invoice_id', $invoice->id)->count() + 1;
             $idempotencyKey = "{$invoice->invoice_number}-{$attemptNumber}";
 
-            $order = app(PaymentProvider::class)->createOrder($invoice, $idempotencyKey);
+            $order = app(PaymentProvider::class)->createOrder($invoice, $idempotencyKey, $emiDurationMonths);
 
             return FeePayment::create([
                 'fee_invoice_id' => $invoice->id,
@@ -246,6 +253,7 @@ class FeeInvoiceService
                 'provider_order_id' => $order['order_id'],
                 'idempotency_key' => $idempotencyKey,
                 'amount' => $order['amount'],
+                'emi_duration_months' => $emiDurationMonths,
                 'status' => 'created',
             ]);
         });
