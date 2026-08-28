@@ -27,7 +27,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | V10 pt.1 — `feature_flags` schema + `FeatureFlag` model | not started |
+| B0 | V10 pt.1 — `feature_flags` schema + `FeatureFlag` model | done |
 | B1 | V10 pt.2 — `FeatureGate` service + middleware enforcement on one real gated route | not started |
 | B2 | V10 pt.3 — Admin/Super panel flag toggle UI | not started |
 | B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | not started |
@@ -52,13 +52,23 @@ carried since S1/S2, out of scope here same as every prior slice).
 
 ## Block detail (starting checklist — expand into a build narrative as each block actually lands, same as every prior plan file)
 
-### B0 — V10 pt.1: feature flag schema
+### B0 — V10 pt.1: feature flag schema — done 2026-08-28
 
-- [ ] `feature_flags` migration (`tenant_id`, `key`, `enabled` default
+- [x] `feature_flags` migration (`tenant_id`, `key`, `enabled` default
       `false`, unique `(tenant_id, key)`) + `FeatureFlag` model (Tenancy),
       registered in `TenantModelRegistry`.
-- [ ] Tests: creates a flag, unique constraint holds per tenant, two
+- [x] Tests: creates a flag, unique constraint holds per tenant, two
       tenants can independently set the same key differently.
+
+Built: `database/migrations/2026_08_28_090000_create_feature_flags_table.php`,
+`app/Domains/Tenancy/Models/FeatureFlag.php` (boolean-cast `enabled`, no
+service logic yet — `FeatureGate` arrives in B1). Registered in
+`TenantModelRegistry::MODELS` + `seedAttributes()`/`updateAttributes()`.
+Own test file `tests/Feature/Tenancy/FeatureFlagTest.php` (4 tests: create,
+default-false, unique-per-tenant rejects duplicate, two tenants independent).
+Full suite: 1803 tests, 1802 passed, 1 pre-existing unrelated failure
+(`CourseSlugUniquenessTest`, carried since S1/S2, out of scope per plan's own
+baseline note).
 
 ### B1 — V10 pt.2: FeatureGate + first real gate
 
