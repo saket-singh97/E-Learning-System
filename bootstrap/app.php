@@ -32,6 +32,7 @@ use App\Exceptions\CouponNotRedeemableException;
 use App\Exceptions\DeviceLimitExceededException;
 use App\Exceptions\AffiliatePayoutActionException;
 use App\Exceptions\InstructorPayoutActionException;
+use App\Exceptions\InvalidApiKeyException;
 use App\Exceptions\RefundActionException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Exceptions\GdprDeletionRequestNotPendingException;
@@ -54,6 +55,7 @@ use App\Exceptions\TenantNotFoundException;
 use App\Exceptions\TenantNotSubscribedException;
 use App\Exceptions\TenantSuspendedException;
 use App\Http\Middleware\EnsureAccountNotFlaggedForSharing;
+use App\Http\Middleware\EnsureApiKey;
 use App\Http\Middleware\EnsureDeviceNotRevoked;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\ResolveImpersonation;
@@ -195,6 +197,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'resolve.tenant' => ResolveTenant::class,
             'role' => EnsureRole::class,
+            'api.key' => EnsureApiKey::class,
         ]);
 
         // Global, not `web`-group: Filament always slots its own
@@ -238,6 +241,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (QuizNotAvailableException $e) => abort(404));
         $exceptions->render(fn (QuizAttemptAlreadySubmittedException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (InvalidWebhookSignatureException $e) => abort(400, $e->getMessage()));
+        $exceptions->render(fn (InvalidApiKeyException $e) => abort(401, $e->getMessage()));
         $exceptions->render(fn (CouponNotRedeemableException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (RefundActionException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (AffiliatePayoutActionException $e) => abort(422, $e->getMessage()));

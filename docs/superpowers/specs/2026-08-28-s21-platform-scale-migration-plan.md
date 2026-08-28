@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B1 | V10 pt.2 — `FeatureGate` service + middleware enforcement on one real gated route | ✅ done |
 | B2 | V10 pt.3 — Admin/Super panel flag toggle UI | ✅ done |
 | B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | ✅ done |
-| B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | not started |
+| B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | ✅ done |
 | B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | not started |
 | B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | not started |
 | B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | not started |
@@ -169,16 +169,48 @@ Full suite: 1821 tests, 1820 passed — only the 1 pre-existing baseline
 failure (`CourseSlugUniquenessTest`, carried since S1/S2). No flakes this
 run.
 
-### B4 — V12b: bearer-token auth on `/api/v1/`
+### B4 — V12b: bearer-token auth on `/api/v1/` — done 2026-08-28
 
-- [ ] Middleware verifying a bearer token against `api_keys.key_hash`,
+- [x] Middleware verifying a bearer token against `api_keys.key_hash`,
       binding the resolved tenant the same way `ResolveTenant` does for
       the subdomain path — confirm exact `/api/v1/` route list before
       this block starts (design doc §4 decision 5: additive to existing
       routes, not a new surface).
-- [ ] Tests: valid key passes, missing/invalid/revoked key is refused,
+- [x] Tests: valid key passes, missing/invalid/revoked key is refused,
       resolved tenant matches the key's own owner, cross-tenant key never
       grants access to another tenant's endpoint.
+
+**Route-list verification (done before writing code, per the checklist
+above):** grepped the whole tree for a literal `api/v1` or `prefix('v1'`
+match — zero hits anywhere. `routes/api.php` (mounted at Laravel's default
+`/api` prefix, `bootstrap/app.php`) held exactly 5 routes: `/user`
+(Sanctum, app end-users, unrelated) and 4 vendor webhook receivers
+(Razorpay ×2, Zoom, Device) — each already authenticated by its own
+vendor-specific signature scheme. None of the 4 is a route an institute's
+*own* system calls with *its own* key — retrofitting bearer auth onto a
+vendor webhook would break it outright (the vendor has no way to supply an
+institute's bearer token). So there was no existing "institute calls this
+with its key" route to attach middleware to; R4/T1's own "webhook receivers
+and health endpoints" wording named a health endpoint as in-scope for P1,
+and none existed. Added exactly one — `GET /api/v1/health` — the smallest
+possible real call site for the middleware, not a parallel REST surface
+(the 4 vendor webhooks are untouched).
+
+Built: `App\Http\Middleware\EnsureApiKey` (alias `api.key`) — reads
+`Request::bearerToken()`, calls `ApiKeyService::verify()` (B3), binds
+`CurrentTenant` to the resolved tenant on success, throws
+`InvalidApiKeyException` (401, registered in `bootstrap/app.php`) on
+missing/invalid/revoked. `GET /api/v1/health` in `routes/api.php`, gated by
+`api.key`, returns `{ok, tenant}` — confirms both a valid key and which
+tenant it resolved to in one response.
+Tests: `tests/Feature/Api/EnsureApiKeyTest.php` (5: valid key passes,
+missing token refused, invalid token refused, revoked key refused,
+cross-tenant key resolves only its own tenant, never the other).
+Full suite: 1826 tests, 1824 passed. 2 failures, both pre-existing and
+unrelated to this block's diff (`Http/Middleware`, `Exceptions`,
+`routes/api.php`, `bootstrap/app.php` only) — 1 baseline
+(`CourseSlugUniquenessTest`) + 1 already-confirmed test-order flake
+(`BackupConfigurationTest`, verified passing in isolation during B2).
 
 ### B5 — T5 pt.2: webhook schema + dispatch
 

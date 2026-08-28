@@ -4,12 +4,27 @@ use App\Http\Controllers\Batches\DeviceWebhookController;
 use App\Http\Controllers\Batches\ZoomRecordingWebhookController;
 use App\Http\Controllers\Billing\RazorpaySubscriptionWebhookController;
 use App\Http\Controllers\Fees\RazorpayWebhookController;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+// S21 B4 (V12b/T5) — the first real `/api/v1/` route (FEATURES.md's own T1
+// naming): an institute's own external system calls this with its own
+// api_keys bearer token to confirm the key is valid and which tenant it
+// resolves to. The 4 vendor webhooks below stay untouched — each already
+// authenticates via its own vendor-specific signature scheme, and a vendor
+// has no way to supply an institute's bearer token, so bearer auth is
+// additive here, not retrofitted onto routes it would break.
+Route::get('/v1/health', function () {
+    return response()->json([
+        'ok' => true,
+        'tenant' => app(CurrentTenant::class)->get()->subdomain,
+    ]);
+})->middleware('api.key')->name('api.v1.health');
 
 // No Route::domain(...) constraint — Razorpay calls one fixed URL with no
 // notion of this app's tenant subdomains (S7 design doc §2.4 decision 6).
