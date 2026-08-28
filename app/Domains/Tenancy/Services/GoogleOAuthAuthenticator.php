@@ -2,6 +2,8 @@
 
 namespace App\Domains\Tenancy\Services;
 
+use App\Domains\Tenancy\Models\Tenant;
+use App\Exceptions\GoogleWorkspaceDomainMismatchException;
 use App\Models\User;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
@@ -12,13 +14,21 @@ use Laravel\Socialite\Contracts\User as SocialiteUser;
  * login. Google OAuth carries no subdomain of its own, so the tenant a new
  * or existing user resolves against is whichever tenant the redirect step
  * (GoogleAuthController::redirect(), still running on that tenant's own
- * subdomain) remembered in the session — passed in here as $tenantId
- * rather than read from CurrentTenant, since by the time the callback
- * request arrives there is no subdomain left to resolve it from.
+ * subdomain) remembered in the session — passed in here as the resolved
+ * Tenant rather than read from CurrentTenant, since by the time the
+ * callback request arrives there is no subdomain left to resolve it from.
  */
 class GoogleOAuthAuthenticator
 {
     /**
+     * S21 B7 (V13a) — checked first, before any user lookup: an unconfigured
+     * tenant (`google_workspace_domain` null) behaves byte-identical to
+     * before this block, any Google account may sign in. Configured, only
+     * an account on that domain may authenticate for this tenant at all —
+     * checked ahead of the google_id/email lookups below so a mismatched
+     * domain can never even reach (and thus never silently link onto) an
+     * existing account.
+     *
      * Match by google_id first (returning user who already linked this
      * Google account). Falling back to an email match within the same
      * tenant handles a user who registered with a password first and is
@@ -28,8 +38,18 @@ class GoogleOAuthAuthenticator
      * directly. No match at all creates a brand new row, the same
      * first-touch shape RegisteredUserController already uses.
      */
-    public function authenticate(SocialiteUser $socialiteUser, int $tenantId): User
+    public function authenticate(SocialiteUser $socialiteUser, Tenant $tenant): User
     {
+        if ($tenant->google_workspace_domain !== null) {
+            $emailDomain = Str::after($socialiteUser->getEmail(), '@');
+
+            if (strcasecmp($emailDomain, $tenant->google_workspace_domain) !== 0) {
+                throw GoogleWorkspaceDomainMismatchException::make($tenant->google_workspace_domain);
+            }
+        }
+
+        $tenantId = $tenant->id;
+
         $user = User::where('tenant_id', $tenantId)
             ->where('google_id', $socialiteUser->getId())
             ->first();

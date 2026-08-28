@@ -49,6 +49,7 @@ class Tenant extends Model
         'primary_color',
         'accent_color',
         'custom_domain',
+        'google_workspace_domain',
         'plan_tier',
         'plan_id',
         'at_risk_threshold_percent',

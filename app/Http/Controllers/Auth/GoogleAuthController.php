@@ -67,7 +67,7 @@ class GoogleAuthController extends Controller
             ->redirectUrl(route('auth.google.callback'))
             ->user();
 
-        $user = app(GoogleOAuthAuthenticator::class)->authenticate($socialiteUser, $tenantId);
+        $user = app(GoogleOAuthAuthenticator::class)->authenticate($socialiteUser, $tenant);
 
         $routeName = $portal === 'parent' ? 'parent.dashboard' : 'student.dashboard';
 

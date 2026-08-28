@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | ✅ done |
 | B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | ✅ done |
 | B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | ✅ done |
-| B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | not started |
+| B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | ✅ done |
 | B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | not started |
 | B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | not started |
 | B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | not started |
@@ -299,16 +299,40 @@ baseline (`CourseSlugUniquenessTest`) + 2 already-confirmed test-order
 flakes (`BackupConfigurationTest`, `DownloadEnrolmentExportControllerTest`)
 seen in earlier blocks.
 
-### B7 — V13a: Google Workspace SSO
+### B7 — V13a: Google Workspace SSO — done 2026-08-28
 
-- [ ] `tenants.google_workspace_domain` migration (nullable, off by
+- [x] `tenants.google_workspace_domain` migration (nullable, off by
       default).
-- [ ] `GoogleOAuthAuthenticator` gains a domain check: when configured,
+- [x] `GoogleOAuthAuthenticator` gains a domain check: when configured,
       only a Google account on that domain may authenticate for this
       tenant (design doc §2.3: no such check exists today).
-- [ ] Tests: configured domain allows a matching account, refuses a
+- [x] Tests: configured domain allows a matching account, refuses a
       non-matching one, unconfigured tenant behaves byte-identical to
       today.
+
+Built: `tenants.google_workspace_domain` (nullable, added to `$fillable`).
+`GoogleOAuthAuthenticator::authenticate()` checks it first, before any
+`google_id`/email lookup — a mismatched domain can never reach (and thus
+never silently link onto) an existing account. Comparison is
+`strcasecmp($emailDomain, $tenant->google_workspace_domain)` (exact,
+case-insensitive — domains aren't case-sensitive; `Str::is()` would have
+been wildcard-glob matching, the wrong tool for an exact check). Mismatch
+throws `GoogleWorkspaceDomainMismatchException` (403, registered in
+`bootstrap/app.php`). Signature changed from `authenticate($user, int
+$tenantId)` to `authenticate($user, Tenant $tenant)` — `GoogleAuthController`
+already had the resolved `Tenant` in hand right before this call, so this
+avoids a second lookup inside the authenticator rather than adding one.
+Unconfigured tenant (`google_workspace_domain === null`) skips the check
+entirely — proven byte-identical by the fact all 11 pre-existing
+`GoogleOAuthLoginTest` cases (none of which set the column) still pass
+unchanged.
+Tests: 2 new in `tests/Feature/Tenancy/GoogleOAuthLoginTest.php` — matching
+domain signs in, non-matching domain gets 403 and creates no user row.
+Full suite: 1842 tests, 1840 passed. 2 failures, both pre-existing and
+unrelated to this block's diff (`Tenant` model, `GoogleOAuthAuthenticator`,
+`GoogleAuthController`, 1 exception, 1 migration only) — the 1 baseline
+(`CourseSlugUniquenessTest`) + 1 already-confirmed test-order flake
+(`DownloadEnrolmentExportControllerTest`).
 
 ### B8 — V11 pt.1: Card EMI eligibility + order creation
 

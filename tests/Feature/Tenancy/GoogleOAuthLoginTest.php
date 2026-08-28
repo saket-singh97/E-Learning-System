@@ -196,6 +196,30 @@ it('completes login via the portals own two-factor challenge after a 2FA-enabled
     $this->assertAuthenticatedAs($student);
 });
 
+it('allows sign-in from a matching Google Workspace domain', function () {
+    $tenant = Tenant::factory()->create(['subdomain' => 'physics', 'google_workspace_domain' => 'school.edu']);
+
+    $this->withSession(['oauth.tenant_id' => $tenant->id, 'oauth.portal' => 'student']);
+    mockSocialiteGoogle(fakeSocialiteUser('google-123', 'ada@school.edu'));
+
+    $this->get('http://lms.test/auth/google/callback')
+        ->assertRedirect('http://physics.lms.test/dashboard');
+
+    $this->assertAuthenticated();
+});
+
+it('refuses sign-in from a non-matching Google account when a Workspace domain is configured', function () {
+    $tenant = Tenant::factory()->create(['subdomain' => 'physics', 'google_workspace_domain' => 'school.edu']);
+
+    $this->withSession(['oauth.tenant_id' => $tenant->id, 'oauth.portal' => 'student']);
+    mockSocialiteGoogle(fakeSocialiteUser('google-123', 'ada@gmail.com'));
+
+    $this->get('http://lms.test/auth/google/callback')->assertForbidden();
+
+    $this->assertGuest();
+    expect(User::where('email', 'ada@gmail.com')->exists())->toBeFalse();
+});
+
 it('does not resume a two-factor challenge for a different tenant than the one the session flag was set for', function () {
     $physics = Tenant::factory()->create(['subdomain' => 'physics']);
     $chemistry = Tenant::factory()->create(['subdomain' => 'chemistry']);

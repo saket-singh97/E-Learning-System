@@ -36,6 +36,7 @@ use App\Exceptions\InvalidApiKeyException;
 use App\Exceptions\RefundActionException;
 use App\Exceptions\EnrolmentApprovalDeniedException;
 use App\Exceptions\GdprDeletionRequestNotPendingException;
+use App\Exceptions\GoogleWorkspaceDomainMismatchException;
 use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\InvalidWebhookSignatureException;
 use App\Exceptions\LessonArtifactNotReadyException;
@@ -242,6 +243,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (QuizAttemptAlreadySubmittedException $e) => abort(409, $e->getMessage()));
         $exceptions->render(fn (InvalidWebhookSignatureException $e) => abort(400, $e->getMessage()));
         $exceptions->render(fn (InvalidApiKeyException $e) => abort(401, $e->getMessage()));
+        $exceptions->render(fn (GoogleWorkspaceDomainMismatchException $e) => abort(403, $e->getMessage()));
         $exceptions->render(fn (CouponNotRedeemableException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (RefundActionException $e) => abort(422, $e->getMessage()));
         $exceptions->render(fn (AffiliatePayoutActionException $e) => abort(422, $e->getMessage()));
