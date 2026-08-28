@@ -9,6 +9,8 @@ use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
 use App\Domains\Api\Models\ApiKey;
+use App\Domains\Api\Models\WebhookDelivery;
+use App\Domains\Api\Models\WebhookEndpoint;
 use App\Domains\Analytics\Models\Badge;
 use App\Domains\Analytics\Models\GamificationProfile;
 use App\Domains\Analytics\Models\MonthlyReportCard;
@@ -201,6 +203,8 @@ class TenantModelRegistry
         StudentBadge::class,
         FeatureFlag::class,
         ApiKey::class,
+        WebhookEndpoint::class,
+        WebhookDelivery::class,
     ];
 
     /**
@@ -1279,6 +1283,12 @@ class TenantModelRegistry
             ],
             FeatureFlag::class => ['key' => 'row-flag-'.uniqid(), 'enabled' => false],
             ApiKey::class => ['name' => 'Row Key', 'key_hash' => hash('sha256', 'row-'.uniqid())],
+            WebhookEndpoint::class => ['url' => 'https://example.com/row-'.uniqid(), 'secret' => 'secret-'.uniqid()],
+            WebhookDelivery::class => [
+                'webhook_endpoint_id' => WebhookEndpoint::create(['url' => 'https://example.com/parent', 'secret' => 'parent-secret'])->id,
+                'event_type' => 'row.event',
+                'payload' => ['row' => true],
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1390,6 +1400,8 @@ class TenantModelRegistry
             StudentBadge::class => ['awarded_at' => now()->subDay()],
             FeatureFlag::class => ['enabled' => true],
             ApiKey::class => ['name' => 'tampered'],
+            WebhookEndpoint::class => ['status' => 'disabled'],
+            WebhookDelivery::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

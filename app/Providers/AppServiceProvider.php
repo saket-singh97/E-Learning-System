@@ -9,6 +9,7 @@ use App\Domains\AI\Livewire\LessonRevisionNotes;
 use App\Domains\AI\Livewire\PhotoDoubtUpload;
 use App\Domains\AI\Livewire\SemanticSearch;
 use App\Domains\AI\Livewire\WeakTopics;
+use App\Domains\Api\Listeners\DispatchPaymentCapturedWebhook;
 use App\Domains\Batches\Events\AttendanceRecorded;
 use App\Domains\Batches\Events\EnrolmentApprovalExpired;
 use App\Domains\Batches\Events\EnrolmentAwaitingPayment;
@@ -176,6 +177,10 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(EnrolmentApprovalExpired::class, SendEnrolmentExpiredNotification::class);
         Event::listen(EnrolmentAwaitingPayment::class, CreateInvoiceForPendingEnrolment::class);
         Event::listen(PaymentCaptured::class, FinalizeEnrolmentOnPaymentCaptured::class);
+        // S21 B5 — Api's own half of the same one-way-ignorance shape;
+        // creates webhook_deliveries rows + queues DeliverWebhook for any
+        // active endpoint the tenant has configured.
+        Event::listen(PaymentCaptured::class, DispatchPaymentCapturedWebhook::class);
         // S13 B17 — Fees' program-invoice half of the same PaymentCaptured
         // shape, fixed from a direct PaymentReconciler -> ProgramEnrolmentService
         // call the review pass caught (CLAUDE.md: Events only, never a

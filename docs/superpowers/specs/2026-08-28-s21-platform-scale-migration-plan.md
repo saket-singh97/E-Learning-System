@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B2 | V10 pt.3 — Admin/Super panel flag toggle UI | ✅ done |
 | B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | ✅ done |
 | B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | ✅ done |
-| B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | not started |
+| B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | ✅ done |
 | B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | not started |
 | B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | not started |
 | B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | not started |
@@ -212,16 +212,44 @@ unrelated to this block's diff (`Http/Middleware`, `Exceptions`,
 (`CourseSlugUniquenessTest`) + 1 already-confirmed test-order flake
 (`BackupConfigurationTest`, verified passing in isolation during B2).
 
-### B5 — T5 pt.2: webhook schema + dispatch
+### B5 — T5 pt.2: webhook schema + dispatch — done 2026-08-28
 
-- [ ] `webhook_endpoints`/`webhook_deliveries` migrations + models (Api),
+- [x] `webhook_endpoints`/`webhook_deliveries` migrations + models (Api),
       registered in `TenantModelRegistry`.
-- [ ] HMAC-signed dispatch job (design doc §4 decision 3: queued,
+- [x] HMAC-signed dispatch job (design doc §4 decision 3: queued,
       at-least-once, never synchronous) — confirm which existing domain
       event(s) trigger a first real webhook before this block starts.
-- [ ] Tests: payload signature verifies with the endpoint's own secret, a
+- [x] Tests: payload signature verifies with the endpoint's own secret, a
       disabled endpoint receives nothing, delivery creates a real
       `webhook_deliveries` row.
+
+**Trigger event chosen (verified before coding):** `Fees\Events\PaymentCaptured`
+— already fired on every captured payment, already listened to twice
+(`FinalizeEnrolmentOnPaymentCaptured`, `EnrolFromProgramPayment`), and "a
+payment was captured" is the clearest real "an institute's own external
+system wants to know" moment already in the app. Added a third listener,
+`Api\Listeners\DispatchPaymentCapturedWebhook`, same one-way-ignorance shape
+as the other two.
+Built: `WebhookDispatcher::dispatch(Tenant, eventType, payload)` — the one
+chokepoint that turns a domain event into `webhook_deliveries` rows; only
+`active` endpoints get a row at all (a disabled endpoint receives nothing,
+not a row that's skipped later). `Api\Jobs\DeliverWebhook` (`ShouldQueue`,
+sync-tested via `QUEUE_CONNECTION=sync`) — HMAC-signs the JSON body
+(`hash_hmac('sha256', $body, $endpoint->secret)`) into an
+`X-Webhook-Signature` header, POSTs, records `delivered`/`failed` +
+`attempt_count`/`last_attempted_at`/`delivered_at`. No retry/backoff yet —
+that's explicitly B6's own addition, not this block's; a failed attempt is
+recorded and left alone, not rethrown into `failed_jobs`.
+Tests: `tests/Feature/Api/WebhookDeliveryTest.php` (5: HMAC signature
+verifies against the endpoint's own secret, disabled endpoint gets nothing
+sent and no row, a row is created per active endpoint, a non-2xx response
+marks `failed` without retrying, `PaymentCaptured::dispatch()` end-to-end
+produces a delivered webhook).
+Full suite: 1833 tests, 1831 passed. 2 failures, both pre-existing and
+unrelated to this block's diff (`app/Domains/Api/*`, `AppServiceProvider`,
+`TenantModelRegistry`, 2 migrations only) — the 1 baseline
+(`CourseSlugUniquenessTest`) + the same already-confirmed test-order flake
+(`BackupConfigurationTest`) seen in B2/B4.
 
 ### B6 — T5 pt.3: retry + delivery log
 
