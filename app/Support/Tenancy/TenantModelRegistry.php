@@ -8,6 +8,7 @@ use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
+use App\Domains\Api\Models\ApiKey;
 use App\Domains\Analytics\Models\Badge;
 use App\Domains\Analytics\Models\GamificationProfile;
 use App\Domains\Analytics\Models\MonthlyReportCard;
@@ -199,6 +200,7 @@ class TenantModelRegistry
         Badge::class,
         StudentBadge::class,
         FeatureFlag::class,
+        ApiKey::class,
     ];
 
     /**
@@ -1276,6 +1278,7 @@ class TenantModelRegistry
                 'awarded_at' => now(),
             ],
             FeatureFlag::class => ['key' => 'row-flag-'.uniqid(), 'enabled' => false],
+            ApiKey::class => ['name' => 'Row Key', 'key_hash' => hash('sha256', 'row-'.uniqid())],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1386,6 +1389,7 @@ class TenantModelRegistry
             Badge::class => ['name' => 'tampered'],
             StudentBadge::class => ['awarded_at' => now()->subDay()],
             FeatureFlag::class => ['enabled' => true],
+            ApiKey::class => ['name' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

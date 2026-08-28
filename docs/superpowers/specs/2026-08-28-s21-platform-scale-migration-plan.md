@@ -30,7 +30,7 @@ stop and report before starting the next block.
 | B0 | V10 pt.1 — `feature_flags` schema + `FeatureFlag` model | ✅ done |
 | B1 | V10 pt.2 — `FeatureGate` service + middleware enforcement on one real gated route | ✅ done |
 | B2 | V10 pt.3 — Admin/Super panel flag toggle UI | ✅ done |
-| B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | not started |
+| B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | ✅ done |
 | B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | not started |
 | B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | not started |
 | B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | not started |
@@ -139,16 +139,35 @@ unrelated to this block's diff (Tenancy/Filament only) — 1 baseline
 (`DownloadCompletionExportControllerTest`, `DownloadEnrolmentExportControllerTest`,
 `BackupConfigurationTest`) that all pass cleanly in isolation.
 
-### B3 — T5 pt.1: API key issuance
+### B3 — T5 pt.1: API key issuance — done 2026-08-28
 
-- [ ] `api_keys` migration + model (Api, new domain), registered in
+- [x] `api_keys` migration + model (Api, new domain), registered in
       `TenantModelRegistry`.
-- [ ] Admin-panel issuance action showing the real key exactly once,
+- [x] Admin-panel issuance action showing the real key exactly once,
       storing only `key_hash` (design doc §4 decision 4); revoke action
       sets `revoked_at`.
-- [ ] Tests: key shown once, hash verifies correctly, revoked key fails
+- [x] Tests: key shown once, hash verifies correctly, revoked key fails
       verification, a different tenant's key never verifies against this
       tenant's own records.
+
+Built: new `Api` domain — `app/Domains/Api/Models/ApiKey.php`,
+`Services/ApiKeyService.php` (`issue()`/`verify()`/`revoke()`,
+`hash('sha256', $key)`), `Filament/Resources/ApiKeys/` (Admin-panel only via
+`canAccess()`; discovery line added to `AdminPanelProvider`). No Edit page —
+issuance is a header action on the List page (shows the plain key once in a
+persistent notification, never persisted), revoke is a row action setting
+`revoked_at`; same "mutate via page actions, not a form" shape
+`ListInstructorInvitations`/`EditTenant` already established.
+`ApiKeyService::verify()` bypasses the tenant scope on purpose — an inbound
+key arrives with no tenant context bound yet, same unscoped-lookup shape
+`FeatureGate` uses. Registered in `TenantModelRegistry`.
+Tests: `tests/Feature/Api/ApiKeyServiceTest.php` (5: plain-key-once,
+verify+last_used_at, garbage key refused, revoked key refused, cross-tenant
+never resolves) + `tests/Feature/Api/ApiKeyIssuanceUiTest.php` (2: issue via
+header action, revoke via row action).
+Full suite: 1821 tests, 1820 passed — only the 1 pre-existing baseline
+failure (`CourseSlugUniquenessTest`, carried since S1/S2). No flakes this
+run.
 
 ### B4 — V12b: bearer-token auth on `/api/v1/`
 

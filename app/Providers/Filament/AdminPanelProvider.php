@@ -49,6 +49,7 @@ class AdminPanelProvider extends PanelProvider
             ->favicon(fn () => app(BrandingService::class)->faviconUrl())
             ->brandLogo(fn () => app(BrandingService::class)->logoUrl())
             ->discoverResources(in: app_path('Domains/Tenancy/Filament/Resources'), for: 'App\Domains\Tenancy\Filament\Resources')
+            ->discoverResources(in: app_path('Domains/Api/Filament/Resources'), for: 'App\Domains\Api\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Batches/Filament/Resources'), for: 'App\Domains\Batches\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Fees/Filament/Resources'), for: 'App\Domains\Fees\Filament\Resources')
             ->discoverResources(in: app_path('Domains/Comms/Filament/Resources'), for: 'App\Domains\Comms\Filament\Resources')
