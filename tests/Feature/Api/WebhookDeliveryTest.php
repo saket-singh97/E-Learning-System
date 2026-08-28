@@ -59,14 +59,22 @@ it('creates a real webhook_deliveries row per active endpoint', function () {
         ->and(WebhookDelivery::pluck('event_type')->unique()->all())->toBe(['payment.captured']);
 });
 
-it('marks a delivery failed when the endpoint responds with an error, without retrying yet', function () {
+it('marks a delivery failed on a bad response and rethrows for the queue to retry', function () {
     $tenant = Tenant::factory()->create();
     app(CurrentTenant::class)->set($tenant);
     WebhookEndpoint::create(['url' => 'https://down.example.com/hook', 'secret' => 'x']);
 
     Http::fake(['down.example.com/*' => Http::response('', 500)]);
 
-    app(WebhookDispatcher::class)->dispatch($tenant, 'payment.captured', ['enrolment_id' => 1]);
+    // QUEUE_CONNECTION=sync in tests runs the job inline with no retry loop
+    // of its own (that's the real queue worker's job, not something this
+    // test harness simulates) — the thrown exception is expected here and
+    // is exactly what lets a real worker's backoff/retry take over.
+    try {
+        app(WebhookDispatcher::class)->dispatch($tenant, 'payment.captured', ['enrolment_id' => 1]);
+    } catch (\Illuminate\Http\Client\RequestException) {
+        // expected — see comment above
+    }
 
     $delivery = WebhookDelivery::sole();
     expect($delivery->status)->toBe('failed')

@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B3 | T5 pt.1 — `api_keys` schema + issuance/revocation Filament UI | ✅ done |
 | B4 | V12b — bearer-token auth (Sanctum) on `/api/v1/`'s existing webhook/health endpoints | ✅ done |
 | B5 | T5 pt.2 — `webhook_endpoints`/`webhook_deliveries` schema + HMAC-signed dispatch job | ✅ done |
-| B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | not started |
+| B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | ✅ done |
 | B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | not started |
 | B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | not started |
 | B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | not started |
@@ -251,14 +251,53 @@ unrelated to this block's diff (`app/Domains/Api/*`, `AppServiceProvider`,
 (`CourseSlugUniquenessTest`) + the same already-confirmed test-order flake
 (`BackupConfigurationTest`) seen in B2/B4.
 
-### B6 — T5 pt.3: retry + delivery log
+### B6 — T5 pt.3: retry + delivery log — done 2026-08-28
 
-- [ ] 5-retry backoff on delivery failure (design doc §4 decision 3),
+- [x] 5-retry backoff on delivery failure (design doc §4 decision 3),
       `attempt_count`/`status` updated per attempt; delivery log
       admin-panel view.
-- [ ] Tests: a failing endpoint retries up to 5 times then marks
+- [x] Tests: a failing endpoint retries up to 5 times then marks
       `failed`, a recovering endpoint on a later attempt marks
       `delivered`, the log shows accurate attempt history.
+
+Built: `DeliverWebhook` gained `$tries = 5` + `backoff(): [60, 300, 900,
+3600]` (same shape every other queued sweep in this app already uses) —
+the catch block now rethrows after recording `failed`/`attempt_count`, which
+is what lets Laravel's own queue worker re-run `handle()` after each
+backoff delay; the job itself doesn't loop or sleep. Also noticed no UI
+existed yet anywhere to actually *register* a webhook endpoint (B5 only
+built the schema+dispatch side) — added `WebhookEndpointResource`
+(Admin-panel only, `app/Domains/Api/Filament/Resources/WebhookEndpoints/`,
+already discovered via B3's `AdminPanelProvider` line): a header action
+registers an endpoint and shows its signing secret once (same idiom
+`ListApiKeys` used), row actions disable/enable, and a read-only
+`DeliveriesRelationManager` on the Edit page is the "delivery log" the
+checklist names — no create/edit/delete on it, rows are system-generated
+only.
+**Real bug caught while writing the "recovering endpoint" test:** `Http::fake()`
+called twice for the same URL pattern in one test does *not* override the
+first stub — `Factory::stubUrl()` merges onto the same `stubCallbacks`
+collection and `PendingRequest::buildStubHandler()` takes the *first*
+matching stub, not the last (confirmed by reading Laravel's own source).
+The test looked correct but silently kept hitting the first (500) stub.
+Fixed with a single `Http::fake([...=>Http::sequence()->push(...)->push(...)])`
+registration instead of two separate `Http::fake()` calls — a genuine
+Laravel testing gotcha worth remembering for any future test that needs a
+mocked HTTP response to change mid-test.
+Tests: `tests/Feature/Api/WebhookRetryTest.php` (4: 5 attempts against a
+permanently-down endpoint stays `failed`, a recovering endpoint marks
+`delivered` on the attempt that succeeds, attempt history accumulates
+correctly across retries, an already-`delivered` row is a no-op) +
+`tests/Feature/Api/WebhookEndpointUiTest.php` (3: register shows the secret
+once, disable/enable row actions, delivery log visible on the Edit page) +
+1 existing B5 test in `WebhookDeliveryTest.php` updated for the new
+rethrow-on-failure behavior.
+Full suite: 1840 tests, 1837 passed. 3 failures, all pre-existing and
+unrelated to this block's diff (`Api/Jobs/DeliverWebhook.php`,
+`Api/Filament/Resources/WebhookEndpoints/`, 3 test files only) — the 1
+baseline (`CourseSlugUniquenessTest`) + 2 already-confirmed test-order
+flakes (`BackupConfigurationTest`, `DownloadEnrolmentExportControllerTest`)
+seen in earlier blocks.
 
 ### B7 — V13a: Google Workspace SSO
 

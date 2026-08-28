@@ -13,20 +13,33 @@ use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
- * S21 B5 (T5 pt.2, design doc §4 decision 3) — an institute's own endpoint
- * being slow or down must never block the request that triggered the
- * webhook, so this always runs off the queue, never inline. Retry/backoff
- * on failure is B6's own addition, not this block's — a failed attempt here
- * is recorded and left alone.
+ * S21 B5/B6 (T5 pt.2/3, design doc §4 decision 3) — an institute's own
+ * endpoint being slow or down must never block the request that triggered
+ * the webhook, so this always runs off the queue, never inline. 5 tries
+ * (T5's own spec), same $tries/backoff() shape every other queued sweep in
+ * this app already uses (FlagOverdueInvoices et al.) — rethrowing on
+ * failure is what lets Laravel's own queue worker re-run handle() after
+ * each backoff delay; this class only records what happened on each real
+ * attempt, it doesn't loop or sleep itself.
  */
 class DeliverWebhook implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
 
+    public int $tries = 5;
+
     public function __construct(
         public readonly int $webhookDeliveryId,
         public readonly int $tenantId,
     ) {}
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [60, 300, 900, 3600];
+    }
 
     public function handle(): void
     {
@@ -54,12 +67,14 @@ class DeliverWebhook implements ShouldQueue
                 'last_attempted_at' => now(),
                 'delivered_at' => now(),
             ]);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
             $delivery->update([
                 'status' => 'failed',
                 'attempt_count' => $delivery->attempt_count + 1,
                 'last_attempted_at' => now(),
             ]);
+
+            throw $e;
         }
     }
 }
