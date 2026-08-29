@@ -30,7 +30,7 @@ stop and report before starting the next block.
 | B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | ✅ done |
 | B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | ✅ done |
 | B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | ✅ done |
-| B4 | U3 pt.2 — DPP student-facing page + generation trigger | not started |
+| B4 | U3 pt.2 — DPP student-facing page + generation trigger | ✅ done |
 | B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | not started |
 | B6 | U5 — Auto formula sheet / revision cards per chapter | not started |
 | B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | not started |
@@ -126,18 +126,24 @@ posture S21's own blocks established).
       respects the `practice_date` cutoff, idempotent re-run returns the
       same row and doesn't grow the Questions table.
 
-### B4 — U3 pt.2: DPP UI + trigger
+### B4 — U3 pt.2: DPP UI + trigger ✅
 
-- [ ] Student-facing daily practice page (list today's set, attempt via
-      the existing `Quiz`/attempt flow if DPP questions are wrapped in a
-      `Quiz`, or a lighter standalone view — confirm exact UI shape
-      before this block starts).
-- [ ] Daily generation trigger — confirm scheduled sweep vs on-demand
-      generation at first student visit before building (a sweep matches
-      this app's own existing `Schedule::job()` posture; on-demand avoids
-      generating sets nobody opens).
-- [ ] Tests: a student sees today's set, generation is idempotent if
-      triggered twice.
+- [x] Student-facing daily practice page: `DailyPracticeBoard` Livewire
+      component (lighter standalone view, not wrapped in `Quiz` — DPP's
+      draft/`ai_generated` questions would never surface through
+      `QuizAttemptService`'s approved-only draw pool anyway; DPP is
+      ungraded self-practice, not an attempt). New host route
+      `/batches/{batch}/daily-practice` (same "add a small host route"
+      shape `batch-session.check-in` already used), gated the same
+      "actively-enrolled student" way `GeofenceCheckIn` already is.
+- [x] Generation trigger: on-demand at first visit, not a scheduled sweep
+      — `DailyPracticeSetGenerator::generateFor()` is already idempotent
+      (B3), so calling it on every `mount()` is safe and never builds a
+      set for a batch nobody opens that day.
+- [x] Tests (`tests/Feature/Assessments/DailyPracticeBoardTest.php`): an
+      enrolled student sees today's set, a second visit the same day
+      doesn't create a second `DailyPracticeSet` row, a non-enrolled user
+      gets a 404.
 
 ### B5 — U4: ask-at-timestamp
 

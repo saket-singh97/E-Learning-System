@@ -39,6 +39,16 @@ Route::get('/batch-sessions/{session}/check-in', function (Request $request) {
     return view('batches.batch-session-check-in', ['session' => $session]);
 })->middleware(['auth'])->name('batch-session.check-in');
 
+// S22 B4 — same "add a small host route" shape as the check-in route above;
+// no existing student-facing "batch" page to embed DailyPracticeBoard on.
+// Auth-required — the component's own enrolment gate has nothing to check
+// against for a guest.
+Route::get('/batches/{batch}/daily-practice', function (Request $request) {
+    $batch = Batch::findOrFail($request->route('batch'));
+
+    return view('batches.batch-daily-practice', ['batch' => $batch]);
+})->middleware(['auth'])->name('batch.daily-practice');
+
 // Same double-check posture as /zoom/connect above — role:institute_admin
 // middleware plus the controller's own tenant-scoped lookup.
 Route::get('/student-imports/{importBatch}/error-report', DownloadStudentImportErrorReportController::class)
