@@ -71,6 +71,7 @@ use App\Domains\Content\Models\CourseImportBatch;
 use App\Domains\Content\Models\CourseReview;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Content\Models\LessonAudioTrack;
 use App\Domains\Content\Models\LessonNote;
 use App\Domains\Content\Models\LessonQuestion;
 use App\Domains\Content\Models\LessonQuestionReply;
@@ -196,6 +197,7 @@ class TenantModelRegistry
         LessonRevisionNote::class,
         LessonPdfNote::class,
         DailyPracticeSet::class,
+        LessonAudioTrack::class,
         PhotoDoubtQuery::class,
         MonthlyReportCard::class,
         Survey::class,
@@ -262,6 +264,10 @@ class TenantModelRegistry
             ],
             LessonPdfNote::class => [
                 'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
+                'status' => 'pending',
+            ],
+            LessonAudioTrack::class => [
+                'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'video', 'position' => 0])->id,
                 'status' => 'pending',
             ],
             DailyPracticeSet::class => [
@@ -1350,6 +1356,7 @@ class TenantModelRegistry
             LessonArtifact::class => ['source_asset_version' => 'tampered'],
             LessonPdfNote::class => ['status' => 'failed'],
             DailyPracticeSet::class => ['question_ids' => [999]],
+            LessonAudioTrack::class => ['status' => 'failed'],
             LessonArtifactChunk::class => ['text' => 'tampered'],
             DoubtChatMessage::class => ['answer' => 'tampered'],
             Batch::class => ['title' => 'tampered'],

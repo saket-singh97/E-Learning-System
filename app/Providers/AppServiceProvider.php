@@ -21,6 +21,7 @@ use App\Domains\Batches\Listeners\FinalizeEnrolmentOnPaymentCaptured;
 use App\Domains\AI\Events\LessonArtifactReady;
 use App\Domains\Content\Listeners\EnrolFromProgramPayment;
 use App\Domains\AI\Listeners\GenerateLessonPdfNotes;
+use App\Domains\Content\Listeners\ExtractLessonAudio;
 use App\Domains\Content\Listeners\GenerateLessonSubtitles;
 use App\Domains\Batches\Listeners\SendEnrolmentExpiredNotification;
 use App\Domains\Batches\Livewire\BatchCatalog;
@@ -70,6 +71,8 @@ use App\Integrations\Drivers\FakeAiDriver;
 use App\Integrations\Drivers\FakeGeoIpResolver;
 use App\Integrations\Drivers\FakeLiveClassDriver;
 use App\Integrations\Drivers\FakeRazorpayDriver;
+use App\Integrations\AudioExtractionProvider;
+use App\Integrations\Drivers\FakeAudioExtractionDriver;
 use App\Integrations\Drivers\FakeVideoDriver;
 use App\Integrations\Drivers\FakeWhatsAppDriver;
 use App\Integrations\Drivers\FakeRazorpaySubscriptionDriver;
@@ -113,6 +116,13 @@ class AppServiceProvider extends ServiceProvider
             $app->make(FakeVideoDriver::class),
             $app->make(CircuitBreaker::class),
         ));
+
+        // S22 B7 — no circuit-breaker wrapper: unlike the providers above
+        // (all wrapped by S12 B10's own hardening pass over what existed
+        // then), this interface is new in this slice and the design doc
+        // calls only for the Fake-driver-first shape, not a resilience
+        // retrofit for a driver that can't fail over a real network yet.
+        $this->app->bind(AudioExtractionProvider::class, FakeAudioExtractionDriver::class);
 
         // Wraps the driver, not a sixth spend-cap check duplicated across
         // every AiProvider call site (S9 B12) — every call site resolves
@@ -175,6 +185,10 @@ class AppServiceProvider extends ServiceProvider
         // not app/Domains/*/Listeners) — cross-domain event wiring belongs here,
         // it's the boundary connecting Content -> AI, not either domain's own concern.
         Event::listen(LessonVideoReady::class, StartIngestion::class);
+        // S22 B7 — audio extraction is a pure media transform on the video
+        // itself, so it rides the same LessonVideoReady signal StartIngestion
+        // does rather than waiting on the AI pipeline's own LessonArtifactReady.
+        Event::listen(LessonVideoReady::class, ExtractLessonAudio::class);
         // S14 B2 — subtitles ride the same ingestion-complete signal
         // StartIngestion's own chain produces, not a separate manual trigger.
         Event::listen(LessonArtifactReady::class, GenerateLessonSubtitles::class);

@@ -33,7 +33,7 @@ stop and report before starting the next block.
 | B4 | U3 pt.2 — DPP student-facing page + generation trigger | ✅ done |
 | B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | ✅ done |
 | B6 | U5 — Auto formula sheet / revision cards per chapter | ✅ done |
-| B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | not started |
+| B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | ✅ done |
 | B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | not started |
 | B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | not started |
 | B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | not started |
@@ -189,17 +189,25 @@ posture S21's own blocks established).
       chapter, empty state when none extracted, a draft course's chapter
       404s a guest.
 
-### B7 — U7 pt.1: audio-only mode, extraction
+### B7 — U7 pt.1: audio-only mode, extraction ✅
 
-- [ ] `lesson_audio_tracks` migration + model (Content), registered in
-      `TenantModelRegistry`.
-- [ ] `AudioExtractionProvider` interface (`app/Integrations/`) +
+- [x] `lesson_audio_tracks` migration + `LessonAudioTrack` model
+      (Content), registered in `TenantModelRegistry`.
+- [x] `AudioExtractionProvider` interface (`app/Integrations/`) +
       `FakeAudioExtractionDriver`, same Fake-first shape
       `AiProvider`/`VideoProvider` already established. No real driver
-      bound this block — confirmed deliberate per design doc §2.4.
-- [ ] Tests: extraction job creates a `ready` track against the fake
-      driver, failure state handled same as `LiveRecording`'s own
-      `failed` status shape.
+      bound (deliberate, §2.4) — bound directly too, no circuit-breaker
+      wrapper: that layer (S12 B10) retrofitted providers that existed
+      *then*, not a resilience requirement for a new Fake-only interface.
+      `ExtractLessonAudio` listener, additive to the *existing*
+      `LessonVideoReady` event (rides the video-ready signal, not
+      `LessonArtifactReady` — audio extraction doesn't need the AI
+      pipeline at all).
+- [x] Tests (`tests/Feature/Content/ExtractLessonAudioTest.php`):
+      extraction creates a `ready` track against the fake driver, a
+      throwing driver marks the track `failed` without fatally erroring
+      (same `InteractsWithQueue`/`fail()` shape `GenerateLessonSubtitles`
+      already needed, S14 B18).
 
 ### B8 — U7 pt.2: audio-only player UI
 
