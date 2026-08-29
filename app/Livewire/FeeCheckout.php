@@ -25,6 +25,15 @@ class FeeCheckout extends Component
 
     public string $couponCode = '';
 
+    /**
+     * S21 B9 (V11) — null is a full payment, byte-identical to before this
+     * block. Card EMI is separate from, and in addition to, the
+     * institute's own instalment plan (design doc §2.1) — this option
+     * exists regardless of whether the invoice is already one instalment
+     * of several.
+     */
+    public ?int $emiDurationMonths = null;
+
     public function mount(Enrolment $enrolment): void
     {
         $this->enrolment = $enrolment;
@@ -77,7 +86,7 @@ class FeeCheckout extends Component
             return;
         }
 
-        app(FeeInvoiceService::class)->createPaymentOrder($invoice);
+        app(FeeInvoiceService::class)->createPaymentOrder($invoice, $this->emiDurationMonths);
     }
 
     public function render(): View

@@ -85,6 +85,34 @@ it('captures a payment, marks the invoice paid, and dispatches PaymentCaptured',
     Event::assertDispatched(PaymentCaptured::class, fn ($event) => $event->enrolmentId === $this->enrolment->id);
 });
 
+it('captures an EMI payment identically to a non-EMI one (S21 B9)', function () {
+    Event::fake([PaymentCaptured::class]);
+
+    // No EMI-specific webhook event exists on Razorpay's own side (design
+    // doc §4 decision 6/verification) — EMI is only an order-creation
+    // option, so the same payment.captured event/payload shape as any
+    // other order applies here too.
+    $this->payment->update(['status' => 'failed']);
+    $emiPayment = app(FeeInvoiceService::class)->createPaymentOrder($this->invoice->fresh(), 6);
+
+    $payload = json_encode([
+        'event' => 'payment.captured',
+        'payload' => [
+            'payment' => ['entity' => ['id' => 'pay_emi123', 'order_id' => $emiPayment->provider_order_id]],
+            'order' => ['entity' => ['id' => $emiPayment->provider_order_id, 'notes' => ['tenant_id' => (string) $this->tenant->id]]],
+        ],
+    ]);
+
+    $this->reconciler->reconcile($payload, ($this->sign)($payload));
+
+    expect($emiPayment->fresh()->status)->toBe('captured')
+        ->and($emiPayment->fresh()->provider_payment_id)->toBe('pay_emi123')
+        ->and($emiPayment->fresh()->emi_duration_months)->toBe(6)
+        ->and($this->invoice->fresh()->status)->toBe('paid');
+
+    Event::assertDispatched(PaymentCaptured::class);
+});
+
 it('throws on an invalid signature and touches nothing', function () {
     $payload = ($this->payload)('payment.captured');
 

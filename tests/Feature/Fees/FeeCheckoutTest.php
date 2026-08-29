@@ -58,6 +58,24 @@ it('starts a checkout order and shows the created order instead of the Pay now b
     expect(FeePayment::count())->toBe(1);
 });
 
+it('carries a selected EMI duration through to the created order (S21 B9)', function () {
+    Livewire::actingAs($this->student)
+        ->test(FeeCheckout::class, ['enrolment' => $this->enrolment])
+        ->set('emiDurationMonths', 6)
+        ->call('startCheckout')
+        ->assertSee('Order created');
+
+    expect(FeePayment::sole()->emi_duration_months)->toBe(6);
+});
+
+it('leaves emi_duration_months null for a plain Pay now checkout (S21 B9)', function () {
+    Livewire::actingAs($this->student)
+        ->test(FeeCheckout::class, ['enrolment' => $this->enrolment])
+        ->call('startCheckout');
+
+    expect(FeePayment::sole()->emi_duration_months)->toBeNull();
+});
+
 it('polls for a live refresh while a payment is genuinely in flight', function () {
     // No broadcasting infrastructure exists (BROADCAST_CONNECTION is
     // 'log') — wire:poll is this block's own pragmatic live-refresh

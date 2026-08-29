@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B6 | T5 pt.3 — 5-retry delivery logic + delivery log admin UI | ✅ done |
 | B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | ✅ done |
 | B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | ✅ done |
-| B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | not started |
+| B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | ✅ done |
 | B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | not started |
 | B11 | V14 pt.2 — enrolment CSV import | not started |
 | B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | not started |
@@ -377,16 +377,44 @@ immediately after and it passed clean, confirming a transient
 infra/connection-pool hiccup during the long run, not a regression from
 this block's diff (`Fees`/`Integrations` files + 1 migration only).
 
-### B9 — V11 pt.2: EMI checkout + webhook handling
+### B9 — V11 pt.2: EMI checkout + webhook handling — done 2026-08-29
 
-- [ ] Checkout UI option to select an EMI duration (reuses the existing
+- [x] Checkout UI option to select an EMI duration (reuses the existing
       checkout flow's own structure — confirm exact component before
       this block starts).
-- [ ] `PaymentReconciler` correctly captures an EMI payment the same as
+- [x] `PaymentReconciler` correctly captures an EMI payment the same as
       any other (confirm no EMI-specific webhook event exists in
       Razorpay's own docs before assuming one does).
-- [ ] Tests: EMI selection flows through to a real order, capture works
+- [x] Tests: EMI selection flows through to a real order, capture works
       identically to a non-EMI payment.
+
+**Component confirmed before starting:** `app/Livewire/FeeCheckout.php`
+(`startCheckout()`) — the one existing call site for
+`FeeInvoiceService::createPaymentOrder()` from the student-facing checkout
+flow (B1's own component, embedded in the batch-catalog row). Added
+`public ?int $emiDurationMonths = null` (null = full payment, unchanged
+default) and a `<select>` in `fee-checkout.blade.php` (3/6/9/12-month
+options) alongside the existing "Pay now" button, threaded straight into
+`createPaymentOrder($invoice, $this->emiDurationMonths)`.
+**`PaymentReconciler` needed zero changes** — confirmed before touching it:
+design doc §4 decision 6 already establishes EMI as an order-*creation*
+option only, not a separate payment type or webhook event; Razorpay still
+fires the same `payment.captured`/`payment.failed` events regardless, and
+`capture()`/`fail()` key off `provider_order_id` alone, which doesn't care
+whether that order was EMI or not.
+Tests: 2 new in `FeeCheckoutTest.php` (EMI duration carries through to the
+`FeePayment` row, plain checkout leaves it null) + 1 new in
+`PaymentReconcilerTest.php` (an EMI payment captures identically to a
+non-EMI one — same event, same code path).
+**Docker Postgres hiccup mid-block:** first full-suite attempt errored with
+`connection refused` (container had genuinely restarted, confirmed via
+`docker ps` showing 27s uptime) — an infra blip, not a code issue; re-ran
+clean once the container was back.
+Full suite: 1848 tests, 1845 passed. 3 failures, all pre-existing and
+unrelated to this block's diff (`FeeCheckout.php` + its view + 2 test files
+only) — the 1 baseline (`CourseSlugUniquenessTest`) + 2 already-confirmed
+test-order flakes (`DownloadCompletionExportControllerTest`,
+`DownloadEnrolmentExportControllerTest`).
 
 ### B10 — V14 pt.1: course/category import
 

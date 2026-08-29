@@ -23,6 +23,13 @@
         @endif
 
         @if ($latestPayment === null)
+            <select wire:model="emiDurationMonths">
+                <option value="">Full payment</option>
+                <option value="3">Card EMI &mdash; 3 months</option>
+                <option value="6">Card EMI &mdash; 6 months</option>
+                <option value="9">Card EMI &mdash; 9 months</option>
+                <option value="12">Card EMI &mdash; 12 months</option>
+            </select>
             <button type="button" wire:click="startCheckout">Pay now</button>
         @elseif ($latestPayment->status === 'created')
             {{-- No broadcasting infrastructure exists yet (BROADCAST_CONNECTION
