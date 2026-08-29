@@ -36,7 +36,7 @@ class StreamLessonController extends Controller
         }
 
         $path = $video->url($lesson);
-        $bytes = $this->bytesServed($request, (int) filesize($path));
+        $bytes = self::bytesServed($request, (int) filesize($path));
 
         $access->assertWithinBandwidthQuota($lesson, $bytes);
 
@@ -50,8 +50,12 @@ class StreamLessonController extends Controller
      * one is a separate hit on this controller. Charging the tenant the whole
      * file every time turned one watch into many full-file charges, so meter
      * the slice actually sent instead.
+     *
+     * Public static (S22 B8) — StreamLessonAudioController reuses this exact
+     * Range-parsing logic for the lesson's audio track rather than a second
+     * copy of it; the method never touched $this to begin with.
      */
-    protected function bytesServed(Request $request, int $fileSize): int
+    public static function bytesServed(Request $request, int $fileSize): int
     {
         $range = (string) $request->header('Range');
 

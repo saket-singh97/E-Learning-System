@@ -34,7 +34,7 @@ stop and report before starting the next block.
 | B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | ✅ done |
 | B6 | U5 — Auto formula sheet / revision cards per chapter | ✅ done |
 | B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | ✅ done |
-| B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | not started |
+| B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | ✅ done |
 | B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | not started |
 | B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | not started |
 | B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | not started |
@@ -209,16 +209,26 @@ posture S21's own blocks established).
       (same `InteractsWithQueue`/`fail()` shape `GenerateLessonSubtitles`
       already needed, S14 B18).
 
-### B8 — U7 pt.2: audio-only player UI
+### B8 — U7 pt.2: audio-only player UI ✅
 
-- [ ] Player toggle to switch to the extracted audio track when
-      `lesson_audio_tracks` has a `ready` row for the current lesson.
-- [ ] Confirm bandwidth-metering integration — an audio-only stream
-      should record against `BandwidthUsageDaily` at its own (much
-      lower) byte count, not the video byte count, same metering
-      chokepoint `LessonAccess::assertWithinBandwidthQuota()` already is.
-- [ ] Tests: toggle only appears when a ready track exists, bandwidth
-      recorded at the audio file's own size.
+- [x] `LessonPlayer::mount()` sets `$audioUrl` (a signed `watch.audio`
+      route) only when a `ready` `lesson_audio_tracks` row exists; the
+      player's own toggle button swaps `<video src>` between it and the
+      normal `$streamUrl`, reusing the existing player controls
+      (play/seek/heartbeat) unchanged.
+- [x] New `StreamLessonAudioController`, the exact same gate/metering
+      chokepoint `StreamLessonController` already is
+      (`isPlayable`/`isVisibleTo`/`canStream`/`ConcurrentStreamGuard`/
+      `assertWithinBandwidthQuota`) — reuses
+      `StreamLessonController::bytesServed()` (made `public static`,
+      it never touched `$this`) rather than a second copy of the same
+      Range-parsing logic. 404s if no `ready` track exists. Records the
+      audio file's own byte count, not the video's.
+- [x] Tests (`LessonAudioTrackToggleTest.php`,
+      `BandwidthMeteringAudioTest.php`): toggle appears only for a
+      `ready` track (not `pending`, not missing), an audio-only stream
+      meters at the audio file's own size, a lesson with no ready track
+      404s the audio route without recording anything.
 
 ### B9 — U8: teacher lesson-plan assistant
 

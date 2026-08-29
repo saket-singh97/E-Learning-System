@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Content\Models\LessonAudioTrack;
 use App\Domains\Content\Models\VideoWatchEvent;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\View\View;
@@ -18,6 +19,8 @@ class LessonPlayer extends Component
     public string $heartbeatUrl = '';
 
     public string $subtitleUrl = '';
+
+    public string $audioUrl = '';
 
     public string $viewerName = '';
 
@@ -58,6 +61,19 @@ class LessonPlayer extends Component
             $this->resumeAt = (int) VideoWatchEvent::where('user_id', $user->id)
                 ->where('lesson_id', $lesson->id)
                 ->max('end_s');
+        }
+
+        // U7 pt.2 (S22 B8) — the toggle only ever appears when a ready
+        // track actually exists (design doc B8 checklist).
+        $hasReadyAudioTrack = LessonAudioTrack::where('lesson_id', $lesson->id)
+            ->where('status', 'ready')
+            ->exists();
+
+        if ($hasReadyAudioTrack) {
+            $this->audioUrl = URL::temporarySignedRoute('watch.audio', now()->addMinutes(10), [
+                'subdomain' => $subdomain,
+                'lesson' => $lesson->id,
+            ]);
         }
     }
 

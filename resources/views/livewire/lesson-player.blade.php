@@ -3,6 +3,7 @@
         speed: 1,
         watermarkTop: 5,
         watermarkLeft: 5,
+        useAudio: false,
         resumeAt: {{ $resumeAt }},
         lastReported: {{ $resumeAt }},
         reposition() {
@@ -57,6 +58,12 @@
         toggleFullscreen() {
             document.fullscreenElement ? document.exitFullscreen() : this.$refs.container.requestFullscreen();
         },
+        toggleAudioOnly() {
+            this.useAudio = !this.useAudio;
+            this.$refs.video.src = this.useAudio ? '{{ $audioUrl }}' : '{{ $streamUrl }}';
+            this.$refs.video.load();
+            this.$refs.video.play();
+        },
     }"
     x-ref="container"
     x-on:seek-to.window="$refs.video.currentTime = $event.detail.seconds"
@@ -104,5 +111,11 @@
         </select>
 
         <button type="button" x-on:click="toggleFullscreen()">Fullscreen</button>
+
+        @if ($audioUrl)
+            {{-- U7 pt.2 (S22 B8) — only rendered when a ready
+                 lesson_audio_tracks row exists (LessonPlayer::mount()). --}}
+            <button type="button" x-on:click="toggleAudioOnly()" x-text="useAudio ? 'Switch to video' : 'Audio-only mode'"></button>
+        @endif
     </div>
 </div>

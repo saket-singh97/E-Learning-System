@@ -6,6 +6,7 @@ use App\Http\Controllers\Content\DownloadLessonPdfController;
 use App\Http\Controllers\Content\DownloadLessonSubtitleController;
 use App\Http\Controllers\Content\JoinLiveClassController;
 use App\Http\Controllers\Content\ShowSyllabusController;
+use App\Http\Controllers\Content\StreamLessonAudioController;
 use App\Http\Controllers\Content\StreamLessonController;
 use App\Http\Controllers\Content\WatchHeartbeatController;
 use App\Http\Controllers\Content\WatchLessonController;
@@ -29,6 +30,12 @@ Route::get('/wishlist', fn () => view('content.my-wishlist'))
 Route::get('/watch/{lesson}', StreamLessonController::class)
     ->middleware('signed')
     ->name('watch.stream');
+
+// S22 B8 — audio-only mode's own stream endpoint, same 'signed' shape as
+// watch.stream/watch.pdf/watch.subtitle above.
+Route::get('/watch/{lesson}/audio', StreamLessonAudioController::class)
+    ->middleware('signed')
+    ->name('watch.audio');
 
 // S21 B10 — same double-check posture as routes/batches.php's own
 // /student-imports/{importBatch}/error-report: role:institute_admin
