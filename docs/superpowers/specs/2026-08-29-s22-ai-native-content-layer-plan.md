@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | ✅ done |
 | B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | ✅ done |
 | B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | ✅ done |
-| B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | not started |
+| B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | ✅ done |
 | B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | not started |
 | B13 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
@@ -287,17 +287,27 @@ posture S21's own blocks established).
       already-renewed row doesn't renew it again, a `cancelled`
       subscription past its period is never renewed.
 
-### B11 — Z2: affiliate commission auto-confirmation
+### B11 — Z2: affiliate commission auto-confirmation ✅
 
-- [ ] `ConfirmCommissionOnPaymentCaptured` listener on the *existing*
-      `PaymentCaptured` event, calling `AffiliateAttributionService`'s
-      existing confirmation step. Confirm the event never fires for a
-      program/membership-linked payment (per `PaymentReconciler::capture()`'s
-      own branching, design doc §4 decision 8) before assuming no guard
-      is needed.
-- [ ] Tests: a captured payment with a pending referral confirms its
-      commission automatically, a payment with no referral is a no-op,
-      a program/membership-linked payment never reaches this listener.
+- [x] `ConfirmCommissionOnPaymentCaptured` listener on the *existing*
+      `PaymentCaptured` event (plain listener, no `ShouldQueue` — same
+      shape `FinalizeEnrolmentOnPaymentCaptured`/
+      `DispatchPaymentCapturedWebhook` already use on this event),
+      calling `AffiliateAttributionService::confirmCommission()`.
+      Confirmed by reading `PaymentReconciler::capture()`: it dispatches
+      `PaymentCaptured` only from its plain-enrolment `else` branch — a
+      membership invoice calls `activateFromPayment()` directly, a
+      program invoice dispatches `ProgramInvoicePaid` instead — so no
+      branch guard is needed inside the listener itself. Resolves the
+      referral via the invoice's own payments (not the referral's stored
+      `fee_payment_id`) since a retried checkout can attach a second
+      `FeePayment` to the same invoice after an earlier one failed.
+- [x] Tests (`tests/Feature/Growth/ConfirmCommissionOnPaymentCapturedTest.php`):
+      a captured payment with a pending referral confirms its commission
+      (real percentage math verified), a captured payment with no
+      referral is a no-op, a membership-linked payment's real webhook
+      capture (`PaymentReconciler::reconcile()`, not just a direct
+      `event()` call) never dispatches `PaymentCaptured` at all.
 
 ### B12 — `TenantModelRegistry` sweep
 

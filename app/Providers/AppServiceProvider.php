@@ -9,6 +9,7 @@ use App\Domains\AI\Livewire\DoubtChat;
 use App\Domains\AI\Livewire\FormulaSheet;
 use App\Domains\Assessments\Listeners\GenerateQuizFromLiveClass;
 use App\Domains\Assessments\Livewire\DailyPracticeBoard;
+use App\Domains\Growth\Listeners\ConfirmCommissionOnPaymentCaptured;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
 use App\Domains\AI\Livewire\PhotoDoubtUpload;
 use App\Domains\AI\Livewire\SemanticSearch;
@@ -205,6 +206,8 @@ class AppServiceProvider extends ServiceProvider
         // creates webhook_deliveries rows + queues DeliverWebhook for any
         // active endpoint the tenant has configured.
         Event::listen(PaymentCaptured::class, DispatchPaymentCapturedWebhook::class);
+        // Z2 (S22 B11) — Growth's own half of the same PaymentCaptured shape.
+        Event::listen(PaymentCaptured::class, ConfirmCommissionOnPaymentCaptured::class);
         // S13 B17 — Fees' program-invoice half of the same PaymentCaptured
         // shape, fixed from a direct PaymentReconciler -> ProgramEnrolmentService
         // call the review pass caught (CLAUDE.md: Events only, never a
