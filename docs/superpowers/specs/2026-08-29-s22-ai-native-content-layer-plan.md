@@ -36,7 +36,7 @@ stop and report before starting the next block.
 | B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | ✅ done |
 | B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | ✅ done |
 | B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | ✅ done |
-| B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | not started |
+| B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | ✅ done |
 | B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | not started |
 | B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | not started |
 | B13 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
@@ -258,19 +258,34 @@ posture S21's own blocks established).
       no ready artifact exists yet, `null` when the only artifact is
       still processing.
 
-### B10 — Z1: subscription renewal scheduled trigger
+### B10 — Z1: subscription renewal scheduled trigger ✅
 
-- [ ] `RenewStudentSubscriptions` job — same unscoped-CurrentTenant sweep
-      shape `FlagOverdueInvoices`/`SuspendOverdueTenantSubscriptions`
-      already use, scheduled daily in `bootstrap/app.php`'s
-      `withSchedule()`. Calls the *existing*
-      `StudentSubscriptionService::renew()` (S20) — confirm that method's
-      exact signature/behavior before wiring (it was written but never
-      scheduled; re-verify it still does the right thing under a real
-      sweep call, not just the unit test that exercises it directly).
-- [ ] Tests: a subscription past `current_period_end` renews on sweep
-      run, one not yet due is untouched, sweep is idempotent for an
-      already-renewed row.
+- [x] `RenewStudentSubscriptions` job — same unscoped-CurrentTenant sweep
+      shape `FlagOverdueInvoices` uses for the outer clear+query, plus
+      `SuspendOverdueTenantSubscriptions`'s own lock-and-recheck shape
+      per row (a multi-step action, not one bulk `UPDATE`). Scheduled
+      daily in `bootstrap/app.php`'s `withSchedule()`. Calls the
+      *existing* `StudentSubscriptionService::renew()` (S20) unchanged —
+      confirmed it only creates a checkout order (`FeeInvoice`+
+      `FeePayment`), it does **not** itself advance the period (that's
+      `activateFromPayment()`, on actual payment capture) — so the sweep
+      advances `current_period_start`/`current_period_end` itself right
+      after a successful `renew()` call (reusing
+      `StudentSubscriptionService::nextPeriodEnd()`, made `public`) as
+      the scheduling-layer half of "a renewal happened," not new billing
+      logic. That's also what makes a second sweep run idempotent — the
+      row no longer matches the due-`WHERE`. Also had to rebind
+      `CurrentTenant` per row before calling `renew()`:
+      `FeeInvoiceService::invoiceForMembership()` resolves the billing
+      tenant through `CurrentTenant`, unlike `CertificateService`'s own
+      `Tenant::findOrFail()`-from-the-row shape — a real gap the block's
+      own "confirm it still does the right thing under a real sweep
+      call" instruction was there to catch.
+- [x] Tests (`tests/Feature/Fees/RenewStudentSubscriptionsTest.php`): a
+      due subscription renews (period advances, one `FeeInvoice`
+      created), one not yet due is untouched, a second sweep run on an
+      already-renewed row doesn't renew it again, a `cancelled`
+      subscription past its period is never renewed.
 
 ### B11 — Z2: affiliate commission auto-confirmation
 

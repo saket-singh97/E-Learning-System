@@ -14,6 +14,7 @@ use App\Domains\Comms\Jobs\SendMissedClassReplayNudges;
 use App\Domains\Comms\Jobs\SendWeakTopicPracticeNudges;
 use App\Domains\Content\Jobs\CloseStaleLessonStreamSessions;
 use App\Domains\Fees\Jobs\FlagOverdueInvoices;
+use App\Domains\Fees\Jobs\RenewStudentSubscriptions;
 use App\Domains\Fees\Jobs\SendFeeReminders;
 use App\Domains\Security\Jobs\DetectAccountSharing;
 use App\Domains\Security\Jobs\ProcessGdprDeletions;
@@ -179,6 +180,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // sla_breach_notified_at is the dedup marker so a permanently-
         // breached open ticket isn't re-notified every single day forever.
         $schedule->job(new HelpDeskSlaSweep, 'scheduled')->daily();
+
+        // Z1 (S22 B10) — same unscoped-sweep shape as the jobs above;
+        // StudentSubscriptionService::renew() (S20) existed but was never
+        // scheduled, so a subscription never actually renewed on its own.
+        $schedule->job(new RenewStudentSubscriptions, 'scheduled')->daily();
 
         // S9 B10 — spaced past the four ->daily() sweeps above (which all
         // default to midnight) rather than piling everything onto the same
