@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | ✅ done |
 | B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | ✅ done |
 | B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | ✅ done |
-| B11 | V14 pt.2 — enrolment CSV import | not started |
+| B11 | V14 pt.2 — enrolment CSV import | ✅ done |
 | B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | not started |
 | B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | not started |
 | B14 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | not started |
@@ -459,15 +459,43 @@ controller + 1 migration + provider registration only) — the 1 baseline
 (`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
 (`DownloadCompletionExportControllerTest`, `DownloadEnrolmentExportControllerTest`).
 
-### B11 — V14 pt.2: enrolment import
+### B11 — V14 pt.2: enrolment import — done 2026-08-29
 
-- [ ] `enrolment_import_batches` migration + model (Batches), registered
+- [x] `enrolment_import_batches` migration + model (Batches), registered
       in `TenantModelRegistry`.
-- [ ] CSV import job targeting `Enrolment`, same dry-run/error-report
+- [x] CSV import job targeting `Enrolment`, same dry-run/error-report
       shape, validating against already-imported (or pre-existing)
       batches/students.
-- [ ] Tests: dry-run catches a reference to a non-existent batch/student,
+- [x] Tests: dry-run catches a reference to a non-existent batch/student,
       real run creates valid enrolments only.
+
+Same "sync, no queue" call as B10 (design/reasoning identical — a lookup
+plus one insert via `BatchEnrolmentService::addManually()`, no external
+I/O). CSV columns: `email, batch` — both must reference a **pre-existing**
+student/batch (this is enrolment import, not student import — F9/S15
+already owns creating new student rows); a row whose email or batch slug
+doesn't already exist is a per-row error, never a new record, per the
+design's own "validating against already-imported (or pre-existing)
+batches/students" wording.
+Built: `enrolment_import_batches` (Batches), `EnrolmentImportBatch` model,
+`EnrolmentCsvImporter` service. Real run calls
+`BatchEnrolmentService::addManually()` — already idempotent (an existing
+enrolment for the same batch+user is returned as-is, never duplicated or
+errored), reused rather than re-implemented. `EnrolmentImportBatchResource`
+lives under `Batches/Filament/Resources`, which `AdminPanelProvider`
+already auto-discovers — no explicit registration needed the way B10's
+Content-domain resource required.
+Tests: `tests/Feature/Batches/EnrolmentCsvImporterTest.php` (6: empty
+file, bad headers, dry-run zero-writes catching both a missing student and
+a missing batch, real run creates-and-skips, in-file duplicate email+batch
+pair, an already-enrolled pair reuses the row without erroring) +
+`tests/Feature/Batches/EnrolmentImportBatchUiTest.php` (3: real-run
+upload, dry-run upload, cross-tenant download 403).
+Full suite: 1868 tests, 1865 passed. 3 failures, all pre-existing and
+unrelated to this block's diff (`Batches` domain + 1 exception + 1
+controller + 1 migration + 1 route file only) — the 1 baseline
+(`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
+(`DownloadCompletionExportControllerTest`, `BackupConfigurationTest`).
 
 ### B12 — V14 pt.3: payment-history import
 

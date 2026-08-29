@@ -2,6 +2,7 @@
 
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
+use App\Http\Controllers\Batches\DownloadEnrolmentImportErrorReportController;
 use App\Http\Controllers\Batches\DownloadIdCardController;
 use App\Http\Controllers\Batches\DownloadStudentImportErrorReportController;
 use App\Http\Controllers\Batches\ZoomOAuthController;
@@ -43,6 +44,11 @@ Route::get('/batch-sessions/{session}/check-in', function (Request $request) {
 Route::get('/student-imports/{importBatch}/error-report', DownloadStudentImportErrorReportController::class)
     ->middleware(['auth', 'role:institute_admin'])
     ->name('student-import.error-report.download');
+
+// S21 B11 — same double-check posture as the student-import route above.
+Route::get('/enrolment-imports/{importBatch}/error-report', DownloadEnrolmentImportErrorReportController::class)
+    ->middleware(['auth', 'role:institute_admin'])
+    ->name('enrolment-import.error-report.download');
 
 // No route-level role middleware — same bare shape
 // DownloadGradebookPdfExportController/DownloadRevenueExportController

@@ -30,6 +30,7 @@ use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchFeedback;
 use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Batches\Models\DeviceWebhookCredential;
+use App\Domains\Batches\Models\EnrolmentImportBatch;
 use App\Domains\Batches\Models\StudentImportBatch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
@@ -207,6 +208,7 @@ class TenantModelRegistry
         WebhookEndpoint::class,
         WebhookDelivery::class,
         CourseImportBatch::class,
+        EnrolmentImportBatch::class,
     ];
 
     /**
@@ -1289,6 +1291,10 @@ class TenantModelRegistry
                 'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'status' => 'completed',
             ],
+            EnrolmentImportBatch::class => [
+                'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'completed',
+            ],
             WebhookEndpoint::class => ['url' => 'https://example.com/row-'.uniqid(), 'secret' => 'secret-'.uniqid()],
             WebhookDelivery::class => [
                 'webhook_endpoint_id' => WebhookEndpoint::create(['url' => 'https://example.com/parent', 'secret' => 'parent-secret'])->id,
@@ -1407,6 +1413,7 @@ class TenantModelRegistry
             FeatureFlag::class => ['enabled' => true],
             ApiKey::class => ['name' => 'tampered'],
             CourseImportBatch::class => ['status' => 'failed'],
+            EnrolmentImportBatch::class => ['status' => 'failed'],
             WebhookEndpoint::class => ['status' => 'disabled'],
             WebhookDelivery::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
