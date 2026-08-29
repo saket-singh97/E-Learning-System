@@ -38,7 +38,7 @@ stop and report before starting the next block.
 | B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | ✅ done |
 | B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | ✅ done |
 | B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | ✅ done |
-| B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | not started |
+| B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | ✅ done |
 | B13 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
 **Test suite baseline:** 1883+/1886+ passing at slice start per S21's own
@@ -309,15 +309,22 @@ posture S21's own blocks established).
       capture (`PaymentReconciler::reconcile()`, not just a direct
       `event()` call) never dispatches `PaymentCaptured` at all.
 
-### B12 — `TenantModelRegistry` sweep
+### B12 — `TenantModelRegistry` sweep ✅
 
-- [ ] Reverse sweep (same anchored-grep method every prior slice's own
-      final-stretch block used): grep every `app/Domains/*/Models/*.php`
-      for a real `use BelongsToTenant` declaration, diff against
-      `TenantModelRegistry::MODELS`, confirm zero gaps either direction.
-      All 3 new S22 models (`LessonPdfNote`, `DailyPracticeSet`,
-      `LessonAudioTrack`) confirmed present with working
-      `seedAttributes()`/`updateAttributes()` entries.
+- [x] Reverse sweep: every `app/Domains/*/Models/*.php` file whose class
+      body actually declares `use BelongsToTenant` (not just imports it)
+      extracted via script (101 models) and diffed against
+      `TenantModelRegistry::MODELS` (101 entries) — **identical sets,
+      zero gaps either direction**. `AuditLogEntry`/`CookieConsent`/
+      `ImpersonationAudit` don't use the trait at all (each has its own
+      docblock explaining why — a pre-tenant-resolution or
+      row-derived-tenant case), so their absence from the registry is
+      correct, not a gap. All 3 new S22 models (`LessonPdfNote`,
+      `DailyPracticeSet`, `LessonAudioTrack`) confirmed present with
+      working `seedAttributes()`/`updateAttributes()` entries — the
+      generated `tests/Isolation/CrossTenantTest.php` suite (102 tests)
+      passes in full, proving isolation for all 101 registered models,
+      not just the 3 new ones.
 
 ### B13 — Full test coverage, review pass
 
