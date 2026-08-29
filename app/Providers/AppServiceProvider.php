@@ -6,6 +6,7 @@ use App\Domains\AI\Listeners\RetryIngestion;
 use App\Domains\AI\Listeners\StartIngestion;
 use App\Domains\AI\Livewire\ChapterMarkers;
 use App\Domains\AI\Livewire\DoubtChat;
+use App\Domains\Assessments\Listeners\GenerateQuizFromLiveClass;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
 use App\Domains\AI\Livewire\PhotoDoubtUpload;
 use App\Domains\AI\Livewire\SemanticSearch;
@@ -178,6 +179,8 @@ class AppServiceProvider extends ServiceProvider
         // S22 B0 — U1 auto lecture notes, additive to the same ingestion-ready
         // signal, not a new trigger point (design doc §4 decision 3).
         Event::listen(LessonArtifactReady::class, GenerateLessonPdfNotes::class);
+        // S22 B2 — U6 auto quiz after every live class, same additive shape.
+        Event::listen(LessonArtifactReady::class, GenerateQuizFromLiveClass::class);
         Event::listen(LessonIngestionRetryRequested::class, RetryIngestion::class);
         Event::listen(EnrolmentApprovalExpired::class, SendEnrolmentExpiredNotification::class);
         Event::listen(EnrolmentAwaitingPayment::class, CreateInvoiceForPendingEnrolment::class);

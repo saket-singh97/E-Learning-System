@@ -28,7 +28,7 @@ stop and report before starting the next block.
 |---|---|---|
 | B0 | U1 — Auto lecture notes: transcript → structured PDF, `LessonPdfNote` model | ✅ done |
 | B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | ✅ done |
-| B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | not started |
+| B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | ✅ done |
 | B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | not started |
 | B4 | U3 pt.2 — DPP student-facing page + generation trigger | not started |
 | B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | not started |
@@ -90,18 +90,23 @@ posture S21's own blocks established).
       error) when no concepts extracted yet, empty list when no ready
       artifact exists at all.
 
-### B2 — U6: auto quiz after every live class
+### B2 — U6: auto quiz after every live class ✅
 
-- [ ] `GenerateQuizFromLiveClass` listener on the *existing*
+- [x] `GenerateQuizFromLiveClass` listener on the *existing*
       `LessonArtifactReady` event (S3) — additive to that event's current
-      listener list, not a new trigger. Confirm the event only fires for
-      a `live_session`-type lesson's own ingestion before wiring this
-      (it may fire for any lesson type; if so, guard on lesson type here).
-- [ ] Calls `QuestionGenerator::fromSeedQuestions()` directly, creates a
-      real `Quiz` attached to the lesson, same shape a manually-created
-      quiz already takes.
-- [ ] Tests: a live-class lesson's ingestion creates a quiz with the
-      right questions, a non-live-session lesson's ingestion does not.
+      listener list. Confirmed `LessonVideoReady`/`StartIngestion` fires
+      for every lesson type, not just `live_session` — guarded on lesson
+      type inside the listener.
+- [x] Calls `QuestionGenerator::fromSeedQuestions()` directly, creates a
+      real `Quiz` (status `draft`, `time_limit_minutes`/`max_attempts`
+      matching `QuizResource`'s own form defaults) attached to the
+      lesson. Stays draft — the underlying Questions are also
+      draft/`ai_generated`, same S6 review-queue gate every other
+      AI-drafted question already goes through before a student can be
+      handed one.
+- [x] Tests (`tests/Feature/Assessments/GenerateQuizFromLiveClassTest.php`):
+      a live-class lesson's ingestion creates a draft quiz with the right
+      question count, a non-live-session lesson's ingestion does not.
 
 ### B3 — U3 pt.1: DPP schema + aggregation
 
