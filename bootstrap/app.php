@@ -26,6 +26,9 @@ use App\Exceptions\CircuitOpenException;
 use App\Exceptions\CircularPrerequisiteException;
 use App\Exceptions\EnquiryConversionException;
 use App\Exceptions\ForumReplyDepthExceededException;
+use App\Exceptions\InvalidCourseImportFileException;
+use App\Exceptions\InvalidEnrolmentImportFileException;
+use App\Exceptions\InvalidPaymentHistoryImportFileException;
 use App\Exceptions\InvalidStudentImportFileException;
 use App\Exceptions\ConcurrentStreamLimitExceededException;
 use App\Exceptions\CouponNotRedeemableException;
@@ -285,6 +288,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(fn (ForumReplyDepthExceededException $e) => abort(409, $e->getMessage()));
 
         $exceptions->render(fn (InvalidStudentImportFileException $e) => abort(422, $e->getMessage()));
+        // S21 B15 review pass — these 3 followed InvalidStudentImportFileException's
+        // exact shape (S15) but were never registered here, so a bad-header
+        // or empty CSV through any of the 3 new importers bubbled up as an
+        // unhandled RuntimeException instead of a clean 422.
+        $exceptions->render(fn (InvalidCourseImportFileException $e) => abort(422, $e->getMessage()));
+        $exceptions->render(fn (InvalidEnrolmentImportFileException $e) => abort(422, $e->getMessage()));
+        $exceptions->render(fn (InvalidPaymentHistoryImportFileException $e) => abort(422, $e->getMessage()));
 
         $exceptions->render(fn (EnquiryConversionException $e) => abort(409, $e->getMessage()));
     })->create();

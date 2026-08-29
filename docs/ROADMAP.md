@@ -14,8 +14,7 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 20 (S1–S20) |
-| **Designed, not built** | 1 (S21) |
+| **Shipped** | 21 (S1–S21) |
 | **Proposed, not yet scoped** | 5 (S22–S26) |
 
 **Phase completion:**
@@ -26,7 +25,7 @@ regenerate it from this file.
 
 ---
 
-## Shipped — S1 to S20
+## Shipped — S1 to S21
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -50,22 +49,12 @@ regenerate it from this file.
 | S18 | Analytics & Parent Engagement — engagement ratio + speed profile, rewatch heatmap, drop-off tracking, missed-class-replay + weak-topic-practice nudges, monthly parent report card on WhatsApp. Real scope is 5 items, not the row's headline "8": M15's 3-day-inactivity nudge already shipped in S9, M14/O5 are the same report-card feature counted twice, O6 (parent-teacher thread) is P3 and largely already covered by the existing generic `DirectMessage` — cut for now | 13 blocks | Aug 26 | ✅ Done |
 | S19 | Communication Platform — real-time WebSockets (Reverb), general forum, feedback surveys, help desk, study planner + calendar (incl. signed `.ics` export), gamification. Real scope is 6 items, matching the row's own headline exactly | 17 blocks | Aug 26–27 | ✅ Done |
 | S20 | Growth & Billing Extensions — refunds, fee-based access restriction, student subscriptions, multi-currency + regional tax, platform revenue analytics (MRR/ARR), affiliate program, instructor payouts, course-interest capture. Real scope is 9 items, not the row's own headline "12": Q7 already shipped (S8/S9's revenue-register export), R4/R5 cut (too broad / a separate product surface) — same verify-before-building boundary every prior slice drew | 15 blocks | Aug 27–28 | ✅ Done |
+| S21 | Platform Scale & Migration — stateless-readiness audit, per-tenant feature flags, institute API keys + outbound webhooks, bearer-token auth on `/api/v1/`, Google Workspace SSO, Card EMI, data-import tooling (courses/enrolments/payment history). Real scope is 6 items, not the row's own headline "5 sentences" (V12 splits into two tracked deliverables): read replicas (V8) and server hardening (V7) are cut — infra/ops or "no concrete deliverable yet," not application code; SAML (half of V13) is cut — no library installed, no buyer signal | 16 blocks | Aug 28–29 | ✅ Done |
 
 Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
+`...-plan.md`; `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,
 `...-plan.md`.
-
----
-
-## Designed, not built — S21
-
-| Slice | Scope | Size | Designed | Status |
-|---|---|---|---|---|
-| S21 | Platform Scale & Migration — stateless-readiness audit, per-tenant feature flags, institute API keys + outbound webhooks, bearer-token auth on `/api/v1/`, Google Workspace SSO, Card EMI, data-import tooling (courses/enrolments/payment history). Real scope is 6 items, not the row's own headline "5 sentences" (V12 splits into two tracked deliverables): read replicas (V8) and server hardening (V7) are cut — infra/ops or "no concrete deliverable yet," not application code; SAML (half of V13) is cut — no library installed, no buyer signal | 16 blocks | Aug 28 | 📝 Designed, build not started |
-
-Full design/plan docs: `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,
-`...-plan.md` — the plan file's own PROGRESS table will be the live source
-of truth once building starts, same as every prior slice.
 
 ---
 

@@ -57,6 +57,7 @@ class PaymentHistoryCsvImporter
         $tenantId = app(CurrentTenant::class)->id();
         $valid = [];
         $errors = [];
+        $seenInvoiceNumbers = [];
 
         foreach ($lines as $index => $line) {
             $rowNumber = $index + 2;
@@ -80,6 +81,18 @@ class PaymentHistoryCsvImporter
 
             if ($invoiceNumber === '') {
                 $errors[] = ['row' => $rowNumber, 'message' => 'Invoice number is required.'];
+
+                continue;
+            }
+
+            if (isset($seenInvoiceNumbers[$invoiceNumber])) {
+                $errors[] = ['row' => $rowNumber, 'message' => "Duplicate invoice_number in this file (also row {$seenInvoiceNumbers[$invoiceNumber]})."];
+
+                continue;
+            }
+
+            if (FeeInvoice::where('invoice_number', $invoiceNumber)->exists()) {
+                $errors[] = ['row' => $rowNumber, 'message' => "Invoice number \"{$invoiceNumber}\" is already in use."];
 
                 continue;
             }
@@ -121,6 +134,8 @@ class PaymentHistoryCsvImporter
 
                 continue;
             }
+
+            $seenInvoiceNumbers[$invoiceNumber] = $rowNumber;
 
             $valid[] = [
                 'row' => $rowNumber,

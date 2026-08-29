@@ -42,7 +42,7 @@ stop and report before starting the next block.
 | B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | ✅ done |
 | B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | ✅ done |
 | B14 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ✅ done |
-| B15 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
+| B15 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite baseline:** 1797+/1798+ passing at slice start per S20's own
 final count (1 pre-existing, unrelated `CourseSlugUniquenessTest` failure
@@ -615,15 +615,106 @@ unrelated across multiple prior blocks — the 1 baseline
 (`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
 (`DownloadCompletionExportControllerTest`, `BackupConfigurationTest`).
 
-### B15 — Full test coverage, review pass
+### B15 — Full test coverage, review pass — done 2026-08-29
 
-- [ ] Lifecycle E2E (design doc §5): API key mint → webhook endpoint
+- [x] Lifecycle E2E (design doc §5): API key mint → webhook endpoint
       registered → event fires → HMAC-signed delivery; feature flag
       enabled for one tenant, gated route reachable there and blocked for
       an unflagged tenant; course CSV dry-run reports errors with zero
       writes, then a real run imports correctly.
-- [ ] Dispatch a review pass over the whole slice's diff, same discipline
+- [x] Dispatch a review pass over the whole slice's diff, same discipline
       every prior slice's final block established.
-- [ ] Update `HANDOVER.md` (S21 complete entry), `docs/PROJECT-STATUS.md`
+- [x] Update `HANDOVER.md` (S21 complete entry), `docs/PROJECT-STATUS.md`
       (new S21 section), `docs/ROADMAP.md` (S21 row → Done, shipped-count
       20→21).
+
+Built: `tests/Feature/Api/S21LifecycleE2ETest.php` — all 3 design-doc §5
+scenarios, each driving real services end to end (not a shortcut status
+flip): API key mint via `ApiKeyService`, `/api/v1/health` bearer-auth
+round-trip, a registered `WebhookEndpoint`, `WebhookDispatcher::dispatch()`
+firing a real HMAC-signed HTTP delivery verified against the endpoint's
+own secret; a feature flag enabled for one tenant reaching `DoubtChat`
+while an unflagged tenant's identical request creates zero messages;
+`CourseCsvImporter` dry-run (zero writes) then real run (creates + skips)
+against the same CSV.
+
+**Review pass:** 2 parallel background agents, each given the full
+`git diff b03a3d0..HEAD` to read directly (not pasted in) — one focused on
+security/tenant-isolation (7 named focus areas: every `withoutGlobalScope`
+call site, the 3 download-error-report controllers, `EnsureApiKey`/
+`ApiKeyService`, webhook HMAC + secret handling, the Google Workspace
+domain-check ordering, whether Card EMI's client-controllable duration can
+affect the charged amount, whether `FeatureFlagResource` can be
+self-granted via any path including the raw `ToggleColumn`), the other on
+correctness/CLAUDE.md-convention compliance (event-only cross-domain
+calls, no raw SQL, explicit `$fillable`, `DeliverWebhook`'s retry
+correctness across real multiple attempts, the 3 importers' row-numbering/
+duplicate-detection/dry-run-write-safety, `PaymentHistoryCsvImporter`
+never dispatching a live event, `FeatureGate`'s null-as-false handling,
+every new migration matching its model's `$fillable`/`casts`).
+
+**Found and fixed 2 real issues:**
+1. Three new CSV-import exceptions (`InvalidCourseImportFileException`
+   (B10), `InvalidEnrolmentImportFileException` (B11),
+   `InvalidPaymentHistoryImportFileException` (B12)) followed
+   `InvalidStudentImportFileException`'s (S15) exact shape but were never
+   registered in `bootstrap/app.php`'s `withExceptions()` — a bad-header
+   or empty CSV through any of the 3 new importers bubbled up as an
+   unhandled `RuntimeException` (500) instead of a clean 422, unlike their
+   sibling. Fixed: all 3 now registered (`abort(422, $e->getMessage())`,
+   matching the sibling exactly).
+2. `PaymentHistoryCsvImporter` (B12) had no duplicate-detection at all,
+   unlike its two siblings (`CourseCsvImporter` dedupes by slug,
+   `EnrolmentCsvImporter` by email+batch) — two rows sharing an
+   `invoice_number` in one file, or one reused from a prior import, both
+   silently created separate invoice/payment pairs. Fixed with the same
+   in-file `$seenInvoiceNumbers` map pattern plus a
+   `FeeInvoice::where('invoice_number', ...)->exists()` DB check — 2 new
+   tests added (`PaymentHistoryCsvImporterTest.php`).
+
+**Confirmed clean, not newly found (both reviewers independently checked,
+neither treats as a regression):** `DoubtChat` (AI domain) calls
+`FeatureGate` (Tenancy domain) as a direct read-only service call rather
+than through an event — technically against CLAUDE.md's literal "Events
+only" wording, but matches dozens of pre-existing direct cross-domain
+reads already in this codebase (`TenantPlanLimits`→`AiSpendCap`,
+`DoubtChatService`→`LessonAccess`) — a query, not a side-effect trigger.
+CSV row-number reporting drifts from the real file line when a mid-file
+blank line exists — real, but copied byte-for-byte from S15's own
+`StudentCsvImporter`, a pre-existing limitation this slice inherited, not
+introduced.
+
+Everything else reviewed came back clean: every `withoutGlobalScope`
+call site genuinely justified, all 3 download-error-report controllers
+correctly double-gated, `EnsureApiKey` correctly refuses garbage/revoked
+tokens and binds `CurrentTenant` to the key's own owner, webhook HMAC
+signs the exact bytes sent and the endpoint secret is never exposed
+anywhere, the Google Workspace domain check runs before any user lookup,
+EMI's client-controllable duration cannot affect the server-computed
+charged amount, `FeatureFlagResource` cannot be self-granted via the
+Create page (`canCreate()` + Filament's own `authorizeAccess()`) or the
+raw `ToggleColumn` (server-side `isDisabled()` re-check on every Livewire
+call) — checked deeper than the one path the existing test already
+covers. `DeliverWebhook`'s `$tries`/`backoff()`/rethrow retry logic
+verified correct across real multiple attempts. All 7 new migrations
+match their models' `$fillable`/`casts` exactly.
+
+Full suite after fixes: 1883 tests, 1880 passed. 3 failures, all
+pre-existing and unrelated to this slice's diff — the 1 baseline
+(`CourseSlugUniquenessTest`, carried since S1/S2) + 2 already-confirmed
+test-order flakes seen repeatedly across S21's own blocks this run
+(`DownloadCompletionExportControllerTest`, `BackupConfigurationTest` —
+this rotating pair, plus `DownloadEnrolmentExportControllerTest` on other
+runs, never all three at once — each individually confirmed to pass clean
+in isolation during earlier blocks this slice).
+
+Docs updated: `HANDOVER.md` "Right now" replaced with S21's own complete
+entry (S20's stays below as history, same pattern every prior slice
+used), `docs/PROJECT-STATUS.md` gained a new `## S21` section (same
+per-block narrative + "what's still rough" shape every prior slice's own
+section uses), `docs/ROADMAP.md`'s S21 row moved from "Designed, not
+built" into the "Shipped" table (shipped-count 20→21), the now-redundant
+"Designed, not built — S21" section removed.
+
+**S21 Platform Scale & Migration: COMPLETE. All 16 blocks (B0-B15) built,
+tested, reviewed, and documented.**

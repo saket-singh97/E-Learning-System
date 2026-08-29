@@ -2312,3 +2312,134 @@ this slice's own scope. `student_subscriptions`' `renew()` has no
 scheduled trigger yet, same reasoning.
 
 **All 15 S20 blocks are now built, tested, and reviewed.**
+
+## S21 — Platform Scale & Migration: COMPLETE (all 16 blocks, 2026-08-29)
+
+`docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`
+and `...-plan.md` cover B0-B15 in full per-block detail — not repeated
+here. Real build scope was 6 items (V9/V10/T5+V12b/V13a/V11/V14), one new
+`Api` domain, 7 new `BelongsToTenant` models, 16 build blocks.
+Per-tenant feature flags — `feature_flags` table (unique
+`(tenant_id, key)`), `FeatureGate::enabled()` the single chokepoint every
+call site uses, an unset key defaulting `false` (opt-in, never
+opt-out-by-accident); gates the `DoubtChat` Livewire component as the
+proof case. One `FeatureFlagResource`, not two — discovered on both Admin
+and Super panels from the same directory, `canCreate()` restricted to
+Super, Admin's own tenant scoping falls out of `BelongsToTenant`'s global
+scope automatically since Super never binds `CurrentTenant` (B0-B2). New
+`Api` domain — institute API keys (`ApiKeyService`, sha256 hash-only
+storage, plaintext shown once at issuance and never persisted),
+bearer-token auth (`EnsureApiKey` middleware) guarding a new
+`GET /api/v1/health` — verified before building that no `/api/v1` route
+existed anywhere, and the app's 4 pre-existing vendor webhooks already
+authenticate via their own signature schemes, so bearer auth is additive,
+not a retrofit that would break them. Outbound `webhook_endpoints`/
+`webhook_deliveries`, HMAC-signed dispatch via a queued `DeliverWebhook`
+job (`$tries=5`, `backoff([60,300,900,3600])`, rethrows on failure so the
+queue worker's own retry loop drives it), wired to the existing
+`PaymentCaptured` event as the first real trigger. `WebhookEndpointResource`
+with a read-only `DeliveriesRelationManager` as the "delivery log" (B3-B6).
+Google Workspace SSO — `tenants.google_workspace_domain` (nullable, off by
+default), checked first in `GoogleOAuthAuthenticator::authenticate()`,
+before any `google_id`/email lookup, so a mismatched domain can never
+touch or link an existing account (B7). Card EMI —
+`PaymentProvider::createOrder()` gained an optional
+`?int $emiDurationMonths = null` parameter across its interface and all 3
+implementations (`RazorpayProvider`, `CircuitBreakerGuardedPaymentDriver`,
+`FakeRazorpayDriver`); Razorpay sends its own `method: emi`/`emi_duration`
+order-creation option only when set, byte-identical request otherwise;
+`FeeCheckout` gained a duration `<select>`; `PaymentReconciler` needed
+zero code changes since EMI is only an order-creation option, never a
+separate webhook event on Razorpay's own side (B8-B9). Data-import
+tooling — three CSV importers sharing one dry-run/per-row-error-report
+shape (reusing `StudentImportBatch`'s own S15 UX, not its two-phase queued
+architecture: course/enrolment/payment-history writes are cheap enough to
+run fully synchronously, no queue needed unlike the heavier student
+import). `CourseCsvImporter` (Content) creates `Course`+`Category` rows.
+`EnrolmentCsvImporter` (Batches) references only pre-existing
+students/batches, reusing `BatchEnrolmentService::addManually()` (already
+idempotent) for the real-run writes. `PaymentHistoryCsvImporter` (Fees)
+writes already-paid/captured `FeeInvoice`/`FeePayment` rows directly,
+bypassing `FeeInvoiceService`/`PaymentReconciler` entirely — no live
+gateway call is possible even in principle, and no `PaymentCaptured` event
+fires for backfilled history (B10-B12). 7 new `BelongsToTenant` models,
+all registered in `TenantModelRegistry` immediately on creation, confirmed
+exact-complete in B14's reverse sweep (98 real usages, 98 registry
+entries).
+
+- **B0-B2** — Feature flags: `FeatureGate::enabled()` bypasses the tenant
+  global scope on purpose (`withoutGlobalScope('tenant')`) so a
+  Super-panel caller can check a tenant other than the one currently
+  bound — the same explicit-lookup shape `ApiKeyService::verify()` needed
+  for the same reason (no tenant context exists yet at the point of call).
+- **B3-B6** — API/webhooks: `ApiKeyService::issue()`/`verify()`/`revoke()`
+  is the one place a key is ever hashed or checked. `WebhookDispatcher`
+  creates a `webhook_deliveries` row only for an `active` endpoint — a
+  disabled endpoint receives nothing, not a row that's silently skipped
+  later. `CreateFeatureFlag`/`CreateApiKey`-style pages on the Super panel
+  use `Model::withoutEvents(fn () => Model::create([...'tenant_id' =>
+  explicit...]))` — the same shape `PlanChangeService::subscribe()` (S11)
+  already established for creating a `BelongsToTenant` row from a position
+  where `CurrentTenant` is never bound.
+- **B7** — Google Workspace SSO: comparison is
+  `strcasecmp($emailDomain, $tenant->google_workspace_domain)` — an exact,
+  case-insensitive match, not `Str::is()` (which would have been
+  wildcard-glob matching, the wrong tool here). Signature changed from
+  `authenticate($user, int $tenantId)` to `authenticate($user, Tenant
+  $tenant)` since the controller already had the resolved `Tenant` in
+  hand — avoids a second lookup inside the authenticator.
+- **B8-B9** — Card EMI: no eligibility threshold (minimum order value)
+  was added — neither the plan's own checklist nor the design doc's
+  decision 6 names one; "eligibility" here is simply "can this call
+  request EMI at all," which the optional parameter itself already is.
+- **B10-B12** — Import tooling: all 3 importers found and fixed a real
+  gap at B15 review time (see below) — `PaymentHistoryCsvImporter` was
+  missing the duplicate-detection its two siblings already had.
+- **B13** — Stateless-readiness audit: grepped every
+  `app/Domains/**`/`app/Http/**` file for a raw filesystem write
+  bypassing `Storage::disk(...)` — zero found. Every `fopen()` call
+  anywhere in the app (11 files, including all 3 new importers) is
+  `fopen('php://temp', 'r+')`, an in-memory buffer, never a real file.
+  Documented as a load-bearing constraint in `ARCHITECTURE.md`'s new
+  "Stateless readiness (V9)" section — no code changed, nothing to fix.
+- **B14** — Registry reverse sweep: 98 real `BelongsToTenant` usages, 98
+  registry entries, exact match (anchored grep, not a bare substring
+  match). `tests/Isolation/CrossTenantTest.php` run directly — 99/99
+  passing — confirmed every registered model's `seedAttributes()`/
+  `updateAttributes()` actually works at runtime, the 7 new ones included.
+- **B15** — Lifecycle E2E (API key mint → webhook endpoint registered →
+  event fires → HMAC-signed delivery, verified against the endpoint's own
+  secret; feature flag enabled for one tenant reaches a gated route, an
+  unflagged tenant stays blocked; course CSV dry-run reports errors with
+  zero writes, then a real run imports correctly) plus a 2-angle review
+  pass (security/tenant-isolation, correctness/convention) over the whole
+  slice's diff. Found and fixed 2 real issues:
+  1. Three new CSV-import exceptions
+     (`InvalidCourseImportFileException`/`InvalidEnrolmentImportFileException`/
+     `InvalidPaymentHistoryImportFileException`) followed
+     `InvalidStudentImportFileException`'s (S15) exact shape but were
+     never registered in `bootstrap/app.php`'s `withExceptions()` — a bad
+     CSV through any of the 3 new importers bubbled up as an unhandled
+     `RuntimeException` instead of a clean 422. Fixed: all 3 registered.
+  2. `PaymentHistoryCsvImporter` had no duplicate-`invoice_number`
+     detection, unlike `CourseCsvImporter` (dedupes by slug) and
+     `EnrolmentCsvImporter` (dedupes by email+batch) — fixed with the same
+     in-file `$seen`-map pattern plus a DB-existence check.
+  Confirmed, not newly found: `DoubtChat` calling `FeatureGate` directly
+  (a cross-domain read, not an event) is consistent with dozens of
+  pre-existing direct cross-domain reads already in this codebase
+  (`TenantPlanLimits`→`AiSpendCap`), not a new violation. CSV row-number
+  reporting drifting on a mid-file blank line is real but copied
+  byte-for-byte from S15's own `StudentCsvImporter` — a pre-existing
+  limitation, not introduced this slice.
+
+**What's still rough, on purpose:** the payment-history importer has no
+eligibility/amount-sanity check beyond "is it numeric" — an institute
+could backfill an invoice with a nonsensical total, same trust-the-upload
+posture the student/enrolment importers already take (an admin-only tool,
+not student-facing input). EMI has no minimum-order-value gate — any
+amount can request any of the 4 offered durations; Razorpay's own API is
+the actual backstop if a duration/amount combination it doesn't support is
+sent.
+
+**All 16 S21 blocks are now built, tested, and reviewed.**

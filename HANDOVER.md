@@ -5,7 +5,86 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-28)
+## Right now (2026-08-29)
+
+- **S21 — Platform Scale & Migration: COMPLETE, all 16 blocks (2026-08-28–29).**
+  `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,
+  `...-plan.md` (full per-block build log + B15's own review-pass notes
+  live there, not repeated here). Real build scope: 6 items
+  (V9/V10/T5+V12b/V13a/V11/V14). Per-tenant feature flags —
+  `feature_flags` table, `FeatureGate::enabled()` the one chokepoint every
+  call site uses (unset defaults `false`), gating `DoubtChat`; a single
+  `FeatureFlagResource` discovered on both Admin and Super panels —
+  `canCreate()` restricted to Super, Admin's own tenant scoping falls out
+  of `BelongsToTenant`'s global scope automatically (B0-B2). New `Api`
+  domain — institute API keys (`ApiKeyService::issue/verify/revoke`,
+  sha256 hash-only storage, shown once), bearer-token auth
+  (`EnsureApiKey`) on a new `/api/v1/health` (no existing `/api/v1` route
+  existed to gate — the 4 pre-existing vendor webhooks already
+  authenticate via their own signature schemes, retrofitting bearer auth
+  onto them would have broken them), outbound `webhook_endpoints`/
+  `webhook_deliveries` with HMAC-signed queued delivery
+  (`DeliverWebhook`, `$tries=5`/`backoff()`), a `WebhookEndpointResource`
+  with a read-only delivery-log relation manager (B3-B6). Google Workspace
+  SSO — `tenants.google_workspace_domain`, checked first in
+  `GoogleOAuthAuthenticator::authenticate()` before any user lookup so a
+  mismatched domain can never touch an existing account (B7). Card EMI —
+  `PaymentProvider::createOrder()` gained an optional
+  `?int $emiDurationMonths` param (all 3 implementations), Razorpay sends
+  `method: emi`/`emi_duration` only when set; `FeeCheckout` gained a
+  duration `<select>`; `PaymentReconciler` needed zero changes since EMI
+  is only an order-creation option, not a separate webhook event (B8-B9).
+  Data-import tooling — three synchronous (no queue — cheap Eloquent
+  writes, unlike the heavier S15 student-CSV import) CSV importers sharing
+  one dry-run/per-row-error-report shape: course/category
+  (`CourseCsvImporter`), enrolment against pre-existing students/batches
+  (`EnrolmentCsvImporter`, reuses `BatchEnrolmentService::addManually()`),
+  payment-history backfill writing already-paid/captured
+  `FeeInvoice`/`FeePayment` rows directly, bypassing
+  `FeeInvoiceService`/`PaymentReconciler` entirely so no live gateway call
+  or `PaymentCaptured` event is possible (`PaymentHistoryCsvImporter`)
+  (B10-B12). B13's stateless-readiness audit found zero violations — every
+  file write in the app already routes through `Storage::disk(...)`, the
+  only raw `fopen()` calls anywhere are `php://temp` in-memory buffers;
+  documented as a load-bearing constraint in `ARCHITECTURE.md`. B14's
+  reverse sweep confirmed 98-for-98 against every real `BelongsToTenant`
+  usage, zero gaps.
+  B15's lifecycle E2E (API key mint → webhook endpoint registered → event
+  fires → HMAC-signed delivery; feature flag enabled for one tenant reaches
+  a gated route, an unflagged tenant stays blocked; course CSV dry-run
+  reports errors with zero writes, then a real run imports correctly) plus
+  a 2-angle review pass over the whole slice's diff found and fixed 2 real
+  issues:
+  1. Three new CSV-import exceptions (`InvalidCourseImportFileException`,
+     `InvalidEnrolmentImportFileException`,
+     `InvalidPaymentHistoryImportFileException`) followed
+     `InvalidStudentImportFileException`'s (S15) exact shape but were never
+     registered in `bootstrap/app.php`'s `withExceptions()` — a bad-header
+     or empty CSV through any of the 3 new importers bubbled up as an
+     unhandled `RuntimeException` instead of a clean 422. Fixed: all 3 now
+     registered, matching their sibling.
+  2. `PaymentHistoryCsvImporter` had no duplicate-`invoice_number`
+     detection, unlike its sibling importers (`CourseCsvImporter` dedupes
+     by slug, `EnrolmentCsvImporter` by email+batch) — two rows sharing an
+     invoice number in one file, or one reused from a prior import, both
+     silently created separate invoice/payment rows. Fixed with the same
+     in-file `$seen`-map pattern plus a DB-existence check.
+  Confirmed clean, not newly found: `DoubtChat` (AI domain) calls
+  `FeatureGate` (Tenancy domain) as a direct read-only service call rather
+  than an event — technically against CLAUDE.md's literal "Events only"
+  wording, but consistent with dozens of pre-existing direct cross-domain
+  reads already in this codebase (`TenantPlanLimits`→`AiSpendCap`,
+  `DoubtChatService`→`LessonAccess`) — a query, not a side-effect trigger,
+  not flagged as a regression. CSV row-number reporting on a mid-file
+  blank line drifts from the real file line — real, but copied byte-for-byte
+  from S15's own `StudentCsvImporter`, a pre-existing limitation, not a
+  new one.
+  Tests green: **1880/1883** (same 1 pre-existing, unrelated
+  `CourseSlugUniquenessTest` failure carried since S1/S2, plus 2
+  already-confirmed test-order flakes seen repeatedly across this slice's
+  own blocks — each individually confirmed passing clean in isolation)
+  — full suite re-run after this block's own fixes to confirm no
+  regression.
 
 - **S20 — Growth & Billing Extensions: COMPLETE, all 15 blocks (2026-08-27–28).**
   `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,

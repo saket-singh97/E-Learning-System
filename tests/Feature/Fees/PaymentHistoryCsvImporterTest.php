@@ -85,6 +85,37 @@ it('catches a payment for a student/batch pair with no enrolment on record', fun
     expect($batch->error_rows)->toBe(1);
 });
 
+it('catches a duplicate invoice_number within the same file (S21 B15 review fix)', function () {
+    $csv = "{$this->header}\n"
+        ."asha@example.com,batch-a,INV-OLD-1,1000,180,1180,2026-01-15\n"
+        ."asha@example.com,batch-a,INV-OLD-1,500,90,590,2026-02-15\n";
+
+    $batch = $this->importer->import($csv, $this->uploader, true);
+
+    expect($batch->error_rows)->toBe(1);
+});
+
+it('catches an invoice_number already used by a real invoice (S21 B15 review fix)', function () {
+    FeeInvoice::create([
+        'batch_id' => $this->batch->id,
+        'enrolment_id' => $this->enrolment->id,
+        'user_id' => $this->student->id,
+        'sequence_number' => 1,
+        'invoice_number' => 'INV-OLD-1',
+        'description' => 'Existing',
+        'amount' => 100,
+        'gst_amount' => 18,
+        'total_amount' => 118,
+        'due_date' => now()->toDateString(),
+    ]);
+
+    $csv = "{$this->header}\nasha@example.com,batch-a,INV-OLD-1,1000,180,1180,2026-01-15\n";
+
+    $batch = $this->importer->import($csv, $this->uploader, true);
+
+    expect($batch->error_rows)->toBe(1);
+});
+
 it('a real run creates matching invoice/payment pairs, already paid and captured, skipping bad rows', function () {
     Event::fake([PaymentCaptured::class]);
 
