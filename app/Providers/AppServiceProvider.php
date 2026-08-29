@@ -6,6 +6,7 @@ use App\Domains\AI\Listeners\RetryIngestion;
 use App\Domains\AI\Listeners\StartIngestion;
 use App\Domains\AI\Livewire\ChapterMarkers;
 use App\Domains\AI\Livewire\DoubtChat;
+use App\Domains\AI\Livewire\FormulaSheet;
 use App\Domains\Assessments\Listeners\GenerateQuizFromLiveClass;
 use App\Domains\Assessments\Livewire\DailyPracticeBoard;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
@@ -234,6 +235,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('ai.doubt-chat', DoubtChat::class);
         Livewire::component('ai.lesson-revision-notes', LessonRevisionNotes::class);
         Livewire::component('ai.chapter-markers', ChapterMarkers::class);
+        Livewire::component('ai.formula-sheet', FormulaSheet::class);
         Livewire::component('assessments.daily-practice-board', DailyPracticeBoard::class);
         Livewire::component('ai.semantic-search', SemanticSearch::class);
         Livewire::component('ai.weak-topics', WeakTopics::class);

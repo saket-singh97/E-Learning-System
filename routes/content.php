@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Content\Models\CourseSection;
 use App\Http\Controllers\Content\DownloadCourseImportErrorReportController;
 use App\Http\Controllers\Content\DownloadLessonPdfController;
 use App\Http\Controllers\Content\DownloadLessonSubtitleController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Content\ShowSyllabusController;
 use App\Http\Controllers\Content\StreamLessonController;
 use App\Http\Controllers\Content\WatchHeartbeatController;
 use App\Http\Controllers\Content\WatchLessonController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public — same "published is readable by anyone" posture ShowSyllabusController
@@ -54,3 +56,14 @@ Route::get('/courses/{course}', ShowSyllabusController::class)
 
 Route::get('/live-sessions/{session}/join', JoinLiveClassController::class)
     ->name('live.join');
+
+// S22 B6 — same "add a small host route" shape as batches.php's own
+// batch.daily-practice; no existing per-chapter page to embed FormulaSheet
+// on. No auth middleware — same "published is readable by anyone" posture
+// as /courses/{course} above (FormulaSheet's own isCourseVisibleTo() gate
+// still blocks a draft course's chapter).
+Route::get('/course-sections/{section}/formula-sheet', function (Request $request) {
+    $section = CourseSection::findOrFail($request->route('section'));
+
+    return view('content.chapter-formula-sheet', ['section' => $section]);
+})->name('course-section.formula-sheet');

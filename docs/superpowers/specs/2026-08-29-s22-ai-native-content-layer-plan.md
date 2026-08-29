@@ -32,7 +32,7 @@ stop and report before starting the next block.
 | B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | ✅ done |
 | B4 | U3 pt.2 — DPP student-facing page + generation trigger | ✅ done |
 | B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | ✅ done |
-| B6 | U5 — Auto formula sheet / revision cards per chapter | not started |
+| B6 | U5 — Auto formula sheet / revision cards per chapter | ✅ done |
 | B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | not started |
 | B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | not started |
 | B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | not started |
@@ -167,16 +167,27 @@ posture S21's own blocks established).
       closer; the full pre-existing `DoubtChatTest` suite (omitted
       `$atSecond` throughout) passes unchanged.
 
-### B6 — U5: auto formula sheet / revision cards
+### B6 — U5: auto formula sheet / revision cards ✅
 
-- [ ] No new table — reads `LessonArtifact.concepts` directly (confirm
-      concepts already carry enough structure — formula text, a
-      definition — to render a card; if not, note the gap rather than
-      silently expanding `ExtractLessonConcepts`'s own S3 contract).
-- [ ] Per-chapter (course-section-level) aggregation + render (PDF or
-      in-app card view — confirm which before building).
-- [ ] Tests: cards render from real concepts, empty state when none
-      extracted.
+- [x] No new table — `ChapterFormulaSheetReader` reads
+      `LessonArtifact.concepts` directly. **Confirmed gap, not silently
+      worked around**: `concepts` only carries `{name, confidence,
+      chunk_idxs}` (`ExtractLessonConcepts`, S3) — no formula text or
+      definition field exists. This renders a per-chapter revision card
+      of the distinct concept *names* taught, not a worked formula
+      sheet; a real formula sheet needs `ExtractLessonConcepts`'s own AI
+      schema widened with a formula/definition field, out of scope here.
+- [x] In-app card view (not PDF — no storage/quota plumbing needed for a
+      plain list): `ai.formula-sheet` Livewire component, new host route
+      `/course-sections/{section}/formula-sheet` (same "add a small host
+      route" shape B4 already used), gated via
+      `LessonAccess::isCourseVisibleTo()` — chapter-level review content,
+      same sensitivity as the syllabus tree it's reached from, not a
+      per-lesson streaming gate.
+- [x] Tests (`ChapterFormulaSheetReaderTest.php`, `FormulaSheetTest.php`):
+      cards render deduplicated concept names across every lesson in the
+      chapter, empty state when none extracted, a draft course's chapter
+      404s a guest.
 
 ### B7 — U7 pt.1: audio-only mode, extraction
 
