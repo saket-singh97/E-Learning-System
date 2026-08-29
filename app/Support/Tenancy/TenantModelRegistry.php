@@ -6,6 +6,7 @@ use App\Domains\AI\Models\CourseOutlineDraft;
 use App\Domains\AI\Models\DoubtChatMessage;
 use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
+use App\Domains\AI\Models\LessonPdfNote;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
 use App\Domains\Api\Models\ApiKey;
@@ -192,6 +193,7 @@ class TenantModelRegistry
         OmrSheetScan::class,
         CourseOutlineDraft::class,
         LessonRevisionNote::class,
+        LessonPdfNote::class,
         PhotoDoubtQuery::class,
         MonthlyReportCard::class,
         Survey::class,
@@ -255,6 +257,10 @@ class TenantModelRegistry
                 'start_s' => 0,
                 'end_s' => 5,
                 'text' => 'Row',
+            ],
+            LessonPdfNote::class => [
+                'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
+                'status' => 'pending',
             ],
             DoubtChatMessage::class => [
                 'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
@@ -1327,6 +1333,7 @@ class TenantModelRegistry
             VideoWatchEvent::class => ['end_s' => 999],
             BandwidthUsageDaily::class => ['bytes_served' => 999],
             LessonArtifact::class => ['source_asset_version' => 'tampered'],
+            LessonPdfNote::class => ['status' => 'failed'],
             LessonArtifactChunk::class => ['text' => 'tampered'],
             DoubtChatMessage::class => ['answer' => 'tampered'],
             Batch::class => ['title' => 'tampered'],

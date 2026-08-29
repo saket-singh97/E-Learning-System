@@ -26,7 +26,7 @@ stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | U1 — Auto lecture notes: transcript → structured PDF, `LessonPdfNote` model | not started |
+| B0 | U1 — Auto lecture notes: transcript → structured PDF, `LessonPdfNote` model | ✅ done |
 | B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | not started |
 | B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | not started |
 | B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | not started |
@@ -52,19 +52,25 @@ posture S21's own blocks established).
 
 ## Block detail (starting checklist — expand into a build narrative as each block actually lands, same as every prior plan file)
 
-### B0 — U1: auto lecture notes
+### B0 — U1: auto lecture notes ✅
 
-- [ ] `lesson_notes` migration + `LessonPdfNote` model (AI), registered in
-      `TenantModelRegistry`. Named to avoid the existing `LessonNote`
-      (S13, student-authored) collision — confirm this naming still holds
-      before writing code.
-- [ ] `LessonPdfNoteGenerator` — reads `LessonArtifact::latestReadyFor()`'s
-      own `transcript`, one AI call to structure it into notes, renders to
-      PDF via the same PDF-generation path `CertificateService`/gradebook
-      exports already use, writes through `Storage::disk(...)`.
-- [ ] Tests: generates from a real transcript, "still processing" state
-      when no ready artifact exists (mirrors `DoubtChatService`'s own
-      posture), regenerating overwrites the same row.
+- [x] `lesson_pdf_notes` migration (table renamed from the design doc's
+      `lesson_notes` — that table already exists, S13) + `LessonPdfNote`
+      model (AI), registered in `TenantModelRegistry`.
+- [x] `LessonPdfNoteGenerator` — reads `LessonArtifact::latestReadyFor()`'s
+      own `transcript`, one AI call (`responseSchema: ['notes']`, same
+      contract `RevisionNotesGenerator` already established) to structure
+      it into notes, renders to PDF via the same `Pdf::loadView(...)->save()`
+      path `CertificateService` already uses, writes through
+      `Storage::disk('local')`.
+- [x] `GenerateLessonPdfNotes` listener, additive to the existing
+      `LessonArtifactReady` event (same shape as `GenerateLessonSubtitles`)
+      — this is what makes it "auto" (design doc §2.1 "posted... within
+      minutes of class ending") rather than requiring a manual trigger.
+- [x] Tests (`tests/Feature/AI/LessonPdfNoteGeneratorTest.php`): generates
+      from a real transcript, "still processing" placeholder row when no
+      ready artifact exists (mirrors `DoubtChatService`'s own posture),
+      regenerating overwrites the same row.
 
 ### B1 — U2: auto chapters/timestamps
 

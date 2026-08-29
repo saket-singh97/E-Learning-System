@@ -16,6 +16,7 @@ use App\Domains\Batches\Events\EnrolmentAwaitingPayment;
 use App\Domains\Batches\Listeners\FinalizeEnrolmentOnPaymentCaptured;
 use App\Domains\AI\Events\LessonArtifactReady;
 use App\Domains\Content\Listeners\EnrolFromProgramPayment;
+use App\Domains\AI\Listeners\GenerateLessonPdfNotes;
 use App\Domains\Content\Listeners\GenerateLessonSubtitles;
 use App\Domains\Batches\Listeners\SendEnrolmentExpiredNotification;
 use App\Domains\Batches\Livewire\BatchCatalog;
@@ -173,6 +174,9 @@ class AppServiceProvider extends ServiceProvider
         // S14 B2 — subtitles ride the same ingestion-complete signal
         // StartIngestion's own chain produces, not a separate manual trigger.
         Event::listen(LessonArtifactReady::class, GenerateLessonSubtitles::class);
+        // S22 B0 — U1 auto lecture notes, additive to the same ingestion-ready
+        // signal, not a new trigger point (design doc §4 decision 3).
+        Event::listen(LessonArtifactReady::class, GenerateLessonPdfNotes::class);
         Event::listen(LessonIngestionRetryRequested::class, RetryIngestion::class);
         Event::listen(EnrolmentApprovalExpired::class, SendEnrolmentExpiredNotification::class);
         Event::listen(EnrolmentAwaitingPayment::class, CreateInvoiceForPendingEnrolment::class);
