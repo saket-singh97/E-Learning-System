@@ -2443,3 +2443,145 @@ the actual backstop if a duration/amount combination it doesn't support is
 sent.
 
 **All 16 S21 blocks are now built, tested, and reviewed.**
+
+## S22 — AI-Native Content Layer: COMPLETE (all 14 blocks, 2026-08-30)
+
+`docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`
+and `...-plan.md` cover B0-B13 in full per-block detail — not repeated
+here. Real build scope was 8 AI-Native items (U1-U8, not the roadmap row's
+own 5-clause headline) plus 2 backlog gaps (Z1/Z2) found by this slice's
+own audit of every S11-S21 "deferred as fast-follow" note, 3 new
+`BelongsToTenant` models, 14 build blocks.
+
+- **B0** — U1 auto lecture notes: `lesson_pdf_notes` table (renamed from
+  the design doc's own `lesson_notes` — that table already exists, S13's
+  student-authored video-timestamp notes). `LessonPdfNoteGenerator` reads
+  `LessonArtifact::latestReadyFor()`'s transcript, one `AiProvider::chat()`
+  call (`responseSchema: ['notes']`, same contract `RevisionNotesGenerator`
+  established), renders via the same `Pdf::loadView(...)->save()` path
+  `CertificateService` uses. `GenerateLessonPdfNotes` listener, additive to
+  the existing `LessonArtifactReady` event.
+- **B1** — U2 auto chapters/timestamps: `ChapterMarkerReader` maps each
+  concept's `chunk_idxs` to its earliest matching `LessonArtifactChunk.start_s`,
+  sorted by time. No new table. `ai.chapter-markers` Livewire component
+  dispatches the player's *existing* `seek-to` window event (already built
+  for doubt-chat citations) — no new player wiring.
+- **B2** — U6 auto quiz after every live class: `GenerateQuizFromLiveClass`
+  listener, additive to `LessonArtifactReady`. Guarded to `live_session`
+  lessons — confirmed `LessonVideoReady`/`StartIngestion` fires for every
+  lesson type. Reuses `QuestionGenerator::fromSeedQuestions()` directly;
+  quiz stays `draft` (same default a manually-created quiz's own form
+  uses) since the underlying questions are also draft/`ai_generated`.
+- **B3-B4** — U3 Daily Practice Problems: `DailyPracticeSetGenerator`
+  aggregates a batch's own taught-lesson questions — "taught" = a
+  `BatchSession` with a non-null `lesson_id` whose `starts_at` date is
+  on/before the practice date. `DailyPracticeBoard` Livewire page
+  (new host route `/batches/{batch}/daily-practice`, enrolment-gated same
+  as `GeofenceCheckIn`) generates on-demand at first visit, not a
+  scheduled sweep — never builds a set for a batch nobody opens.
+  Questions render directly, not wrapped in a `Quiz` — draft/`ai_generated`
+  questions would never surface through `QuizAttemptService`'s
+  approved-only draw pool anyway.
+- **B5** — U4 ask-at-timestamp: `DoubtChatService::ask()` gained an
+  optional `?int $atSecond = null`, byte-identical to before when omitted.
+  Given, a private `nearbyChunks()` sorts the artifact's chunks by
+  time-distance in PHP (no `orderByRaw` — CLAUDE.md bans raw SQL in
+  `app/Domains/`), falling back to the existing whole-lesson semantic
+  search only if that comes back empty. `DoubtChat`'s "ask about this
+  moment" checkbox reuses the player's existing `lesson-time-update` event
+  via `$wire.ask(...)`.
+- **B6** — U5 auto formula sheet: `ChapterFormulaSheetReader` dedupes
+  concept names across a chapter's own lessons. **Confirmed gap, not
+  silently worked around**: `concepts` only carries `{name, confidence,
+  chunk_idxs}` — no formula/definition field — so this renders a revision
+  card of topic names, a real formula sheet needs `ExtractLessonConcepts`'s
+  own S3 AI schema widened, out of scope here. Originally gated only at
+  course level; hardened in B13's review pass (see below).
+- **B7-B8** — U7 audio-only mode: `AudioExtractionProvider` interface +
+  `FakeAudioExtractionDriver` (Fake-first, real driver deferred). No
+  circuit-breaker wrapper — that S12 layer retrofitted providers that
+  existed *then*, not a resilience requirement for a brand-new
+  Fake-only interface. `ExtractLessonAudio` listener rides the existing
+  `LessonVideoReady` event, not `LessonArtifactReady` — a pure media
+  transform needs no AI pipeline. `LessonPlayer` toggle swaps `<video src>`
+  to the extracted track, only rendered when a `ready` row exists.
+  `StreamLessonAudioController` mirrors `StreamLessonController`'s exact
+  gate/metering chokepoint (reused its `bytesServed()`, made `public
+  static`) so audio meters at its own file size, not the video's.
+- **B9** — U8 teacher lesson-plan assistant: `LessonPlanAssistant`,
+  sibling to `CourseOutlineGenerator` — same `AiProvider::chat()` +
+  `responseSchema: ['outline']` contract, reuses `CourseOutlineDraft`
+  itself (no new table) with a prompt grounded in the *preceding* lesson's
+  own `syllabus_map`. Returns `null` (not an exception) when nothing's
+  been extracted yet. "Draft next lesson plan" header action on
+  `EditLesson`, redirecting into the same `CourseOutlineDraft` review
+  queue. **Known scope edge, not fixed**: approving one of these drafts
+  still runs `CourseOutlineApprovalService`, which creates a *new* `Course`
+  — correct for the sibling generator, semantically odd for "the next
+  lesson in an existing course."
+- **B10-B11** — Z1/Z2 backlog gaps: `RenewStudentSubscriptions` daily
+  sweep finally schedules S20's own `StudentSubscriptionService::renew()`
+  (written, never scheduled) — B13's review pass found and fixed a real
+  billing bug here, see below. `ConfirmCommissionOnPaymentCaptured`
+  listens on the existing `PaymentCaptured` event; confirmed
+  `PaymentReconciler::capture()` only dispatches it from the
+  plain-enrolment branch (a membership invoice calls `activateFromPayment()`
+  directly, a program invoice dispatches `ProgramInvoicePaid`), so no
+  branch guard was needed. Resolves the referral via the invoice's own
+  payments, not the referral's stored `fee_payment_id`, since a retried
+  checkout can attach a second `FeePayment` to the same invoice.
+- **B12** — Registry reverse sweep: 101 real `BelongsToTenant` usages, 101
+  registry entries, exact match. `AuditLogEntry`/`CookieConsent`/
+  `ImpersonationAudit` correctly excluded — each documents its own reason
+  for not using the trait. `tests/Isolation/CrossTenantTest.php` run
+  directly — 102/102 passing.
+- **B13** — Lifecycle E2E (a live class ingests for real → auto-quiz
+  exists and that day's DPP includes its questions; a student pauses
+  mid-lecture and gets an answer grounded in the real nearest chunk; a
+  teacher's lesson-plan draft is grounded in the real `syllabus_map`; a
+  due subscription bills → goes `past_due` → only reactivates on a real
+  captured payment; a real webhook-captured payment auto-confirms its
+  pending affiliate commission) plus a 2-angle background-agent review
+  pass (correctness/convention, tenant-isolation/security) over the whole
+  slice's diff. Found and fixed 4 real issues:
+  1. **`RenewStudentSubscriptions` (Z1) granted a free renewed period with
+     no payment ever captured** — `renew()`/`checkout()` only creates an
+     unpaid order, but B10's first version advanced the period immediately
+     regardless, and the row then fell outside the sweep's own `WHERE`
+     clause so nothing would ever notice. Fixed: the sweep now only flips
+     the row to `past_due` (declared since S20, never assigned anywhere
+     before this); the period only actually advances through the
+     *existing* `activateFromPayment()` path once the renewal invoice is
+     genuinely captured.
+  2. **`ChapterFormulaSheetReader` (U5) leaked real mined lecture content
+     to unauthenticated guests**, including unreleased lessons — gated
+     only at the course level. Fixed: filters per lesson through
+     `isVisibleTo()` + `canStream()`, the same pair `DoubtChatService`/both
+     stream controllers already gate on.
+  3. **`QuestionGenerator::fromSeedQuestions()` had no idempotency** —
+     harmless for its one pre-S22 caller, but S22's two new callers
+     (`DailyPracticeSetGenerator`'s cumulative "taught so far" window,
+     `GenerateQuizFromLiveClass` on a retried ingestion) each legitimately
+     call it more than once per lesson, minting a fresh duplicate batch of
+     draft `Question` rows every time. Fixed at the shared root — returns
+     a lesson's already-promoted rows instead of re-creating them.
+     `GenerateQuizFromLiveClass` also gained its own `Quiz::firstOrCreate()`
+     guard, matching its sibling listener `GenerateLessonPdfNotes`.
+  4. Switching to audio-only mode restarted the lecture from 0:00 —
+     `.load()` resets `currentTime` with nothing to restore it. Fixed by
+     reusing the existing `resumeAt`/`onLoadedMetadata()` seek mechanism.
+  Confirmed clean, not newly found: `ChapterMarkers` (U2) shares
+  `LessonRevisionNotes`' (S17) own "`isVisibleTo()` only, not `canStream()`"
+  gap — a pre-existing, already-accepted posture used in a second place,
+  not a new regression. `/watch/{lesson}/audio` applies the identical
+  gate/metering chain as `/watch/{lesson}`. Every listener/job correctly
+  rebinds `CurrentTenant` before touching a tenant-scoped row in an
+  unscoped-sweep context — no cross-tenant leakage found anywhere.
+
+**What's still rough, on purpose:** U5's revision card is topic names, not
+a worked formula sheet (see B6 above — needs `ExtractLessonConcepts`'s own
+AI schema widened). U8's draft-approval flow creates a new `Course` rather
+than inserting into the existing one (see B9 above). `ChapterMarkers`'
+guest-visibility gap is pre-existing (S17), not introduced or fixed here.
+
+**All 14 S22 blocks are now built, tested, and reviewed.**

@@ -97,3 +97,22 @@ it('is idempotent for the same batch and date, returning the same row without re
         ->and(DailyPracticeSet::count())->toBe(1)
         ->and(Question::count())->toBe($questionCountAfterFirst);
 });
+
+it('reuses the same lessons already-promoted questions across different practice dates instead of duplicating them (S22 B13 review pass)', function () {
+    // The cumulative "taught so far" window means a lesson taught 3 days
+    // ago contributes to every one of today's, yesterday's, and 3-days-ago's
+    // own DailyPracticeSet — generateFor()'s own idempotency only covers
+    // the same (batch, date) pair, so QuestionGenerator::fromSeedQuestions()
+    // itself must be the thing that stops re-promoting fresh duplicate
+    // Question rows for a lesson already covered by an earlier date.
+    $lesson = dppLesson($this->section, 'Velocity', $this->seed);
+    BatchSession::create(['batch_id' => $this->batch->id, 'lesson_id' => $lesson->id, 'starts_at' => now()->subDays(3), 'duration_minutes' => 60, 'position' => 0]);
+
+    $day1 = app(DailyPracticeSetGenerator::class)->generateFor($this->batch, now()->subDays(2));
+    $day2 = app(DailyPracticeSetGenerator::class)->generateFor($this->batch, now()->subDay());
+    $day3 = app(DailyPracticeSetGenerator::class)->generateFor($this->batch, now());
+
+    expect(Question::where('lesson_id', $lesson->id)->count())->toBe(1)
+        ->and($day1->question_ids)->toBe($day2->question_ids)
+        ->and($day2->question_ids)->toBe($day3->question_ids);
+});

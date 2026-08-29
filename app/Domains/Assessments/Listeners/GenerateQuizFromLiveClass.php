@@ -44,13 +44,20 @@ class GenerateQuizFromLiveClass implements ShouldQueue
             return;
         }
 
-        Quiz::create([
-            'lesson_id' => $lesson->id,
-            'title' => "{$lesson->title} — Quiz",
-            'blueprint' => [['count' => $questions->count()]],
-            'time_limit_minutes' => 30,
-            'max_attempts' => 1,
-            'status' => 'draft',
-        ]);
+        // S22 B13 review pass: a retried ingestion (EditLesson's own
+        // "Retry ingestion" action) re-fires LessonArtifactReady for the
+        // same lesson — firstOrCreate keeps this a no-op the second time,
+        // same guard GenerateLessonPdfNotes' own updateOrCreate() already
+        // has on this exact event.
+        Quiz::firstOrCreate(
+            ['lesson_id' => $lesson->id],
+            [
+                'title' => "{$lesson->title} — Quiz",
+                'blueprint' => [['count' => $questions->count()]],
+                'time_limit_minutes' => 30,
+                'max_attempts' => 1,
+                'status' => 'draft',
+            ],
+        );
     }
 }

@@ -49,3 +49,12 @@ it('does not create a quiz for a non-live-session lessons ingestion', function (
 
     expect(Quiz::where('lesson_id', $lesson->id)->exists())->toBeFalse();
 });
+
+it('never creates a second quiz when a retried ingestion re-fires LessonArtifactReady (S22 B13 review pass)', function () {
+    $lesson = ingestibleLessonOfType($this->tenant, 'live_session');
+
+    event(new LessonVideoReady($lesson->id, $this->tenant->id));
+    event(new LessonVideoReady($lesson->id, $this->tenant->id));
+
+    expect(Quiz::where('lesson_id', $lesson->id)->count())->toBe(1);
+});

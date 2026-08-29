@@ -25,10 +25,28 @@ class QuestionGenerator
      * draft Question rows. No AI call — this is free, the extraction
      * already happened during ingestion.
      *
+     * Idempotent per lesson (S22 B13 review pass): S6 had exactly one
+     * caller, each lesson promoted at most once by a human action, so this
+     * never needed a repeat-call guard. S22 added two callers that legitimately
+     * call this more than once for the same lesson — DailyPracticeSetGenerator
+     * (a lesson stays in a batch's own cumulative "taught so far" window
+     * across many days) and GenerateQuizFromLiveClass (a retried ingestion
+     * re-fires LessonArtifactReady) — both would otherwise mint a fresh
+     * duplicate batch of draft Questions on every repeat call. Existing
+     * ai_generated rows for the lesson are the guard.
+     *
      * @return Collection<int, Question>
      */
     public function fromSeedQuestions(Lesson $lesson): Collection
     {
+        $alreadyPromoted = Question::where('lesson_id', $lesson->id)
+            ->where('source', 'ai_generated')
+            ->get();
+
+        if ($alreadyPromoted->isNotEmpty()) {
+            return $alreadyPromoted;
+        }
+
         $seedQuestions = LessonArtifact::latestReadyFor($lesson->id)?->seed_questions ?? [];
 
         if (empty($seedQuestions)) {

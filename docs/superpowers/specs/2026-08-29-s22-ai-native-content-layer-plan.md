@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | ✅ done |
 | B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | ✅ done |
 | B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | ✅ done |
-| B13 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
+| B13 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite baseline:** 1883+/1886+ passing at slice start per S21's own
 final count (1 pre-existing, unrelated `CourseSlugUniquenessTest` failure
@@ -326,18 +326,27 @@ posture S21's own blocks established).
       passes in full, proving isolation for all 101 registered models,
       not just the 3 new ones.
 
-### B13 — Full test coverage, review pass
+### B13 — Full test coverage, review pass ✅
 
-- [ ] Lifecycle E2E (design doc §5): live class ends → ingestion
-      completes → auto-quiz exists and that day's DPP includes its
-      questions; a student asks a doubt at a specific timestamp and gets
-      an answer grounded in that timestamp's own chunk; a teacher opens
-      the lesson-plan assistant and gets a draft grounded in the real
-      `syllabus_map`; Z1/Z2 both verified end to end (a due subscription
-      renews, a captured payment confirms its commission).
-- [ ] Dispatch a review pass over the whole slice's diff, same discipline
-      every prior slice's final block established (S21 B15's own 2-angle
-      background-agent pattern is the proven approach — reuse it).
-- [ ] Update `HANDOVER.md` (S22 complete entry), `docs/PROJECT-STATUS.md`
+- [x] Lifecycle E2E (`tests/Feature/AI/S22LifecycleE2ETest.php`, design doc
+      §5): a live class ingests for real (against `FakeAiDriver`) → the
+      auto-quiz and that day's DPP both exist and include its questions; a
+      student pauses mid-lecture at a real chunk's own timestamp and gets
+      an answer grounded in that chunk; a teacher's lesson-plan draft is
+      grounded in the real `syllabus_map`; Z1/Z2 verified end to end
+      through real webhook captures (a due subscription bills → goes
+      `past_due` → only reactivates once its renewal payment is genuinely
+      captured; a captured enrolment payment auto-confirms its pending
+      affiliate commission).
+- [x] Dispatched a 2-angle background-agent review pass over the whole
+      slice's diff (`54dfb2b..HEAD`, 13 commits) — correctness/convention
+      angle and tenant-isolation/security angle, same S21 B15 pattern.
+      Found and fixed 4 real issues (billing-correctness bug in Z1's
+      period-advancement, a content-leak in U5's `ChapterFormulaSheetReader`,
+      a shared-root duplicate-`Question` bug hitting both U3 and U6, an
+      audio-toggle position-loss UX bug) — full detail in `HANDOVER.md`'s
+      and `docs/PROJECT-STATUS.md`'s own S22 entries, not repeated here.
+      Regression tests added for all 4 alongside the fixes.
+- [x] Updated `HANDOVER.md` (S22 complete entry), `docs/PROJECT-STATUS.md`
       (new S22 section), `docs/ROADMAP.md` (S22 row → Done, shipped-count
       21→22).

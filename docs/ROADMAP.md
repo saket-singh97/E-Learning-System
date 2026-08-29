@@ -14,9 +14,9 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 21 (S1–S21) |
-| **Designed, not built** | 1 (S22) |
-| **Proposed, not yet scoped** | 4 (S23–S26) |
+| **Shipped** | 22 (S1–S22) |
+| **Designed, not built** | 1 (S23) |
+| **Proposed, not yet scoped** | 3 (S24–S26) |
 
 **Phase completion:**
 
@@ -26,7 +26,7 @@ regenerate it from this file.
 
 ---
 
-## Shipped — S1 to S21
+## Shipped — S1 to S22
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -51,37 +51,33 @@ regenerate it from this file.
 | S19 | Communication Platform — real-time WebSockets (Reverb), general forum, feedback surveys, help desk, study planner + calendar (incl. signed `.ics` export), gamification. Real scope is 6 items, matching the row's own headline exactly | 17 blocks | Aug 26–27 | ✅ Done |
 | S20 | Growth & Billing Extensions — refunds, fee-based access restriction, student subscriptions, multi-currency + regional tax, platform revenue analytics (MRR/ARR), affiliate program, instructor payouts, course-interest capture. Real scope is 9 items, not the row's own headline "12": Q7 already shipped (S8/S9's revenue-register export), R4/R5 cut (too broad / a separate product surface) — same verify-before-building boundary every prior slice drew | 15 blocks | Aug 27–28 | ✅ Done |
 | S21 | Platform Scale & Migration — stateless-readiness audit, per-tenant feature flags, institute API keys + outbound webhooks, bearer-token auth on `/api/v1/`, Google Workspace SSO, Card EMI, data-import tooling (courses/enrolments/payment history). Real scope is 6 items, not the row's own headline "5 sentences" (V12 splits into two tracked deliverables): read replicas (V8) and server hardening (V7) are cut — infra/ops or "no concrete deliverable yet," not application code; SAML (half of V13) is cut — no library installed, no buyer signal | 16 blocks | Aug 28–29 | ✅ Done |
+| S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, auto quiz after every live class, Daily Practice Problems, ask-at-timestamp, auto formula sheets, audio-only revision mode, teacher lesson-plan assistant. Real scope is 8 items (U1-U8), not the roadmap row's own 5-clause headline (U6/U7/U8 are real, separate FEATURES.md rows the headline folded into other clauses) — plus 2 backlog gaps (Z1 subscription renewal never scheduled, Z2 affiliate commission never auto-confirmed) found by this slice's own audit of every S11-S21 "deferred as fast-follow" note, neither previously picked up by a later slice | 14 blocks | Aug 29–30 | ✅ Done |
 
 Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,
+`...-plan.md`; `docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`,
 `...-plan.md`.
 
 ---
 
-## Designed, not built — S22
+## S23 — Coaching-Market Differentiators (designed, not built)
 
-| Slice | Scope | Size | Designed | Status |
-|---|---|---|---|---|
-| S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, auto quiz after every live class, Daily Practice Problems, ask-at-timestamp, auto formula sheets, audio-only revision mode, teacher lesson-plan assistant. Real scope is 8 items (U1-U8), not the roadmap row's own 5-clause headline (U6/U7/U8 are real, separate FEATURES.md rows the headline folded into other clauses) — plus 2 backlog gaps (Z1 subscription renewal never scheduled, Z2 affiliate commission never auto-confirmed) found by this slice's own audit of every S11-S21 "deferred as fast-follow" note, neither previously picked up by a later slice | 14 blocks | Aug 29 | 📝 Designed, build not started |
+Design + block-by-block plan written 2026-08-30, all 10 roadmap-pinned
+items (U9-U18) covered, none cut:
+`docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,
+`...-plan.md` (22 blocks, B0-B21 — not yet started).
 
-Full design/plan docs: `docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`,
-`...-plan.md` — the plan file's own PROGRESS table will be the live source
-of truth once building starts, same as every prior slice.
-
----
-
-## Full roadmap — S23 onward (proposed)
+## Full roadmap — S24 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S22 were each shaped only once they
+slice's turn comes, the same way S10-S23 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S23 | Coaching-Market Differentiators — confusion-signal alerting, syllabus tracker, PYQ bank, scholarship tests, rank cards, backlog/catch-up mode | 10 | U9-U18 |
 | S24 | WhatsApp-Native AI & Ops — WhatsApp doubt bot, voice-note doubts, photo doubt over WhatsApp, auto-scheduler, fee analytics, peer comparison | 7 | U19-U25 |
 | S25 | Mobile App: Core Shell — Capacitor shell, screen-record block, per-institute branding, offline downloads, camera/voice doubts, push | 6 | W1-W6 |
 | S26 | Mobile App: Build & Store — white-label build pipeline, store submission runbook, forced updates, background audio, biometric lock, iOS build | 6 | W7-W12 |

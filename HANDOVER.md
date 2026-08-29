@@ -5,7 +5,120 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-29)
+## Right now (2026-08-30)
+
+- **S23 — Coaching-Market Differentiators: DESIGNED, NOT BUILT.** Design +
+  22-block plan written, all 10 roadmap-pinned items (U9-U18) covered, none
+  cut — `docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,
+  `...-plan.md`. No blocks started yet; next session picks up at B0.
+
+- **S22 — AI-Native Content Layer: COMPLETE, all 14 blocks (2026-08-29–30).**
+  `docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`,
+  `...-plan.md` (full per-block build log lives there, not repeated here).
+  Real build scope: 8 AI-Native items (U1-U8, not the roadmap row's own
+  5-clause headline — U6/U7/U8 are real, separate `FEATURES.md` rows the
+  headline folded into other clauses) plus 2 backlog gaps (Z1/Z2) found by
+  this slice's own audit of every S11-S21 "deferred as fast-follow" note,
+  neither picked up by any later slice. 3 new `BelongsToTenant` models.
+  U1 auto lecture notes — `LessonPdfNote` (table renamed from the design
+  doc's own `lesson_notes`, which collides with S13's existing table),
+  `LessonPdfNoteGenerator` renders a transcript into a PDF via the same
+  `Pdf::loadView()->save()` path `CertificateService` uses, triggered
+  automatically off the existing `LessonArtifactReady` event (B0). U2 auto
+  chapters/timestamps — `ChapterMarkerReader` maps each `concepts[].chunk_idxs`
+  to its earliest matching chunk's `start_s`, reuses the player's existing
+  `seek-to` window event, no new table (B1). U6 auto quiz after every live
+  class — `GenerateQuizFromLiveClass`, guarded to `live_session` lessons
+  since `LessonVideoReady`/`StartIngestion` fires for every lesson type;
+  reuses `QuestionGenerator::fromSeedQuestions()` (B2). U3 Daily Practice
+  Problems — `DailyPracticeSetGenerator` aggregates a batch's own
+  taught-lesson questions (a `BatchSession` with a lesson, on/before the
+  practice date); `DailyPracticeBoard` Livewire page generates on-demand at
+  first visit rather than a daily sweep (B3-B4). U4 ask-at-timestamp —
+  `DoubtChatService::ask()` gained an optional `?int $atSecond`, byte-
+  identical when omitted, scoping retrieval to the nearest chunks by time
+  (PHP-sorted, no `orderByRaw`) before falling back to the existing
+  whole-lesson semantic search (B5). U5 auto formula sheet — confirmed and
+  documented a real gap: `concepts` has no formula/definition field, so
+  this renders a revision card of topic *names*, not a worked formula
+  sheet; gated per-lesson through `LessonAccess` (see review-pass fix #2
+  below) (B6). U7 audio-only mode — `AudioExtractionProvider` interface +
+  `FakeAudioExtractionDriver` (Fake-first, no circuit-breaker wrapper —
+  that S12 layer retrofitted providers that existed then, not required for
+  a new Fake-only interface), `ExtractLessonAudio` rides `LessonVideoReady`
+  (a pure media transform, doesn't need the AI pipeline);
+  `StreamLessonAudioController` mirrors `StreamLessonController`'s exact
+  gate/metering chokepoint, meters the audio file's own byte count (B7-B8).
+  U8 teacher lesson-plan assistant — `LessonPlanAssistant`, sibling to
+  `CourseOutlineGenerator`, reuses `CourseOutlineDraft` itself (no new
+  table) with a prompt grounded in the *preceding* lesson's own
+  `syllabus_map`; known scope edge, not fixed: approving one of these
+  drafts still runs `CourseOutlineApprovalService`, which creates a new
+  `Course` (B9). Z1 — `RenewStudentSubscriptions` daily sweep finally
+  schedules S20's own `StudentSubscriptionService::renew()`; see review-pass
+  fix #1 below for what B10's first version got wrong. Z2 —
+  `ConfirmCommissionOnPaymentCaptured` listens on the existing
+  `PaymentCaptured` event, confirmed `PaymentReconciler::capture()` only
+  dispatches it from the plain-enrolment branch so no membership/program
+  guard is needed (B10-B11). B12's reverse sweep confirmed 101-for-101
+  against every real `BelongsToTenant` usage, zero gaps.
+  B13's lifecycle E2E (a live class ingests for real → auto-quiz exists and
+  that day's DPP includes its questions; a student pauses mid-lecture and
+  gets an answer grounded in the real nearest chunk; a teacher's lesson-plan
+  draft is grounded in the real `syllabus_map`; a due subscription bills,
+  goes `past_due`, then only reactivates on a real captured payment; a real
+  webhook-captured enrolment payment auto-confirms its pending affiliate
+  commission) plus a 2-angle background-agent review pass over the whole
+  slice's diff found and fixed 4 real issues:
+  1. **`RenewStudentSubscriptions` (Z1) granted a free renewed period with
+     no payment ever captured.** `renew()`/`checkout()` only creates an
+     *unpaid* order — B10's first version advanced `current_period_start`/
+     `current_period_end` immediately anyway, and since the row then fell
+     outside the sweep's own `WHERE current_period_end < now()`, nothing
+     would ever notice or correct an unpaid renewal. Fixed: the sweep now
+     only flips the row to `past_due` (declared in `STATUSES` since S20,
+     never assigned anywhere before this) — the period only actually
+     advances through the *existing* `PaymentReconciler::capture()` →
+     `activateFromPayment()` path once the renewal invoice is genuinely
+     captured (its own `firstOrNew` already finds the same row by
+     user+plan, no new wiring needed).
+  2. **`ChapterFormulaSheetReader` (U5) leaked real mined lecture content
+     to unauthenticated guests**, including from lessons not yet released
+     — it read every lesson in a chapter unconditionally, gated only at
+     the course level (published or not). Worse than the syllabus tree it
+     was modeled on, which shows only author-written titles. Fixed: now
+     filters per lesson through `isVisibleTo()` + `canStream()`, the same
+     pair `DoubtChatService`/both stream controllers already gate on — a
+     lesson the viewer can't actually stream contributes nothing.
+  3. **`QuestionGenerator::fromSeedQuestions()` had no idempotency**,
+     harmless for its one pre-S22 caller (a human triggers it once per
+     lesson) but S22 added two callers that legitimately call it more than
+     once for the same lesson: `DailyPracticeSetGenerator` (a lesson stays
+     in a batch's cumulative "taught so far" window across many days) and
+     `GenerateQuizFromLiveClass` (a retried ingestion re-fires
+     `LessonArtifactReady`). Both minted a fresh duplicate batch of draft
+     `Question` rows every repeat call, forever. Fixed at the shared root:
+     `fromSeedQuestions()` now returns a lesson's already-promoted rows
+     instead of re-creating them. `GenerateQuizFromLiveClass` also gained
+     its own `Quiz::firstOrCreate()` guard (its sibling listener on the
+     same event, `GenerateLessonPdfNotes`, already had the equivalent).
+  4. Switching a player to audio-only mode restarted the lecture from
+     0:00 — `.load()` resets `currentTime` with nothing to restore it.
+     Fixed by reusing the existing `resumeAt`/`onLoadedMetadata()` seek
+     mechanism instead of a second position-tracking path.
+  Confirmed clean, not newly found: `ChapterMarkers` (U2) has the same
+  "gated on `isVisibleTo()` only, not `canStream()`" shape `LessonRevisionNotes`
+  (S17) already has — not a new regression, the same pre-existing,
+  already-accepted gap now used in a second place. `/watch/{lesson}/audio`
+  applies the identical gate/metering chain as `/watch/{lesson}`, verified
+  side by side. Every listener/job rebinds `CurrentTenant` correctly before
+  touching a tenant-scoped row in an unscoped-sweep context; no cross-tenant
+  leakage found anywhere.
+  Tests green: **1927/1930** (documented baseline flakes carried across
+  this slice's own blocks: `CourseSlugUniquenessTest` since S1/S2, plus a
+  rotating pair of test-order flakes among 3 known files, each individually
+  confirmed passing clean in isolation) — full suite re-run after this
+  block's own fixes to confirm no regression.
 
 - **S21 — Platform Scale & Migration: COMPLETE, all 16 blocks (2026-08-28–29).**
   `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,

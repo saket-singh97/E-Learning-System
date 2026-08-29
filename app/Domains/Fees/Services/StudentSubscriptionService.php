@@ -134,12 +134,7 @@ class StudentSubscriptionService
         ];
     }
 
-    /**
-     * Public (S22 B10) — RenewStudentSubscriptions reuses this exact period
-     * math to advance the row past its just-triggered renewal, rather than
-     * duplicating the interval ternary in the sweep job.
-     */
-    public function nextPeriodEnd(StudentMembershipPlan $plan, Carbon $from): Carbon
+    protected function nextPeriodEnd(StudentMembershipPlan $plan, Carbon $from): Carbon
     {
         return $plan->billing_interval === 'yearly' ? $from->copy()->addYear() : $from->copy()->addMonth();
     }

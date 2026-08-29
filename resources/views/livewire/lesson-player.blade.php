@@ -59,6 +59,11 @@
             document.fullscreenElement ? document.exitFullscreen() : this.$refs.container.requestFullscreen();
         },
         toggleAudioOnly() {
+            // S22 B13 review pass: .load() resets currentTime to 0 with no
+            // restore, so a mid-lecture toggle silently restarted from
+            // 0:00 — reuses the existing resumeAt/onLoadedMetadata() seek
+            // instead of a second position-tracking mechanism.
+            this.resumeAt = Math.floor(this.$refs.video.currentTime);
             this.useAudio = !this.useAudio;
             this.$refs.video.src = this.useAudio ? '{{ $audioUrl }}' : '{{ $streamUrl }}';
             this.$refs.video.load();
