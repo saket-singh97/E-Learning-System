@@ -37,7 +37,15 @@ class DoubtChat extends Component
             : collect();
     }
 
-    public function ask(): void
+    /**
+     * U4 (S22 B5) — $atSecond comes from the player's own existing
+     * `lesson-time-update` window event (lesson-player.blade.php already
+     * dispatches it every timeupdate), read client-side and passed through
+     * `$wire.ask(...)` when the student opts into "ask about this moment";
+     * omitted (null) otherwise, so DoubtChatService::ask() takes its
+     * existing whole-lesson path unchanged.
+     */
+    public function ask(?int $atSecond = null): void
     {
         $user = auth()->user();
 
@@ -47,7 +55,7 @@ class DoubtChat extends Component
 
         $this->validate(['question' => 'required|string|max:2000']);
 
-        $this->messages->push(app(DoubtChatService::class)->ask($this->lesson, $user, $this->question));
+        $this->messages->push(app(DoubtChatService::class)->ask($this->lesson, $user, $this->question, $atSecond));
 
         $this->question = '';
     }

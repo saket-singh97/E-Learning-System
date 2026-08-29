@@ -9,6 +9,7 @@ use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Services\LessonAccess;
 use App\Integrations\AiProvider;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Pgvector\Laravel\Distance;
 
 class DoubtChatService
@@ -26,8 +27,14 @@ class DoubtChatService
      * S1 §5.2 consumer #2 ("doubt-chat RAG"). Gates through the same single
      * LessonAccess class streaming and the heartbeat use — per CLAUDE.md,
      * no inline visibility check invented here.
+     *
+     * U4 (S22 B5) — $atSecond is optional and additive (design doc §4
+     * decision 4): omitted, this method is byte-identical to before this
+     * block; given, retrieval scopes to the chunks nearest that timestamp
+     * instead of the whole-lesson semantic search, falling back to it only
+     * if the lesson has no chunks at all yet.
      */
-    public function ask(Lesson $lesson, User $viewer, string $question): DoubtChatMessage
+    public function ask(Lesson $lesson, User $viewer, string $question, ?int $atSecond = null): DoubtChatMessage
     {
         abort_unless($this->access->isVisibleTo($lesson, $viewer), 404);
         abort_unless($this->access->canStream($lesson, $viewer), 403);
@@ -46,11 +53,15 @@ class DoubtChatService
 
         $queryVector = $this->ai->embed($question);
 
-        $chunks = LessonArtifactChunk::query()
-            ->where('lesson_artifact_id', $artifact->id)
-            ->nearestNeighbors('embedding', $queryVector, Distance::Cosine)
-            ->limit(self::TOP_K)
-            ->get();
+        $chunks = $atSecond !== null ? $this->nearbyChunks($artifact->id, $atSecond) : null;
+
+        if ($chunks === null || $chunks->isEmpty()) {
+            $chunks = LessonArtifactChunk::query()
+                ->where('lesson_artifact_id', $artifact->id)
+                ->nearestNeighbors('embedding', $queryVector, Distance::Cosine)
+                ->limit(self::TOP_K)
+                ->get();
+        }
 
         $context = $chunks
             ->map(fn (LessonArtifactChunk $chunk): string => "[{$chunk->start_s}s-{$chunk->end_s}s] {$chunk->text}")
@@ -73,5 +84,22 @@ class DoubtChatService
             // previously had for doubt chat (see its own docblock).
             'token_cost' => $result->usage,
         ]);
+    }
+
+    /**
+     * Sorted in PHP, not `orderByRaw` — a per-lesson chunk count is small
+     * (one lecture's own segments), and CLAUDE.md keeps raw SQL out of
+     * app/Domains/ entirely.
+     *
+     * @return Collection<int, LessonArtifactChunk>
+     */
+    private function nearbyChunks(int $artifactId, int $atSecond): Collection
+    {
+        return LessonArtifactChunk::query()
+            ->where('lesson_artifact_id', $artifactId)
+            ->get()
+            ->sortBy(fn (LessonArtifactChunk $chunk): float => abs((($chunk->start_s + $chunk->end_s) / 2) - $atSecond))
+            ->take(self::TOP_K)
+            ->values();
     }
 }

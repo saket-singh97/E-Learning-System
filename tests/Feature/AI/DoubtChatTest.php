@@ -106,6 +106,32 @@ it('answers only from the asking lesson\'s latest-ready artifact, never a stale,
     expect($message->cited_chunk_idxs)->toBe([0]);
 });
 
+it('scopes retrieval to chunks near a given timestamp, dropping a distant chunk the whole-lesson search would otherwise consider', function () {
+    app()->bind(AiProvider::class, RecordingChatDriver::class);
+
+    [$tenant, , $lesson] = gateFixture();
+    $student = gateStaff($tenant, 'student');
+
+    $artifact = LessonArtifact::create(['lesson_id' => $lesson->id, 'version' => 1, 'source_asset_version' => 'v1', 'status' => 'ready']);
+
+    // A 5-chunk cluster around the 300s mark (TOP_K = 5) plus one chunk far
+    // away at 5000s — time-scoping should keep the whole cluster (including
+    // NEARBY_TARGET_TEXT) and drop the far decoy, regardless of which text
+    // the fake embedder happens to rank as semantically closer.
+    foreach (range(0, 4) as $i) {
+        chunkWithEmbedding($artifact->id, $i, $i === 2 ? 'NEARBY_TARGET_TEXT' : "cluster filler {$i}")
+            ->update(['start_s' => 300 + $i, 'end_s' => 300 + $i + 1]);
+    }
+
+    chunkWithEmbedding($artifact->id, 5, 'DECOY_FAR_TEXT')->update(['start_s' => 5000, 'end_s' => 5005]);
+
+    app(DoubtChatService::class)->ask($lesson, $student, 'What happened at this moment?', 302);
+
+    expect(RecordingChatDriver::$lastMessages[1]['content'])
+        ->toContain('NEARBY_TARGET_TEXT')
+        ->not->toContain('DECOY_FAR_TEXT');
+});
+
 it('returns a still-processing message, not an exception, when no ready artifact exists yet', function () {
     [$tenant, , $lesson] = gateFixture();
     $student = gateStaff($tenant, 'student');

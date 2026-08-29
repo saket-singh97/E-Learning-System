@@ -31,7 +31,7 @@ stop and report before starting the next block.
 | B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | ✅ done |
 | B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | ✅ done |
 | B4 | U3 pt.2 — DPP student-facing page + generation trigger | ✅ done |
-| B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | not started |
+| B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | ✅ done |
 | B6 | U5 — Auto formula sheet / revision cards per chapter | not started |
 | B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | not started |
 | B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | not started |
@@ -145,18 +145,27 @@ posture S21's own blocks established).
       doesn't create a second `DailyPracticeSet` row, a non-enrolled user
       gets a 404.
 
-### B5 — U4: ask-at-timestamp
+### B5 — U4: ask-at-timestamp ✅
 
-- [ ] `DoubtChatService::ask()` gains an optional `?int $atSecond = null`
-      parameter — when given, retrieval scopes to chunks near that
-      timestamp before falling back to the existing whole-lesson search;
-      `null` stays byte-identical to today's behavior.
-- [ ] `DoubtChat` Livewire component: an optional "ask about this moment"
-      entry point from the player's current playhead position.
-- [ ] Tests: a timestamped question retrieves the nearby chunk over a
-      distant one from the same lesson, an omitted timestamp behaves
-      exactly as before this block (regression-proof the existing
-      `DoubtChatTest` suite passes unchanged).
+- [x] `DoubtChatService::ask()` gains an optional `?int $atSecond = null`
+      parameter. Given, a private `nearbyChunks()` sorts the artifact's
+      chunks by distance from the timestamp in PHP (no `orderByRaw` —
+      CLAUDE.md keeps raw SQL out of `app/Domains/`) and takes `TOP_K`;
+      falls back to the existing whole-lesson semantic search only if
+      that comes back empty. Omitted, the method takes the exact same
+      code path as before this block.
+- [x] `DoubtChat` Livewire component: `ask(?int $atSecond = null)`. The
+      view tracks the player's playhead via the *existing*
+      `lesson-time-update` window event (already dispatched by
+      `lesson-player.blade.php`) in a plain Alpine `x-data`, and an "ask
+      about this moment" checkbox routes it through `$wire.ask(...)` only
+      when checked — no new player wiring, no extra network round trip
+      (the deferred `wire:model="question"` rides the same request).
+- [x] Tests (`tests/Feature/AI/DoubtChatTest.php`): a timestamped question
+      keeps a nearby-in-time chunk's text in the AI context and drops a
+      distant chunk's, regardless of which the fake embedder would rank
+      closer; the full pre-existing `DoubtChatTest` suite (omitted
+      `$atSecond` throughout) passes unchanged.
 
 ### B6 — U5: auto formula sheet / revision cards
 
