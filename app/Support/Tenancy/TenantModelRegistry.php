@@ -79,6 +79,7 @@ use App\Domains\Content\Models\Tag;
 use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Content\Models\Wishlist;
 use App\Domains\Fees\Models\FeeCoupon;
+use App\Domains\Fees\Models\PaymentHistoryImportBatch;
 use App\Domains\Operations\Models\Enquiry;
 use App\Domains\Operations\Models\EnquiryFollowUp;
 use App\Domains\Planner\Models\PlannerEvent;
@@ -209,6 +210,7 @@ class TenantModelRegistry
         WebhookDelivery::class,
         CourseImportBatch::class,
         EnrolmentImportBatch::class,
+        PaymentHistoryImportBatch::class,
     ];
 
     /**
@@ -1295,6 +1297,10 @@ class TenantModelRegistry
                 'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'status' => 'completed',
             ],
+            PaymentHistoryImportBatch::class => [
+                'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'completed',
+            ],
             WebhookEndpoint::class => ['url' => 'https://example.com/row-'.uniqid(), 'secret' => 'secret-'.uniqid()],
             WebhookDelivery::class => [
                 'webhook_endpoint_id' => WebhookEndpoint::create(['url' => 'https://example.com/parent', 'secret' => 'parent-secret'])->id,
@@ -1414,6 +1420,7 @@ class TenantModelRegistry
             ApiKey::class => ['name' => 'tampered'],
             CourseImportBatch::class => ['status' => 'failed'],
             EnrolmentImportBatch::class => ['status' => 'failed'],
+            PaymentHistoryImportBatch::class => ['status' => 'failed'],
             WebhookEndpoint::class => ['status' => 'disabled'],
             WebhookDelivery::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),

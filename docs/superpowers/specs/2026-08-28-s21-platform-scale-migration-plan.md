@@ -39,7 +39,7 @@ stop and report before starting the next block.
 | B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | ✅ done |
 | B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | ✅ done |
 | B11 | V14 pt.2 — enrolment CSV import | ✅ done |
-| B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | not started |
+| B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | ✅ done |
 | B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | not started |
 | B14 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | not started |
 | B15 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
@@ -497,16 +497,53 @@ controller + 1 migration + 1 route file only) — the 1 baseline
 (`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
 (`DownloadCompletionExportControllerTest`, `BackupConfigurationTest`).
 
-### B12 — V14 pt.3: payment-history import
+### B12 — V14 pt.3: payment-history import — done 2026-08-29
 
-- [ ] `payment_history_import_batches` migration + model (Fees),
+- [x] `payment_history_import_batches` migration + model (Fees),
       registered in `TenantModelRegistry`.
-- [ ] CSV import job creating historical `FeeInvoice`/`FeePayment` rows
+- [x] CSV import job creating historical `FeeInvoice`/`FeePayment` rows
       directly (no live gateway call — this is backfilling settled
       history, not processing new payments).
-- [ ] Tests: dry-run reports errors with zero writes, real run creates
+- [x] Tests: dry-run reports errors with zero writes, real run creates
       invoice/payment pairs correctly, never dispatches a live payment
       event for imported (already-settled) history.
+
+CSV columns: `email, batch, invoice_number, amount, gst_amount,
+total_amount, paid_at` — the row's student+batch must already have a
+real `Enrolment` on record (checked after the B11-style student/batch
+lookups), since `fee_invoices.batch_id`/`enrolment_id` are both `NOT NULL`
+foreign keys — a payment history row with no matching enrolment is a
+per-row error ("import the enrolment first"), never silently skipped or
+auto-created.
+Built: `PaymentHistoryCsvImporter` — bypasses
+`FeeInvoiceService`/`PaymentReconciler` entirely, writing `FeeInvoice`
+(`status: paid`, `paid_at` from the CSV) and `FeePayment`
+(`provider: imported`, `status: captured`, synthetic unique
+`provider_order_id`/`idempotency_key`) directly inside one transaction —
+no live gateway call is possible even in principle, and no
+`PaymentCaptured` event fires (confirmed with `Event::fake()` +
+`assertNotDispatched()`), since nothing here ever touches the reconciler.
+`sequence_number` computed once per import
+(`FeeInvoice::max('sequence_number') + 1`, incrementing per row) under a
+tenant-row lock, same reasoning `FeeInvoiceService::nextSequenceNumber()`
+already established — `invoice_number` itself comes straight from the CSV
+(the institute's own historical number), not the app's own
+date-based `INV-{tenant}-{FY}-{seq}` builder, since that scheme means
+"issued today," which a backfilled historical invoice never is.
+`PaymentHistoryImportBatchResource` lives under `Fees/Filament/Resources`,
+already auto-discovered — no explicit registration needed.
+Tests: `tests/Feature/Fees/PaymentHistoryCsvImporterTest.php` (6: empty
+file, bad headers, dry-run zero-writes catching missing student/batch/bad
+data, a student+batch pair with no enrolment on record, real run creates
+matching paid/captured pairs and confirms zero `PaymentCaptured`
+dispatches, no report when every row is valid) +
+`tests/Feature/Fees/PaymentHistoryImportBatchUiTest.php` (3: real-run
+upload, dry-run upload, cross-tenant download 403).
+Full suite: 1878 tests, 1875 passed. 3 failures, all pre-existing and
+unrelated to this block's diff (`Fees` domain + 1 exception + 1 controller
++ 1 migration + 1 route file only) — the 1 baseline
+(`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
+(`DownloadCompletionExportControllerTest`, `BackupConfigurationTest`).
 
 ### B13 — V9: stateless-readiness audit
 
