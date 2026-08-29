@@ -9,6 +9,10 @@
 <body>
     @if ($lesson->type === 'video' || $lesson->type === 'live_session')
         <livewire:lesson-player :lesson="$lesson" />
+        {{-- U2 — jump-to-timestamp markers, same video-timeline scoping as
+             doubt-chat/revision-notes below; dispatches the player's own
+             existing seek-to window event. --}}
+        <livewire:ai.chapter-markers :lesson="$lesson" />
         <livewire:ai.doubt-chat :lesson="$lesson" />
         {{-- Timestamp-based, so only meaningful where there's an actual
              video timeline (design doc §3.1) — text/pdf/embed lessons have

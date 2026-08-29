@@ -27,7 +27,7 @@ stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | U1 — Auto lecture notes: transcript → structured PDF, `LessonPdfNote` model | ✅ done |
-| B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | not started |
+| B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | ✅ done |
 | B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | not started |
 | B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | not started |
 | B4 | U3 pt.2 — DPP student-facing page + generation trigger | not started |
@@ -72,17 +72,23 @@ posture S21's own blocks established).
       ready artifact exists (mirrors `DoubtChatService`'s own posture),
       regenerating overwrites the same row.
 
-### B1 — U2: auto chapters/timestamps
+### B1 — U2: auto chapters/timestamps ✅
 
-- [ ] No new table — reads `LessonArtifact.concepts` +
-      `LessonArtifactChunk.start_s`/`.end_s` directly. Confirm exact
-      concepts→chunk-index mapping shape before this block starts (read
-      `ExtractLessonConcepts`, S3, to see how `concepts` cross-references
-      chunk indexes).
-- [ ] Player-facing chapter markers (jump-to-timestamp list) on the
-      existing lesson watch view.
-- [ ] Tests: markers match `concepts`/`start_s` exactly for a real
-      artifact, empty list (not an error) when no concepts extracted yet.
+- [x] No new table — `ChapterMarkerReader` reads `LessonArtifact.concepts`
+      (each `{name, confidence, chunk_idxs}`, confirmed from
+      `ExtractLessonConcepts`) + `LessonArtifactChunk.start_s` directly. A
+      marker's timestamp is the earliest `start_s` among its concept's own
+      `chunk_idxs`.
+- [x] Player-facing chapter markers: `ai.chapter-markers` Livewire
+      component (gated through `LessonAccess`, same posture
+      `LessonRevisionNotes` already takes), embedded in the watch view
+      next to the player, dispatching the player's existing `seek-to`
+      window event (same idiom `doubt-chat.blade.php` already uses) — no
+      new player wiring needed.
+- [x] Tests (`tests/Feature/AI/ChapterMarkerReaderTest.php`): markers match
+      `concepts`/`start_s` exactly and sort by time, empty list (not an
+      error) when no concepts extracted yet, empty list when no ready
+      artifact exists at all.
 
 ### B2 — U6: auto quiz after every live class
 
