@@ -41,7 +41,7 @@ stop and report before starting the next block.
 | B11 | V14 pt.2 — enrolment CSV import | ✅ done |
 | B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | ✅ done |
 | B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | ✅ done |
-| B14 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | not started |
+| B14 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | ✅ done |
 | B15 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
 **Test suite baseline:** 1797+/1798+ passing at slice start per S20's own
@@ -582,9 +582,9 @@ the 1 baseline (`CourseSlugUniquenessTest`) + 2 already-confirmed
 test-order flakes (`DownloadCompletionExportControllerTest`,
 `BackupConfigurationTest`).
 
-### B14 — `TenantModelRegistry` sweep
+### B14 — `TenantModelRegistry` sweep — done 2026-08-29
 
-- [ ] Reverse sweep (same anchored-grep method S19 B15/S20 B13 used):
+- [x] Reverse sweep (same anchored-grep method S19 B15/S20 B13 used):
       grep every `app/Domains/*/Models/*.php` for a real
       `use BelongsToTenant` declaration, diff against
       `TenantModelRegistry::MODELS`, confirm zero gaps either direction.
@@ -592,6 +592,28 @@ test-order flakes (`DownloadCompletionExportControllerTest`,
       `WebhookDelivery`, `CourseImportBatch`, `EnrolmentImportBatch`,
       `PaymentHistoryImportBatch`) confirmed present with working
       `seedAttributes()`/`updateAttributes()` entries.
+
+**Result: zero gaps either direction, no code change needed.** Anchored
+grep for the real trait-use line (`use (BelongsToTenant|..., BelongsToTenant|BelongsToTenant, ...);`
+inside the class body, not just the import) across every
+`app/Domains/*/Models/*.php` found exactly **98** models; extracting
+`TenantModelRegistry::MODELS`'s own class list found exactly **98**;
+`diff` between the two sorted lists produced no output — every model
+using the trait is registered, and nothing stale is registered that no
+longer uses it. All 7 new S21 models individually confirmed present with
+both a `seedAttributes()` and an `updateAttributes()` entry (grepped each
+by name). Ran `tests/Isolation/CrossTenantTest.php` directly — the
+generated suite itself passed clean (99 tests), proving the registry
+isn't just textually complete but functionally exercised.
+No code changed — every S21 block from B0 onward already registered its
+own new model at build time (per `CLAUDE.md`'s own tenant model registry
+rule), so this block found nothing left to fix, same "confirm, don't
+invent a fix" posture as B13.
+Full suite: 1878 tests, 1875 passed — identical count to B12/B13 (no code
+touched this block). 3 failures, all pre-existing and already confirmed
+unrelated across multiple prior blocks — the 1 baseline
+(`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
+(`DownloadCompletionExportControllerTest`, `BackupConfigurationTest`).
 
 ### B15 — Full test coverage, review pass
 
