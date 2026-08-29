@@ -64,6 +64,7 @@ use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\BandwidthUsageDaily;
 use App\Domains\Content\Models\Category;
 use App\Domains\Content\Models\Course;
+use App\Domains\Content\Models\CourseImportBatch;
 use App\Domains\Content\Models\CourseReview;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
@@ -205,6 +206,7 @@ class TenantModelRegistry
         ApiKey::class,
         WebhookEndpoint::class,
         WebhookDelivery::class,
+        CourseImportBatch::class,
     ];
 
     /**
@@ -1283,6 +1285,10 @@ class TenantModelRegistry
             ],
             FeatureFlag::class => ['key' => 'row-flag-'.uniqid(), 'enabled' => false],
             ApiKey::class => ['name' => 'Row Key', 'key_hash' => hash('sha256', 'row-'.uniqid())],
+            CourseImportBatch::class => [
+                'uploaded_by_user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'status' => 'completed',
+            ],
             WebhookEndpoint::class => ['url' => 'https://example.com/row-'.uniqid(), 'secret' => 'secret-'.uniqid()],
             WebhookDelivery::class => [
                 'webhook_endpoint_id' => WebhookEndpoint::create(['url' => 'https://example.com/parent', 'secret' => 'parent-secret'])->id,
@@ -1400,6 +1406,7 @@ class TenantModelRegistry
             StudentBadge::class => ['awarded_at' => now()->subDay()],
             FeatureFlag::class => ['enabled' => true],
             ApiKey::class => ['name' => 'tampered'],
+            CourseImportBatch::class => ['status' => 'failed'],
             WebhookEndpoint::class => ['status' => 'disabled'],
             WebhookDelivery::class => ['status' => 'failed'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),

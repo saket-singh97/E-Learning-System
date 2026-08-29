@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Content\DownloadCourseImportErrorReportController;
 use App\Http\Controllers\Content\DownloadLessonPdfController;
 use App\Http\Controllers\Content\DownloadLessonSubtitleController;
 use App\Http\Controllers\Content\JoinLiveClassController;
@@ -26,6 +27,13 @@ Route::get('/wishlist', fn () => view('content.my-wishlist'))
 Route::get('/watch/{lesson}', StreamLessonController::class)
     ->middleware('signed')
     ->name('watch.stream');
+
+// S21 B10 — same double-check posture as routes/batches.php's own
+// /student-imports/{importBatch}/error-report: role:institute_admin
+// middleware plus the controller's own tenant-scoped lookup.
+Route::get('/course-imports/{importBatch}/error-report', DownloadCourseImportErrorReportController::class)
+    ->middleware(['auth', 'role:institute_admin'])
+    ->name('course-import.error-report.download');
 
 Route::get('/watch/{lesson}/pdf', DownloadLessonPdfController::class)
     ->middleware('signed')

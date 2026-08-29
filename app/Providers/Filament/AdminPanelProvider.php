@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Domains\Assessments\Filament\Resources\OmrSheetScans\OmrSheetScanResource;
 use App\Domains\Assessments\Filament\Resources\TestSeries\TestSeriesResource;
 use App\Domains\Content\Filament\Resources\Categories\CategoryResource;
+use App\Domains\Content\Filament\Resources\CourseImportBatches\CourseImportBatchResource;
 use App\Domains\Content\Filament\Resources\CourseReviews\CourseReviewResource;
 use App\Domains\Content\Filament\Resources\Programs\ProgramResource;
 use App\Domains\Content\Filament\Resources\Tags\TagResource;
@@ -80,6 +81,9 @@ class AdminPanelProvider extends PanelProvider
                 // S16 B15 — same explicit-registration reasoning as
                 // TestSeriesResource above.
                 OmrSheetScanResource::class,
+                // S21 B10 — same explicit-registration reasoning as
+                // Category/Tag/Program above.
+                CourseImportBatchResource::class,
             ])
             ->discoverPages(in: app_path('Filament/Admin/Pages'), for: 'App\Filament\Admin\Pages')
             ->pages([

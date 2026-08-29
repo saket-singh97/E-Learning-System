@@ -37,7 +37,7 @@ stop and report before starting the next block.
 | B7 | V13a — Google Workspace SSO: tenant-configurable allowed domain + domain-restricted OAuth gate | ✅ done |
 | B8 | V11 pt.1 — Card EMI: `PaymentProvider::createOrder()` EMI option + eligibility | ✅ done |
 | B9 | V11 pt.2 — EMI checkout UI option + webhook/payment-status handling | ✅ done |
-| B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | not started |
+| B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | ✅ done |
 | B11 | V14 pt.2 — enrolment CSV import | not started |
 | B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | not started |
 | B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | not started |
@@ -416,15 +416,48 @@ only) — the 1 baseline (`CourseSlugUniquenessTest`) + 2 already-confirmed
 test-order flakes (`DownloadCompletionExportControllerTest`,
 `DownloadEnrolmentExportControllerTest`).
 
-### B10 — V14 pt.1: course/category import
+### B10 — V14 pt.1: course/category import — done 2026-08-29
 
-- [ ] `course_import_batches` migration + model (Content), registered in
+- [x] `course_import_batches` migration + model (Content), registered in
       `TenantModelRegistry`.
-- [ ] CSV import job reusing `StudentImportBatch`'s own dry-run/
+- [x] CSV import job reusing `StudentImportBatch`'s own dry-run/
       per-row-error-report shape (design doc §4 decision 7), targeting
       `Course`/`Category`.
-- [ ] Tests: dry-run reports row-level errors with zero writes, a real
+- [x] Tests: dry-run reports row-level errors with zero writes, a real
       run creates courses/categories and skips only the bad rows.
+
+**One real difference from `StudentImportBatch`, confirmed before
+building:** its own two phases (sync validate, then a *queued* create job)
+exist because creating a User goes through `RoleAssignmentPolicy` — real
+weight. Creating a Course (and optionally a Category) is a couple of plain
+Eloquent inserts, no external I/O, no policy checks — genuinely cheap at
+the same up-to-5000-row scale, so B10 runs fully synchronously in one
+`CourseCsvImporter::import()` call, no queued job class at all. `dry_run`
+is a real toggle here (a schema column `StudentImportBatch` never had) —
+checked before any Course/Category write happens, matching the plan's own
+explicit "dry-run reports errors with zero writes" requirement.
+Built: `course_import_batches` (Content), `CourseImportBatch` model,
+`CourseCsvImporter` service (CSV columns: `title, slug, category` —
+category optional, uncategorized rows skip the pivot entirely). Real run
+creates a `Course` per valid row and `firstOrCreate`s a `Category` by slug
+when given; dry run touches neither table, only reads (`Course::where(...)
+->exists()` for slug-collision checks). Admin-panel-only
+`CourseImportBatchResource` (explicit registration in
+`AdminPanelProvider`, same as `CategoryResource`/`ProgramResource` —
+Content's directory isn't auto-discovered) with a dry-run checkbox on
+upload and a `DownloadCourseImportErrorReportController` (same
+role+tenant double-check shape as `DownloadStudentImportErrorReportController`).
+Tests: `tests/Feature/Content/CourseCsvImporterTest.php` (6: empty file,
+bad headers, dry-run zero-writes with 3 error kinds, real run
+creates-and-skips, blank category leaves no pivot row, no report written
+when every row is valid) + `tests/Feature/Content/CourseImportBatchUiTest.php`
+(3: real-run upload, dry-run upload, cross-tenant download 403 — same
+shape the Student import's own cross-tenant test already established).
+Full suite: 1858 tests, 1855 passed. 3 failures, all pre-existing and
+unrelated to this block's diff (`Content` domain + 1 exception + 1
+controller + 1 migration + provider registration only) — the 1 baseline
+(`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
+(`DownloadCompletionExportControllerTest`, `DownloadEnrolmentExportControllerTest`).
 
 ### B11 — V14 pt.2: enrolment import
 
