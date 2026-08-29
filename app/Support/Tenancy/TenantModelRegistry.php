@@ -16,6 +16,7 @@ use App\Domains\Analytics\Models\Badge;
 use App\Domains\Analytics\Models\GamificationProfile;
 use App\Domains\Analytics\Models\MonthlyReportCard;
 use App\Domains\Analytics\Models\StudentBadge;
+use App\Domains\Assessments\Models\DailyPracticeSet;
 use App\Domains\Assessments\Models\Question;
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAnswer;
@@ -194,6 +195,7 @@ class TenantModelRegistry
         CourseOutlineDraft::class,
         LessonRevisionNote::class,
         LessonPdfNote::class,
+        DailyPracticeSet::class,
         PhotoDoubtQuery::class,
         MonthlyReportCard::class,
         Survey::class,
@@ -261,6 +263,19 @@ class TenantModelRegistry
             LessonPdfNote::class => [
                 'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
                 'status' => 'pending',
+            ],
+            DailyPracticeSet::class => [
+                'batch_id' => Batch::create([
+                    'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid(), 'status' => 'published'])->id,
+                    'title' => 'Parent',
+                    'slug' => 'parent-'.uniqid(),
+                    'starts_on' => now()->toDateString(),
+                    'ends_on' => now()->addMonth()->toDateString(),
+                    'self_enrol_mode' => 'manual_only',
+                    'status' => 'draft',
+                ])->id,
+                'practice_date' => now()->toDateString(),
+                'question_ids' => [],
             ],
             DoubtChatMessage::class => [
                 'lesson_id' => Lesson::create(['course_section_id' => CourseSection::create(['course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id, 'title' => 'Parent', 'position' => 0])->id, 'title' => 'Row', 'type' => 'text', 'position' => 0])->id,
@@ -1334,6 +1349,7 @@ class TenantModelRegistry
             BandwidthUsageDaily::class => ['bytes_served' => 999],
             LessonArtifact::class => ['source_asset_version' => 'tampered'],
             LessonPdfNote::class => ['status' => 'failed'],
+            DailyPracticeSet::class => ['question_ids' => [999]],
             LessonArtifactChunk::class => ['text' => 'tampered'],
             DoubtChatMessage::class => ['answer' => 'tampered'],
             Batch::class => ['title' => 'tampered'],

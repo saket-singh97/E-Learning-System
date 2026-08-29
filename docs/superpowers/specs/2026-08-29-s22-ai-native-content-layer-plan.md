@@ -29,7 +29,7 @@ stop and report before starting the next block.
 | B0 | U1 — Auto lecture notes: transcript → structured PDF, `LessonPdfNote` model | ✅ done |
 | B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | ✅ done |
 | B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | ✅ done |
-| B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | not started |
+| B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | ✅ done |
 | B4 | U3 pt.2 — DPP student-facing page + generation trigger | not started |
 | B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | not started |
 | B6 | U5 — Auto formula sheet / revision cards per chapter | not started |
@@ -108,20 +108,23 @@ posture S21's own blocks established).
       a live-class lesson's ingestion creates a draft quiz with the right
       question count, a non-live-session lesson's ingestion does not.
 
-### B3 — U3 pt.1: DPP schema + aggregation
+### B3 — U3 pt.1: DPP schema + aggregation ✅
 
-- [ ] `daily_practice_sets` migration (`batch_id`, `practice_date` unique
-      per batch, `question_ids` json) + model (Assessments), registered
-      in `TenantModelRegistry`.
-- [ ] `DailyPracticeSetGenerator` — for a given batch + date, walks every
-      lesson taught in that batch up to `practice_date` (confirm exact
-      "taught" definition — a `BatchSession`'s own `starts_at` past, or a
-      lesson's own release date — before writing the query), calls
-      `QuestionGenerator::fromSeedQuestions()` per lesson, aggregates into
-      one set.
-- [ ] Tests: correct question count/lesson coverage across a multi-lesson
-      batch, respects the `practice_date` cutoff (a lesson taught after
-      the cutoff never contributes), idempotent re-run for the same date.
+- [x] `daily_practice_sets` migration (`batch_id`, `practice_date` unique
+      per batch, `question_ids` jsonb) + `DailyPracticeSet` model
+      (Assessments), registered in `TenantModelRegistry`.
+- [x] `DailyPracticeSetGenerator` — "taught" = a `BatchSession` for this
+      batch with a non-null `lesson_id` whose `starts_at` date is on or
+      before `practice_date` (a session with no lesson is a bare
+      timetable slot, not content). Calls
+      `QuestionGenerator::fromSeedQuestions()` per distinct lesson,
+      aggregates into one set. Idempotent by construction: a second call
+      for an already-generated batch+date returns the existing row
+      without re-promoting a duplicate batch of draft Questions.
+- [x] Tests (`tests/Feature/Assessments/DailyPracticeSetGeneratorTest.php`):
+      correct question count/lesson coverage across a multi-lesson batch,
+      respects the `practice_date` cutoff, idempotent re-run returns the
+      same row and doesn't grow the Questions table.
 
 ### B4 — U3 pt.2: DPP UI + trigger
 
