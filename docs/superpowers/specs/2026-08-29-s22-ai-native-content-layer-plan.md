@@ -1,0 +1,230 @@
+# Implementation Plan: S22 AI-Native Content Layer
+
+Full design: `2026-08-29-s22-ai-native-content-layer-design.md`. This is
+the block-by-block build log — update the PROGRESS table as each block
+lands, same as every S1-S21 plan did. 14 blocks (B0-B13): 8 AI-Native
+items (U1-U8) split across 10 blocks, 2 backlog gaps found by this
+slice's own S11-S21 audit (Z1-Z2), a registry sweep, and a final block.
+
+---
+
+## Per-block build command
+
+Use this for every block, swap `0` for block number:
+
+```
+Read docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md and
+docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-plan.md, then build
+Block 0 of the S22 plan. Update the PROGRESS table and check off that
+block's tasks when done, run composer test before marking it complete, then
+stop and report before starting the next block.
+```
+
+---
+
+## PROGRESS — read this first, update it last
+
+| Block | What | Status |
+|---|---|---|
+| B0 | U1 — Auto lecture notes: transcript → structured PDF, `LessonPdfNote` model | not started |
+| B1 | U2 — Auto chapters/timestamps: player markers from `concepts`+`start_s` | not started |
+| B2 | U6 — Auto quiz right after every live class (reuses `fromSeedQuestions()`) | not started |
+| B3 | U3 pt.1 — DPP schema + `DailyPracticeSetGenerator` aggregation service | not started |
+| B4 | U3 pt.2 — DPP student-facing page + generation trigger | not started |
+| B5 | U4 — Ask-at-timestamp: `DoubtChatService` gains optional `$atSecond` scoping | not started |
+| B6 | U5 — Auto formula sheet / revision cards per chapter | not started |
+| B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | not started |
+| B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | not started |
+| B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | not started |
+| B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | not started |
+| B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | not started |
+| B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | not started |
+| B13 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
+
+**Test suite baseline:** 1883+/1886+ passing at slice start per S21's own
+final count (1 pre-existing, unrelated `CourseSlugUniquenessTest` failure
+carried since S1/S2, out of scope here same as every prior slice; a
+rotating pair of test-order flakes among 3 known files may also appear —
+re-run in isolation before treating any of the 3 as a regression, same
+posture S21's own blocks established).
+
+---
+
+## Block detail (starting checklist — expand into a build narrative as each block actually lands, same as every prior plan file)
+
+### B0 — U1: auto lecture notes
+
+- [ ] `lesson_notes` migration + `LessonPdfNote` model (AI), registered in
+      `TenantModelRegistry`. Named to avoid the existing `LessonNote`
+      (S13, student-authored) collision — confirm this naming still holds
+      before writing code.
+- [ ] `LessonPdfNoteGenerator` — reads `LessonArtifact::latestReadyFor()`'s
+      own `transcript`, one AI call to structure it into notes, renders to
+      PDF via the same PDF-generation path `CertificateService`/gradebook
+      exports already use, writes through `Storage::disk(...)`.
+- [ ] Tests: generates from a real transcript, "still processing" state
+      when no ready artifact exists (mirrors `DoubtChatService`'s own
+      posture), regenerating overwrites the same row.
+
+### B1 — U2: auto chapters/timestamps
+
+- [ ] No new table — reads `LessonArtifact.concepts` +
+      `LessonArtifactChunk.start_s`/`.end_s` directly. Confirm exact
+      concepts→chunk-index mapping shape before this block starts (read
+      `ExtractLessonConcepts`, S3, to see how `concepts` cross-references
+      chunk indexes).
+- [ ] Player-facing chapter markers (jump-to-timestamp list) on the
+      existing lesson watch view.
+- [ ] Tests: markers match `concepts`/`start_s` exactly for a real
+      artifact, empty list (not an error) when no concepts extracted yet.
+
+### B2 — U6: auto quiz after every live class
+
+- [ ] `GenerateQuizFromLiveClass` listener on the *existing*
+      `LessonArtifactReady` event (S3) — additive to that event's current
+      listener list, not a new trigger. Confirm the event only fires for
+      a `live_session`-type lesson's own ingestion before wiring this
+      (it may fire for any lesson type; if so, guard on lesson type here).
+- [ ] Calls `QuestionGenerator::fromSeedQuestions()` directly, creates a
+      real `Quiz` attached to the lesson, same shape a manually-created
+      quiz already takes.
+- [ ] Tests: a live-class lesson's ingestion creates a quiz with the
+      right questions, a non-live-session lesson's ingestion does not.
+
+### B3 — U3 pt.1: DPP schema + aggregation
+
+- [ ] `daily_practice_sets` migration (`batch_id`, `practice_date` unique
+      per batch, `question_ids` json) + model (Assessments), registered
+      in `TenantModelRegistry`.
+- [ ] `DailyPracticeSetGenerator` — for a given batch + date, walks every
+      lesson taught in that batch up to `practice_date` (confirm exact
+      "taught" definition — a `BatchSession`'s own `starts_at` past, or a
+      lesson's own release date — before writing the query), calls
+      `QuestionGenerator::fromSeedQuestions()` per lesson, aggregates into
+      one set.
+- [ ] Tests: correct question count/lesson coverage across a multi-lesson
+      batch, respects the `practice_date` cutoff (a lesson taught after
+      the cutoff never contributes), idempotent re-run for the same date.
+
+### B4 — U3 pt.2: DPP UI + trigger
+
+- [ ] Student-facing daily practice page (list today's set, attempt via
+      the existing `Quiz`/attempt flow if DPP questions are wrapped in a
+      `Quiz`, or a lighter standalone view — confirm exact UI shape
+      before this block starts).
+- [ ] Daily generation trigger — confirm scheduled sweep vs on-demand
+      generation at first student visit before building (a sweep matches
+      this app's own existing `Schedule::job()` posture; on-demand avoids
+      generating sets nobody opens).
+- [ ] Tests: a student sees today's set, generation is idempotent if
+      triggered twice.
+
+### B5 — U4: ask-at-timestamp
+
+- [ ] `DoubtChatService::ask()` gains an optional `?int $atSecond = null`
+      parameter — when given, retrieval scopes to chunks near that
+      timestamp before falling back to the existing whole-lesson search;
+      `null` stays byte-identical to today's behavior.
+- [ ] `DoubtChat` Livewire component: an optional "ask about this moment"
+      entry point from the player's current playhead position.
+- [ ] Tests: a timestamped question retrieves the nearby chunk over a
+      distant one from the same lesson, an omitted timestamp behaves
+      exactly as before this block (regression-proof the existing
+      `DoubtChatTest` suite passes unchanged).
+
+### B6 — U5: auto formula sheet / revision cards
+
+- [ ] No new table — reads `LessonArtifact.concepts` directly (confirm
+      concepts already carry enough structure — formula text, a
+      definition — to render a card; if not, note the gap rather than
+      silently expanding `ExtractLessonConcepts`'s own S3 contract).
+- [ ] Per-chapter (course-section-level) aggregation + render (PDF or
+      in-app card view — confirm which before building).
+- [ ] Tests: cards render from real concepts, empty state when none
+      extracted.
+
+### B7 — U7 pt.1: audio-only mode, extraction
+
+- [ ] `lesson_audio_tracks` migration + model (Content), registered in
+      `TenantModelRegistry`.
+- [ ] `AudioExtractionProvider` interface (`app/Integrations/`) +
+      `FakeAudioExtractionDriver`, same Fake-first shape
+      `AiProvider`/`VideoProvider` already established. No real driver
+      bound this block — confirmed deliberate per design doc §2.4.
+- [ ] Tests: extraction job creates a `ready` track against the fake
+      driver, failure state handled same as `LiveRecording`'s own
+      `failed` status shape.
+
+### B8 — U7 pt.2: audio-only player UI
+
+- [ ] Player toggle to switch to the extracted audio track when
+      `lesson_audio_tracks` has a `ready` row for the current lesson.
+- [ ] Confirm bandwidth-metering integration — an audio-only stream
+      should record against `BandwidthUsageDaily` at its own (much
+      lower) byte count, not the video byte count, same metering
+      chokepoint `LessonAccess::assertWithinBandwidthQuota()` already is.
+- [ ] Tests: toggle only appears when a ready track exists, bandwidth
+      recorded at the audio file's own size.
+
+### B9 — U8: teacher lesson-plan assistant
+
+- [ ] `LessonPlanAssistant` service, sibling to `CourseOutlineGenerator`
+      — same `AiProvider::chat()` + structured-response shape, prompt
+      built from the *preceding* lesson's own `LessonArtifact.syllabus_map`
+      instead of a blank topic+level.
+- [ ] Teach-panel entry point (a new lesson's create/edit flow, or a
+      standalone action — confirm exact UI shape before building).
+- [ ] Tests: draft reflects the real syllabus_map content, "nothing to
+      draft from" state when no preceding lesson has one yet.
+
+### B10 — Z1: subscription renewal scheduled trigger
+
+- [ ] `RenewStudentSubscriptions` job — same unscoped-CurrentTenant sweep
+      shape `FlagOverdueInvoices`/`SuspendOverdueTenantSubscriptions`
+      already use, scheduled daily in `bootstrap/app.php`'s
+      `withSchedule()`. Calls the *existing*
+      `StudentSubscriptionService::renew()` (S20) — confirm that method's
+      exact signature/behavior before wiring (it was written but never
+      scheduled; re-verify it still does the right thing under a real
+      sweep call, not just the unit test that exercises it directly).
+- [ ] Tests: a subscription past `current_period_end` renews on sweep
+      run, one not yet due is untouched, sweep is idempotent for an
+      already-renewed row.
+
+### B11 — Z2: affiliate commission auto-confirmation
+
+- [ ] `ConfirmCommissionOnPaymentCaptured` listener on the *existing*
+      `PaymentCaptured` event, calling `AffiliateAttributionService`'s
+      existing confirmation step. Confirm the event never fires for a
+      program/membership-linked payment (per `PaymentReconciler::capture()`'s
+      own branching, design doc §4 decision 8) before assuming no guard
+      is needed.
+- [ ] Tests: a captured payment with a pending referral confirms its
+      commission automatically, a payment with no referral is a no-op,
+      a program/membership-linked payment never reaches this listener.
+
+### B12 — `TenantModelRegistry` sweep
+
+- [ ] Reverse sweep (same anchored-grep method every prior slice's own
+      final-stretch block used): grep every `app/Domains/*/Models/*.php`
+      for a real `use BelongsToTenant` declaration, diff against
+      `TenantModelRegistry::MODELS`, confirm zero gaps either direction.
+      All 3 new S22 models (`LessonPdfNote`, `DailyPracticeSet`,
+      `LessonAudioTrack`) confirmed present with working
+      `seedAttributes()`/`updateAttributes()` entries.
+
+### B13 — Full test coverage, review pass
+
+- [ ] Lifecycle E2E (design doc §5): live class ends → ingestion
+      completes → auto-quiz exists and that day's DPP includes its
+      questions; a student asks a doubt at a specific timestamp and gets
+      an answer grounded in that timestamp's own chunk; a teacher opens
+      the lesson-plan assistant and gets a draft grounded in the real
+      `syllabus_map`; Z1/Z2 both verified end to end (a due subscription
+      renews, a captured payment confirms its commission).
+- [ ] Dispatch a review pass over the whole slice's diff, same discipline
+      every prior slice's final block established (S21 B15's own 2-angle
+      background-agent pattern is the proven approach — reuse it).
+- [ ] Update `HANDOVER.md` (S22 complete entry), `docs/PROJECT-STATUS.md`
+      (new S22 section), `docs/ROADMAP.md` (S22 row → Done, shipped-count
+      21→22).

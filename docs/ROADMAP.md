@@ -15,7 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 21 (S1–S21) |
-| **Proposed, not yet scoped** | 5 (S22–S26) |
+| **Designed, not built** | 1 (S22) |
+| **Proposed, not yet scoped** | 4 (S23–S26) |
 
 **Phase completion:**
 
@@ -58,17 +59,28 @@ Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-plat
 
 ---
 
-## Full roadmap — S22 onward (proposed)
+## Designed, not built — S22
+
+| Slice | Scope | Size | Designed | Status |
+|---|---|---|---|---|
+| S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, auto quiz after every live class, Daily Practice Problems, ask-at-timestamp, auto formula sheets, audio-only revision mode, teacher lesson-plan assistant. Real scope is 8 items (U1-U8), not the roadmap row's own 5-clause headline (U6/U7/U8 are real, separate FEATURES.md rows the headline folded into other clauses) — plus 2 backlog gaps (Z1 subscription renewal never scheduled, Z2 affiliate commission never auto-confirmed) found by this slice's own audit of every S11-S21 "deferred as fast-follow" note, neither previously picked up by a later slice | 14 blocks | Aug 29 | 📝 Designed, build not started |
+
+Full design/plan docs: `docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`,
+`...-plan.md` — the plan file's own PROGRESS table will be the live source
+of truth once building starts, same as every prior slice.
+
+---
+
+## Full roadmap — S23 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S21 were each shaped only once they
+slice's turn comes, the same way S10-S22 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, Daily Practice Problems, ask-at-timestamp, auto formula sheets | 8 | U1-U8 |
 | S23 | Coaching-Market Differentiators — confusion-signal alerting, syllabus tracker, PYQ bank, scholarship tests, rank cards, backlog/catch-up mode | 10 | U9-U18 |
 | S24 | WhatsApp-Native AI & Ops — WhatsApp doubt bot, voice-note doubts, photo doubt over WhatsApp, auto-scheduler, fee analytics, peer comparison | 7 | U19-U25 |
 | S25 | Mobile App: Core Shell — Capacitor shell, screen-record block, per-institute branding, offline downloads, camera/voice doubts, push | 6 | W1-W6 |
