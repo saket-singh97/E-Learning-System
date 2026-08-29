@@ -60,6 +60,23 @@ model registry rule." Five review rounds across S1-S3 have gone looking for
 cross-tenant leaks; two were found and fixed (both in the first S1 round),
 none since.
 
+## Stateless readiness (V9)
+
+**No request path may write to local disk outside `Storage::disk(...)`.**
+Horizontal scaling (a second app server behind a load balancer) is the
+reason: a file written straight to the filesystem on one server is
+invisible to a request the balancer routes to a different server. Every
+export, import, PDF, certificate, and branding asset in this app already
+goes through the `Storage` facade — `Storage::disk('local')` today, but the
+disk is what changes when a second server actually exists (to S3 or
+equivalent shared storage), not every call site. A CSV builder assembling
+content in memory before calling `Storage::disk(...)->put(...)` should use
+`fopen('php://temp', 'r+')`, never a real path. Audited clean, zero
+violations found, S21 B13 (`DECISIONS.md` 2026-08-29) — keep it that way:
+a raw `file_put_contents`/`fopen($realPath)`/`mkdir` anywhere under
+`app/Domains/` or `app/Http/` is a regression against this constraint, not
+a style nit.
+
 ## Roadmap position
 
 Eight sub-projects, S1-S8, one per fortnight, each ending in a demo.

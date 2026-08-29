@@ -40,7 +40,7 @@ stop and report before starting the next block.
 | B10 | V14 pt.1 — course/category CSV import (dry-run + per-row error report) | ✅ done |
 | B11 | V14 pt.2 — enrolment CSV import | ✅ done |
 | B12 | V14 pt.3 — payment-history CSV import (historical backfill, no live gateway calls) | ✅ done |
-| B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | not started |
+| B13 | V9 — stateless-readiness audit + `ARCHITECTURE.md`/`DECISIONS.md` update | ✅ done |
 | B14 | `TenantModelRegistry` sweep — all 7 new `BelongsToTenant` models confirmed registered | not started |
 | B15 | Full test coverage, lifecycle E2E, review pass, `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | not started |
 
@@ -545,17 +545,42 @@ unrelated to this block's diff (`Fees` domain + 1 exception + 1 controller
 (`CourseSlugUniquenessTest`) + 2 already-confirmed test-order flakes
 (`DownloadCompletionExportControllerTest`, `BackupConfigurationTest`).
 
-### B13 — V9: stateless-readiness audit
+### B13 — V9: stateless-readiness audit — done 2026-08-29
 
-- [ ] Grep every `app/Domains/**` and `app/Http/**` for a local
+- [x] Grep every `app/Domains/**` and `app/Http/**` for a local
       filesystem write outside `Storage::disk(...)` (design doc §4
       decision 8) — anchored grep, not a bare substring match, same
       discipline the registry sweep already uses.
-- [ ] Fix any real hit found; if none, document that explicitly (don't
+- [x] Fix any real hit found; if none, document that explicitly (don't
       invent a fix for a problem that doesn't exist).
-- [ ] Update `ARCHITECTURE.md`/`DECISIONS.md` with the "nothing lives on
+- [x] Update `ARCHITECTURE.md`/`DECISIONS.md` with the "nothing lives on
       local disk" constraint as a stated, load-bearing rule for anyone
       adding a future feature.
+
+**Audit result: clean, zero violations, no code changed.** Grepped for
+`file_put_contents`, `fopen(` against a real path, `mkdir`, `copy`/
+`rename`/`unlink`, and a direct `Illuminate\Filesystem\Filesystem` or
+`League\Flysystem` use across `app/Domains/**` and `app/Http/**`. Every
+`fopen(` hit (11 files — every CSV export/import job in the app, including
+S21's own B10/B11/B12 importers) is `fopen('php://temp', 'r+')`, an
+in-memory stream, never a real file. Cross-checked with `Storage::disk(`
+usage: 97 call sites across 53 files — every export, import, PDF,
+certificate, and branding operation in the app already routes through the
+facade. No raw filesystem write bypassing it anywhere.
+Documented in `DECISIONS.md` (2026-08-29 entry, full audit method +
+result) and a new "Stateless readiness (V9)" section in `ARCHITECTURE.md`
+stating the constraint as load-bearing for future features: no request
+path may write to local disk outside `Storage::disk(...)`, since a second
+app server behind a load balancer can't see a file another server wrote
+straight to its own filesystem.
+No tests added — nothing here has behavior to test, only a documented
+constraint and a verified-clean state. Full suite run per this block's own
+"run composer test before marking complete": 1878 tests, 1875 passed (same
+count as B12 — no code touched). 3 failures, all pre-existing and
+unrelated (this block's diff is `ARCHITECTURE.md`/`DECISIONS.md` only) —
+the 1 baseline (`CourseSlugUniquenessTest`) + 2 already-confirmed
+test-order flakes (`DownloadCompletionExportControllerTest`,
+`BackupConfigurationTest`).
 
 ### B14 — `TenantModelRegistry` sweep
 

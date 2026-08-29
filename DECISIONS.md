@@ -15,6 +15,28 @@ Reversible: yes/no — what undoing it would cost.
 
 ## Log
 
+### 2026-08-29 — Stateless-readiness audit (S21 B13, V9): clean, no fixes needed
+Why: horizontal scaling (a second app server) is a one-way door the moment
+some request path writes a file the *next* request — on a different
+server — needs to read back. Audited every `app/Domains/**` and
+`app/Http/**` file for a raw filesystem write bypassing the `Storage`
+facade (`file_put_contents`, `fopen()` against a real path, `mkdir`,
+`copy`/`rename`/`unlink`, a direct `Illuminate\Filesystem\Filesystem` or
+`League\Flysystem` use) — anchored grep, not a bare substring match, same
+discipline `TenantModelRegistry`'s own sweep already uses. Found zero: every
+one of the app's 97 `Storage::disk(...)` call sites (53 files — every
+export/import/PDF/certificate/branding/lesson operation) already routes
+through the facade; the only raw `fopen()` calls anywhere are
+`fopen('php://temp', 'r+')` — an in-memory stream every CSV
+builder in this app already uses to assemble content before handing it to
+`Storage::disk('local')->put(...)`, never a real file. No code changed by
+this block — inventing a fix for a problem that doesn't exist would be
+worse than doing nothing. Recorded as a load-bearing constraint in
+`ARCHITECTURE.md` for anyone adding a future feature, not just this
+finding.
+Reversible: n/a — this is a verified state, not a code change. Constraint
+in `ARCHITECTURE.md` reflects it.
+
 ### 2026-08-10 — Embedding model: `text-embedding-3-small`, 1536 dimensions
 Why: the vector column's dimension is a one-way door once the first lesson
 is ingested, so it couldn't stay open through S3. Delegated to the builder
