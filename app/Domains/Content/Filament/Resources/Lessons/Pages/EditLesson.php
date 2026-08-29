@@ -2,11 +2,14 @@
 
 namespace App\Domains\Content\Filament\Resources\Lessons\Pages;
 
+use App\Domains\AI\Filament\Resources\CourseOutlineDrafts\CourseOutlineDraftResource;
 use App\Domains\AI\Models\LessonArtifact;
+use App\Domains\AI\Services\LessonPlanAssistant;
 use App\Domains\Content\Events\LessonIngestionRetryRequested;
 use App\Domains\Content\Filament\Resources\Lessons\LessonResource;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditLesson extends EditRecord
@@ -37,6 +40,32 @@ class EditLesson extends EditRecord
                 ->requiresConfirmation()
                 ->visible(fn (): bool => LessonArtifact::latestFor($this->record->id)?->status === 'failed')
                 ->action(fn () => event(new LessonIngestionRetryRequested($this->record->id, $this->record->tenant_id))),
+            // U8 (S22 B9) — treats this lesson as "the preceding lesson" and
+            // drafts a plan for whatever comes next in its own syllabus_map,
+            // same header-Action shape ListCourseOutlineDrafts already uses
+            // for CourseOutlineGenerator, reusing the same CourseOutlineDraft
+            // review queue rather than a second one.
+            Action::make('draftNextLessonPlan')
+                ->label('Draft next lesson plan')
+                ->action(function (): void {
+                    $draft = app(LessonPlanAssistant::class)->generateFor($this->record, auth()->user());
+
+                    if ($draft === null) {
+                        Notification::make()
+                            ->title("Nothing to draft from yet — this lesson's syllabus map hasn't been extracted.")
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->title('Lesson plan drafted — review and approve it below.')
+                        ->success()
+                        ->send();
+
+                    $this->redirect(CourseOutlineDraftResource::getUrl('edit', ['record' => $draft]));
+                }),
             DeleteAction::make(),
         ];
     }

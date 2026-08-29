@@ -35,7 +35,7 @@ stop and report before starting the next block.
 | B6 | U5 — Auto formula sheet / revision cards per chapter | ✅ done |
 | B7 | U7 pt.1 — Audio-only mode: `AudioExtractionProvider` interface + Fake driver + `lesson_audio_tracks` | ✅ done |
 | B8 | U7 pt.2 — Audio-only player UI toggle + bandwidth-savings check | ✅ done |
-| B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | not started |
+| B9 | U8 — Teacher lesson-plan assistant (`LessonPlanAssistant`, sibling to `CourseOutlineGenerator`) | ✅ done |
 | B10 | Z1 — `StudentSubscription::renew()` scheduled trigger (S20 gap) | not started |
 | B11 | Z2 — Affiliate commission auto-confirms on `PaymentCaptured` (S20 gap) | not started |
 | B12 | `TenantModelRegistry` sweep — 3 new models confirmed registered | not started |
@@ -230,16 +230,33 @@ posture S21's own blocks established).
       meters at the audio file's own size, a lesson with no ready track
       404s the audio route without recording anything.
 
-### B9 — U8: teacher lesson-plan assistant
+### B9 — U8: teacher lesson-plan assistant ✅
 
-- [ ] `LessonPlanAssistant` service, sibling to `CourseOutlineGenerator`
-      — same `AiProvider::chat()` + structured-response shape, prompt
-      built from the *preceding* lesson's own `LessonArtifact.syllabus_map`
-      instead of a blank topic+level.
-- [ ] Teach-panel entry point (a new lesson's create/edit flow, or a
-      standalone action — confirm exact UI shape before building).
-- [ ] Tests: draft reflects the real syllabus_map content, "nothing to
-      draft from" state when no preceding lesson has one yet.
+- [x] `LessonPlanAssistant` service — same `AiProvider::chat()` +
+      `responseSchema: ['outline']` contract `CourseOutlineGenerator`
+      uses, and **reuses `CourseOutlineDraft` itself** (no new table,
+      per design doc §3.2) rather than a second draft model. Prompt
+      built from the *preceding* lesson's own
+      `LessonArtifact.syllabus_map` instead of a blank topic+level.
+      Returns `null` (not an exception) when nothing's been extracted
+      yet — same placeholder posture `DoubtChatService::ask()` already
+      takes, since the only caller is a Filament action with a
+      notification for either outcome.
+- [x] Teach-panel entry point: `EditLesson`'s own header actions gain
+      "Draft next lesson plan" (same header-`Action` shape
+      `ListCourseOutlineDrafts` already uses for
+      `CourseOutlineGenerator`), redirecting into the *same*
+      `CourseOutlineDraftResource` review queue. **Known scope edge,
+      not fixed here**: approving one of these drafts still runs
+      `CourseOutlineApprovalService`, which creates a *new* `Course`
+      from the outline — correct for U8's sibling, wrong framing for
+      "the next lesson in an existing course." Out of scope for this
+      block (not asked for); a real fast-follow would need its own
+      approval path that inserts into the existing course instead.
+- [x] Tests (`tests/Feature/AI/LessonPlanAssistantTest.php`): draft's AI
+      prompt is grounded in the real `syllabus_map` content, `null` when
+      no ready artifact exists yet, `null` when the only artifact is
+      still processing.
 
 ### B10 — Z1: subscription renewal scheduled trigger
 
