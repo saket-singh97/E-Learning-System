@@ -54,6 +54,7 @@ class Lesson extends Model
         'video_status',
         'scheduled_at',
         'is_free_preview',
+        'is_demo',
         'text_body',
         'embed_url',
         'pdf_disk_path',
@@ -67,6 +68,7 @@ class Lesson extends Model
         return [
             'scheduled_at' => 'datetime',
             'is_free_preview' => 'boolean',
+            'is_demo' => 'boolean',
             'video_duration_seconds' => 'integer',
             'print_disabled' => 'boolean',
         ];

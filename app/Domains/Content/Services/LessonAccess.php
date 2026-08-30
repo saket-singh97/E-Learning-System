@@ -82,6 +82,14 @@ class LessonAccess
             return false;
         }
 
+        // S23 B10 (U13 pt.1, design doc §4 decision — the one new "no
+        // viewer at all" branch) — a demo lesson is visible to a guest even
+        // if its own course is still a draft: the whole point is showing a
+        // prospect real content before the course is fully launched.
+        if ($lesson->is_demo) {
+            return true;
+        }
+
         return $this->isLive($lesson) || $this->isStaff($viewer);
     }
 
@@ -104,6 +112,14 @@ class LessonAccess
     public function canStream(Lesson $lesson, ?User $viewer): bool
     {
         if ($lesson->is_free_preview) {
+            return true;
+        }
+
+        // S23 B10 (U13 pt.1) — same unconditional bypass is_free_preview
+        // gets, independent of enrolment, tenant, or even having an
+        // account at all: a prospect watching a demo class is by
+        // definition not enrolled yet.
+        if ($lesson->is_demo) {
             return true;
         }
 

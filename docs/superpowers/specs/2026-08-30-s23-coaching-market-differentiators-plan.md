@@ -37,7 +37,7 @@ then stop and report before starting the next block.
 | B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ✅ done |
 | B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ✅ done |
 | B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ✅ done |
-| B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ⬜ not started |
+| B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ✅ done |
 | B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ⬜ not started |
 | B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ⬜ not started |
 | B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ⬜ not started |
@@ -414,14 +414,30 @@ assertions: flag off (no change even with bad attendance + threshold set),
 threshold unset (exempt), below threshold (blocked), at/above threshold
 (allowed), no attendance rows yet (not blocked).
 
-### B10 — U13 pt.1: demo class access
+### B10 — U13 pt.1: demo class access ✅
 
-- [ ] Migration adds `is_demo` to `lessons`.
-- [ ] `LessonAccess::isVisibleTo()`/`canStream()` grant access to an
+- [x] Migration adds `is_demo` to `lessons`.
+- [x] `LessonAccess::isVisibleTo()`/`canStream()` grant access to an
       unauthenticated viewer when `lesson.is_demo` is true, independent of
       enrolment — the one new "no viewer at all" branch in this class.
-- [ ] Tests: demo lesson streams for a guest; a non-demo lesson on the
+- [x] Tests: demo lesson streams for a guest; a non-demo lesson on the
       same course still requires enrolment.
+
+Migration `2026_08_30_100005_add_is_demo_to_lessons_table.php` adds the
+column (default `false`). `LessonAccess::isVisibleTo()` gains an unconditional
+`is_demo` bypass ahead of the `isLive()`/`isStaff()` check — a demo lesson is
+visible even while its own course is still a draft, the whole point being to
+show prospects real content before a course fully launches.
+`LessonAccess::canStream()` gains the same bypass `is_free_preview` already
+has, kept as its own separate `if` (distinct flag/purpose: `is_demo` also
+feeds B11's conversion tracking, `is_free_preview` never did). Admin
+`LessonsRelationManager` gains a `Toggle::make('is_demo')` next to the
+existing free-preview toggle — without it nothing could actually turn the
+flag on. Tests: 3 new cases added to `LessonAccessGateTest.php` (reusing its
+existing `gateFixture()` helper) — a demo lesson streams for a guest, streams
+for a guest even in a still-draft course, and a sibling non-demo lesson in
+the same course still 403s a guest. 16/16 in that file, full suite
+1978/1981 (3 pre-existing baseline flakes, unrelated).
 
 ### B11 — U13 pt.2: conversion tracking
 

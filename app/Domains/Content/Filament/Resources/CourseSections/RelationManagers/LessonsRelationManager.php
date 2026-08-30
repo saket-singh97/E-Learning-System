@@ -58,6 +58,13 @@ class LessonsRelationManager extends RelationManager
                 ->helperText('Leave blank to make it visible to students immediately.'),
             Toggle::make('is_free_preview')
                 ->label('Free preview'),
+            // S23 B10 (U13 pt.1) — same unconditional-guest-access toggle
+            // shape as is_free_preview above, distinct flag: is_demo also
+            // records a conversion touchpoint (B11) is_free_preview never
+            // did, so the two stay separate columns rather than one dual-
+            // purpose flag.
+            Toggle::make('is_demo')
+                ->label('Demo class'),
         ]);
     }
 

@@ -97,6 +97,35 @@ it('lets a guest open the player page of a free-preview lesson', function () {
     $this->get("http://physics.lms.test/lessons/{$lesson->id}")->assertOk();
 });
 
+// S23 B10 (U13 pt.1) — same unconditional-guest bypass as free-preview
+// above, distinct flag/purpose (a demo lesson also feeds B11's conversion
+// tracking).
+it('lets a guest open the player page of a demo lesson', function () {
+    [, , $lesson] = gateFixture([], ['is_demo' => true]);
+
+    $this->get("http://physics.lms.test/lessons/{$lesson->id}")->assertOk();
+});
+
+it('lets a guest open a demo lesson even when its own course is still a draft', function () {
+    [, , $lesson] = gateFixture(['status' => 'draft'], ['is_demo' => true]);
+
+    $this->get("http://physics.lms.test/lessons/{$lesson->id}")->assertOk();
+});
+
+it('still requires enrolment for a non-demo lesson in the same course as a demo lesson', function () {
+    [, $section, $demoLesson] = gateFixture([], ['is_demo' => true]);
+    $regularLesson = Lesson::create([
+        'course_section_id' => $section->id,
+        'title' => 'Regular Lesson',
+        'type' => 'text',
+        'position' => 1,
+        'text_body' => 'Hello',
+    ]);
+
+    $this->get("http://physics.lms.test/lessons/{$demoLesson->id}")->assertOk();
+    $this->get("http://physics.lms.test/lessons/{$regularLesson->id}")->assertForbidden();
+});
+
 it('lets an instructor open their own draft-course lesson page', function () {
     [$tenant, , $lesson] = gateFixture(['status' => 'draft']);
     $instructor = gateStaff($tenant);
