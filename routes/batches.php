@@ -49,6 +49,14 @@ Route::get('/batches/{batch}/daily-practice', function (Request $request) {
     return view('batches.batch-daily-practice', ['batch' => $batch]);
 })->middleware(['auth'])->name('batch.daily-practice');
 
+// S23 B2 — same "add a small host route" shape as /daily-practice above;
+// no existing student-facing "batch" page to embed CatchUpPlan on either.
+Route::get('/batches/{batch}/catch-up', function (Request $request) {
+    $batch = Batch::findOrFail($request->route('batch'));
+
+    return view('batches.batch-catch-up', ['batch' => $batch]);
+})->middleware(['auth'])->name('batch.catch-up');
+
 // Same double-check posture as /zoom/connect above — role:institute_admin
 // middleware plus the controller's own tenant-scoped lookup.
 Route::get('/student-imports/{importBatch}/error-report', DownloadStudentImportErrorReportController::class)

@@ -29,7 +29,7 @@ then stop and report before starting the next block.
 |---|---|---|
 | B0 | U10 pt.1 — `syllabus_topics` + `lesson_syllabus_topic` schema, Admin mapping UI | ✅ done |
 | B1 | U10 pt.2 — `SyllabusTracker` service (% complete) + student/parent/admin widget | ✅ done |
-| B2 | U16 — `CatchUpPlanService` (deterministic behind-schedule list) + student UI | ⬜ not started |
+| B2 | U16 — `CatchUpPlanService` (deterministic behind-schedule list) + student UI | ✅ done |
 | B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ⬜ not started |
 | B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ⬜ not started |
 | B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ⬜ not started |
@@ -154,16 +154,47 @@ B0's run (`CourseSlugUniquenessTest`, and `DownloadCompletionExportControllerTes
 `CalendarTest`/`BackupConfigurationTest` in Comms/Planner/Support, none
 touching Content/Comms code this block changed).
 
-### B2 — U16: backlog/catch-up mode
+### B2 — U16: backlog/catch-up mode ✅
 
-- [ ] `CatchUpPlanService::planFor(User $student, Batch $batch)` — taught
+- [x] `CatchUpPlanService::planFor(User $student, Batch $batch)` — taught
       lessons (`BatchSession.lesson_id` on/before today, same definition
       as S22 B3's `DailyPracticeSetGenerator`) minus lessons with a
       `LessonCompletion` row for this student, oldest-taught-first.
-- [ ] Student-facing "Catch Up" page/widget listing the plan with direct
+- [x] Student-facing "Catch Up" page/widget listing the plan with direct
       links into each lesson.
-- [ ] Tests: fully caught-up student → empty plan; a lesson taught but not
+- [x] Tests: fully caught-up student → empty plan; a lesson taught but not
       yet released (`LessonAccess::isVisibleTo()` false) is excluded.
+
+Built `CatchUpPlanService` (Content): same "taught" definition
+`DailyPracticeSetGenerator` (S22 B3) established (`BatchSession.lesson_id`
+non-null, `starts_at <= now()`), with `orderBy('starts_at')` added since a
+catch-up list needs order and a practice-question bag doesn't. Reuses
+`LessonCompletion::isComplete()` (no second "done" signal) and
+`LessonAccess::isVisibleTo()` (drip-scheduled/未-released lessons excluded,
+same gate every other lesson-visibility surface goes through, per CLAUDE.md)
+— no new visibility rule invented.
+
+UI: no student-dashboard page exists yet to embed a widget on (`StudentPortal`
+is a bare login shell, `student.dashboard` route/view exists but hosts only
+tenant-wide, non-batch-scoped components) — same "no existing student-facing
+batch page" gap `DailyPracticeBoard` (S22 B4) hit, closed the identical way:
+new `content.catch-up-plan` Livewire component + a small hosting route
+`/batches/{batch}/catch-up` (`routes/batches.php`, `auth` middleware, `Batch`
+resolved via `$request->route()` per CLAUDE.md's domain-route splicing
+gotcha — not a type-hinted parameter), same enrolment gate
+(`Enrolment::where(...)->where('status','active')->exists()`) `DailyPracticeBoard`
+already uses. Lists direct links to `lessons.watch` per lesson; empty plan
+renders "You're all caught up."
+
+12 new tests (`CatchUpPlanServiceTest`: empty-when-caught-up, excludes
+not-yet-released, excludes not-yet-taught, oldest-first ordering;
+`CatchUpPlanTest`: component + hosting-route smoke tests, non-enrolled 404).
+`Content`+`Assessments`+`Batches` domain suites 659/660 (same lone
+pre-existing `CourseSlugUniquenessTest` fail); `CrossTenantTest` 103/103
+(no new tenant model this block).
+
+`composer test`: 1948/1952 — identical 4 pre-existing/unrelated failures as
+B0/B1's runs, none touching this block's code.
 
 ### B3 — U9 pt.1: confusion signal service
 

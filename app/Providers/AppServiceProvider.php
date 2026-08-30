@@ -36,6 +36,7 @@ use App\Domains\Comms\Livewire\SurveyRunner;
 use App\Domains\Growth\Livewire\AffiliateDashboard;
 use App\Domains\Growth\Livewire\CourseInterestForm;
 use App\Domains\Planner\Livewire\Calendar;
+use App\Domains\Content\Livewire\CatchUpPlan;
 use App\Domains\Content\Livewire\CourseReviews;
 use App\Domains\Content\Livewire\LessonNotes;
 use App\Domains\Content\Livewire\LessonQuestions;
@@ -262,6 +263,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('content.lesson-notes', LessonNotes::class);
         Livewire::component('comms.direct-messages', DirectMessages::class);
         Livewire::component('content.course-reviews', CourseReviews::class);
+        Livewire::component('content.catch-up-plan', CatchUpPlan::class);
         // Found missing (S15 B17's own full-suite run): comms.batch-forum
         // (B6) and batches.batch-feedback-form (B7) were never registered
         // either — both silently 500'd on their real host pages, only ever
