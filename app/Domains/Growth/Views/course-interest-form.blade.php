@@ -1,6 +1,10 @@
 <div>
     @if ($submitted)
         <p>Thanks — we'll let you know when this course opens.</p>
+
+        @if ($demoLesson)
+            <button type="button" wire:click="watchDemo">Watch a free demo class</button>
+        @endif
     @else
         <form wire:submit="submit">
             <input type="text" wire:model="name" placeholder="Your name">

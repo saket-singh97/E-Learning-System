@@ -24,12 +24,14 @@ class CourseInterestSignup extends Model
         'email',
         'phone',
         'notified_at',
+        'demo_attended_at',
     ];
 
     protected function casts(): array
     {
         return [
             'notified_at' => 'datetime',
+            'demo_attended_at' => 'datetime',
         ];
     }
 

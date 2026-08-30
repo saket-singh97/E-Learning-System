@@ -38,7 +38,7 @@ then stop and report before starting the next block.
 | B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ✅ done |
 | B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ✅ done |
 | B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ✅ done |
-| B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ⬜ not started |
+| B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ✅ done |
 | B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ⬜ not started |
 | B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ⬜ not started |
 | B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ⬜ not started |
@@ -439,19 +439,39 @@ for a guest even in a still-draft course, and a sibling non-demo lesson in
 the same course still 403s a guest. 16/16 in that file, full suite
 1978/1981 (3 pre-existing baseline flakes, unrelated).
 
-### B11 — U13 pt.2: conversion tracking
+### B11 — U13 pt.2: conversion tracking ✅
 
-- [ ] Migration adds `demo_attended_at` to `course_interest_signups`
+- [x] Migration adds `demo_attended_at` to `course_interest_signups`
       (extends existing S20 model, no new table — design §3.2).
-- [ ] Demo lesson watch records `demo_attended_at` on a matching
+- [x] Demo lesson watch records `demo_attended_at` on a matching
       `CourseInterestSignup` (by email, captured at the same public
       interest-capture form, S20 B12).
-- [ ] `DemoConversionService::hasConverted(CourseInterestSignup $signup)` —
+- [x] `DemoConversionService::hasConverted(CourseInterestSignup $signup)` —
       read-only match against `Enrolment` via the enrolled user's email,
       same tenant/course (design §4 decision 3, not an event listener).
-- [ ] Tests: conversion true only when a real `Enrolment` exists for the
+- [x] Tests: conversion true only when a real `Enrolment` exists for the
       matching email+course; a same-email signup for a different course
       does not falsely match.
+
+Migration `2026_08_30_100006_add_demo_attended_at_to_course_interest_signups_table.php`
+adds the column. The recording itself lives inside `CourseInterestForm`
+(not a separate anonymous route): the component already knows the
+prospect's own email from its own just-completed signup, so a new
+`watchDemo()` action stamps `demo_attended_at` on the matching signup row
+and redirects straight to the existing `lessons.watch` page (B10's fully
+working, type-aware render — not duplicated here) — no identity-carrying
+query param or session needed across an unauthenticated page boundary. The
+component's `render()` exposes a `demoLesson` (found via the course's
+sections → an `is_demo` lesson) so the blade view only shows a "Watch a
+free demo class" button when one actually exists.
+`App\Domains\Growth\Services\DemoConversionService::hasConverted()` matches
+`Enrolment` via the enrolled user's own email, scoped to `tenant_id` +
+the signup's `course_id` — a query, not an event (design §4 decision 3).
+Tests: 2 new cases in `CourseInterestPageTest.php` (records attendance +
+redirects; no button when no demo lesson exists) and a new
+`DemoConversionServiceTest.php` — converted only with a real matching
+enrolment, and a same-email signup for a different course never falsely
+matches. Full Growth suite 47/47.
 
 ### B12 — U12 pt.1: scholarship test schema + registration
 
