@@ -6,6 +6,7 @@ use App\Domains\Content\Filament\Resources\Courses\Pages\CreateCourse;
 use App\Domains\Content\Filament\Resources\Courses\Pages\EditCourse;
 use App\Domains\Content\Filament\Resources\Courses\Pages\ListCourses;
 use App\Domains\Content\Filament\Resources\Courses\RelationManagers\SectionsRelationManager;
+use App\Domains\Content\Filament\Resources\Courses\RelationManagers\SyllabusTopicsRelationManager;
 use App\Domains\Content\Models\Category;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\Tag;
@@ -184,6 +185,7 @@ class CourseResource extends Resource
     {
         return [
             SectionsRelationManager::class,
+            SyllabusTopicsRelationManager::class,
         ];
     }
 

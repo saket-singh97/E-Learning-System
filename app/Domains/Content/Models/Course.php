@@ -42,6 +42,11 @@ class Course extends Model
         return $this->hasMany(CourseSection::class)->orderBy('position');
     }
 
+    public function syllabusTopics(): HasMany
+    {
+        return $this->hasMany(SyllabusTopic::class)->orderBy('sequence');
+    }
+
     public function categories(): BelongsToMany
     {
         return $this->belongsToMany(Category::class, 'course_category');

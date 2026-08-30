@@ -9,6 +9,7 @@ use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Models\LessonPdfNote;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
+use App\Domains\Content\Models\SyllabusTopic;
 use App\Domains\Api\Models\ApiKey;
 use App\Domains\Api\Models\WebhookDelivery;
 use App\Domains\Api\Models\WebhookEndpoint;
@@ -217,6 +218,7 @@ class TenantModelRegistry
         CourseImportBatch::class,
         EnrolmentImportBatch::class,
         PaymentHistoryImportBatch::class,
+        SyllabusTopic::class,
     ];
 
     /**
@@ -1334,6 +1336,12 @@ class TenantModelRegistry
                 'event_type' => 'row.event',
                 'payload' => ['row' => true],
             ],
+            SyllabusTopic::class => [
+                'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                'board_or_exam' => 'CBSE Class 10',
+                'title' => 'Row',
+                'sequence' => 0,
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1453,6 +1461,7 @@ class TenantModelRegistry
             PaymentHistoryImportBatch::class => ['status' => 'failed'],
             WebhookEndpoint::class => ['status' => 'disabled'],
             WebhookDelivery::class => ['status' => 'failed'],
+            SyllabusTopic::class => ['title' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }
