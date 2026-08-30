@@ -15,6 +15,17 @@
         <img src="{{ $logo }}" alt="{{ config('app.name') }}">
     @endif
 
+    @if ($translationCounterpart)
+        <p>
+            Available in:
+            {{ ['en' => 'English', 'hi' => 'Hindi'][$course->language] ?? $course->language }}
+            /
+            <a href="{{ route('courses.show', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'course' => $translationCounterpart->slug]) }}">
+                {{ ['en' => 'English', 'hi' => 'Hindi'][$translationCounterpart->language] ?? $translationCounterpart->language }}
+            </a>
+        </p>
+    @endif
+
     <livewire:syllabus-tree :course="$course" />
 
     {{-- S17 B8 — course-scoped, so the syllabus page (already gated on

@@ -35,7 +35,7 @@ then stop and report before starting the next block.
 | B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ✅ done |
 | B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ✅ done |
 | B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ✅ done |
-| B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ⬜ not started |
+| B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ✅ done |
 | B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ⬜ not started |
 | B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ⬜ not started |
 | B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ⬜ not started |
@@ -362,13 +362,28 @@ self-reference check. Tests in
 assertions: cross-tenant id rejected, self-reference rejected, real
 same-tenant link accepted.
 
-### B8 — U17 pt.2: catalog filter + switcher
+### B8 — U17 pt.2: catalog filter + switcher ✅
 
-- [ ] `CourseCatalog` (S13) gains a `language` filter.
-- [ ] Course detail page shows an "Available in: Hindi / English" switcher
+- [x] `CourseCatalog` (S13) gains a `language` filter.
+- [x] Course detail page shows an "Available in: Hindi / English" switcher
       when `translation_of_course_id` is set on either side.
-- [ ] Tests: switcher resolves both directions (course A → B and B → A);
+- [x] Tests: switcher resolves both directions (course A → B and B → A);
       absent when no link exists.
+
+`Course` gains `translationOf()` (belongsTo, the parent) and `translations()`
+(hasMany, the reverse), plus a `translationCounterpart()` helper resolving
+whichever direction the link was actually set — only two languages exist
+this slice, so a course has at most one live counterpart in practice.
+`CourseCatalog` gets a `language` public property, filtered with the same
+`->when()` shape as `categoryId`/`tagId`. `ShowSyllabusController` resolves
+`translationCounterpart()` and re-checks `LessonAccess::isCourseVisibleTo()`
+on it before handing it to the view — a draft counterpart stays unlinked for
+a guest, same gate the page's own course already passes through (S5 B8's
+precedent, applied one level sideways instead of down to a lesson).
+Tests: `CourseCatalogTest::filters by language` (1 test), and 4 new tests in
+`ShowSyllabusControllerTest.php` — switcher resolves original→translation,
+translation→original, absent with no link, and a draft counterpart hidden
+from a guest. Full suite: 17/17 new/changed assertions green.
 
 ### B9 — U18: attendance-linked access
 

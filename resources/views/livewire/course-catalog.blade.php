@@ -30,6 +30,16 @@
                 @endforeach
             </select>
         </label>
+
+        <label>
+            Language
+            <select wire:model.live="language">
+                <option value="">All languages</option>
+                @foreach ($languages as $languageCode)
+                    <option value="{{ $languageCode }}">{{ ['en' => 'English', 'hi' => 'Hindi'][$languageCode] ?? $languageCode }}</option>
+                @endforeach
+            </select>
+        </label>
     </form>
 
     <ul>

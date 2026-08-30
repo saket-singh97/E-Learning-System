@@ -59,6 +59,16 @@ it('filters by tag', function () {
         ->assertDontSee($nonMatching->title);
 });
 
+it('filters by language', function () {
+    $english = Course::create(['title' => 'Physics 101', 'slug' => 'physics-101', 'status' => 'published', 'language' => 'en']);
+    $hindi = Course::create(['title' => 'Rasayan Vigyan', 'slug' => 'rasayan-vigyan', 'status' => 'published', 'language' => 'hi']);
+
+    Livewire::test(CourseCatalog::class)
+        ->set('language', 'hi')
+        ->assertSee($hindi->title)
+        ->assertDontSee($english->title);
+});
+
 it('combines category and tag filters with AND', function () {
     $category = Category::create(['name' => 'Science', 'slug' => 'science']);
     $tag = Tag::create(['name' => 'Beginner', 'slug' => 'beginner']);

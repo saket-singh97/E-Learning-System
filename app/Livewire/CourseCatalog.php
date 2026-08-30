@@ -26,6 +26,8 @@ class CourseCatalog extends Component
 
     public ?int $tagId = null;
 
+    public ?string $language = null;
+
     public string $search = '';
 
     /**
@@ -51,6 +53,7 @@ class CourseCatalog extends Component
                 'tags',
                 fn ($query) => $query->whereKey($tagId),
             ))
+            ->when($this->language, fn ($query, $language) => $query->where('language', $language))
             // Eloquent orWhere/like, not whereRaw/DB::raw — SecurityBaselineTest
             // enforces the no-raw-SQL rule repo-wide (design doc §2.3).
             ->when($this->search, fn ($query, $search) => $query->where(
@@ -86,6 +89,7 @@ class CourseCatalog extends Component
             'courses' => $this->courses(),
             'categories' => Category::query()->orderBy('name')->get(),
             'tags' => Tag::query()->orderBy('name')->get(),
+            'languages' => Course::LANGUAGES,
             'wishlistedCourseIds' => $viewer
                 ? Wishlist::where('user_id', $viewer->id)->pluck('course_id')->all()
                 : [],

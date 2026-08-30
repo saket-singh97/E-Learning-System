@@ -5,6 +5,7 @@ namespace App\Domains\Content\Models;
 use App\Support\Security\SanitizesHtml;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -70,5 +71,33 @@ class Course extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(CourseReview::class);
+    }
+
+    /**
+     * S23 B8 (U17 pt.2) — the course this one is a translated track of, if
+     * any. Two independently-authored `Course` rows, not shared content
+     * (design doc §4 decision 5).
+     */
+    public function translationOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'translation_of_course_id');
+    }
+
+    /** Reverse direction — courses that name this one as their `translation_of_course_id`. */
+    public function translations(): HasMany
+    {
+        return $this->hasMany(self::class, 'translation_of_course_id');
+    }
+
+    /**
+     * The one other course this one's language switcher points to, in
+     * whichever direction the link was set (design doc §4 decision 5: "a
+     * course detail page shows a switcher when translation_of_course_id is
+     * set either direction"). Only two languages exist in this slice, so a
+     * course has at most one live counterpart in practice.
+     */
+    public function translationCounterpart(): ?self
+    {
+        return $this->translationOf ?? $this->translations()->first();
     }
 }

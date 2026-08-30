@@ -25,9 +25,20 @@ class ShowSyllabusController extends Controller
         // already correctly gated (found in the S5 B8 review).
         abort_unless($access->isCourseVisibleTo($course, $request->user()), 404);
 
+        // Same "check course visibility before rendering its title" rule
+        // isCourseVisibleTo() itself exists to enforce (S5 B8 review) — a
+        // draft translation counterpart stays unlinked for anyone who isn't
+        // staff, same as this page's own gate above.
+        $translationCounterpart = $course->translationCounterpart();
+
+        if ($translationCounterpart !== null && ! $access->isCourseVisibleTo($translationCounterpart, $request->user())) {
+            $translationCounterpart = null;
+        }
+
         return view('content.syllabus', [
             'course' => $course,
             'recommendations' => $recommendations->forCourse($course, $request->user()),
+            'translationCounterpart' => $translationCounterpart,
         ]);
     }
 }
