@@ -32,7 +32,7 @@ then stop and report before starting the next block.
 | B2 | U16 — `CatchUpPlanService` (deterministic behind-schedule list) + student UI | ✅ done |
 | B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ✅ done |
 | B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ✅ done |
-| B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ⬜ not started |
+| B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ✅ done |
 | B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ⬜ not started |
 | B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ⬜ not started |
 | B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ⬜ not started |
@@ -278,14 +278,37 @@ doesn't error. `Batches`+`Analytics` domain suites 310/310;
 failures from B0-B2's runs (B3's extra sibling export-controller flake
 didn't reproduce this run), none touching this block's code.
 
-### B5 — U11 pt.1: PYQ schema + tagging
+### B5 — U11 pt.1: PYQ schema + tagging ✅
 
-- [ ] Migration adds `is_pyq`/`pyq_exam_name`/`pyq_exam_year` to
+- [x] Migration adds `is_pyq`/`pyq_exam_name`/`pyq_exam_year` to
       `questions` (no new table — design §3.2).
-- [ ] Admin `QuestionResource` (or wherever questions are authored) gains
+- [x] Admin `QuestionResource` (or wherever questions are authored) gains
       the 3 fields, visible only when `is_pyq` is toggled on.
-- [ ] Tests: existing question create/update unaffected when fields are
+- [x] Tests: existing question create/update unaffected when fields are
       omitted (all nullable/defaulted).
+
+3 real columns on `questions` (`is_pyq` boolean default false,
+`pyq_exam_name`/`pyq_exam_year` nullable) — unlike the form's per-type
+virtual `correct_answer_*` fields, these are plain `$fillable` columns, so
+`NormalizesQuestionFormData` needed no changes at all (it only
+composes/decomposes the polymorphic `correct_answer` shape, never touches
+these). `QuestionResource`'s form (Teach panel, where questions are
+authored) gained a `Toggle::make('is_pyq')` plus `pyq_exam_name`/
+`pyq_exam_year` `TextInput`s, `->visible()`+`->required()` gated on
+`$get('is_pyq')` — same conditional-field idiom every per-type
+`correct_answer_*` field on this same form already uses.
+
+4 new tests appended to the existing `QuestionResourceTest.php`: PYQ
+fields omitted → `is_pyq` false, both nullable columns null, no crash
+(the checklist's own edge case); tagging on with exam name/year saves
+correctly; toggling `is_pyq` on without the two now-required fields
+produces form errors. All 15 tests in that file (12 pre-existing + 3 new)
+pass. `Assessments` domain suite 159/159; `CrossTenantTest` 103/103
+(`Question` was already a registered tenant model, no registry change
+needed).
+
+`composer test`: 1956/1960 — the identical 4 pre-existing/unrelated
+failures from every prior block's run, none touching this block's code.
 
 ### B6 — U11 pt.2: PYQ browse page
 

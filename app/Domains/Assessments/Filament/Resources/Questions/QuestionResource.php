@@ -20,6 +20,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -143,6 +144,24 @@ class QuestionResource extends Resource
                 ->native(false),
             TextInput::make('concept')
                 ->maxLength(255),
+            // U11 — previous-year-question tagging (design doc §3.2): no
+            // new table, 3 columns on the existing question, exam
+            // name/year only meaningful once is_pyq is on.
+            Toggle::make('is_pyq')
+                ->label('Previous-year question')
+                ->live(),
+            TextInput::make('pyq_exam_name')
+                ->label('Exam name')
+                ->maxLength(255)
+                ->visible(fn (Get $get): bool => (bool) $get('is_pyq'))
+                ->required(fn (Get $get): bool => (bool) $get('is_pyq')),
+            TextInput::make('pyq_exam_year')
+                ->label('Exam year')
+                ->numeric()
+                ->minValue(1900)
+                ->maxValue(2100)
+                ->visible(fn (Get $get): bool => (bool) $get('is_pyq'))
+                ->required(fn (Get $get): bool => (bool) $get('is_pyq')),
         ]);
     }
 

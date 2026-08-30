@@ -333,3 +333,61 @@ it('edits a draft question without touching its status, and prefills the correct
     expect($question->stem)->toBe('Updated stem')
         ->and($question->status)->toBe('draft');
 });
+
+it('creates a question with the PYQ fields omitted, leaving them false/null', function () {
+    Livewire::test(CreateQuestion::class)
+        ->fillForm([
+            'course_id' => $this->course->id,
+            'type' => 'mcq',
+            'stem' => 'What is 2 + 2?',
+            'options' => ['3', '4', '5'],
+            'correct_answer_mcq' => '4',
+            'difficulty' => 'easy',
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $question = Question::sole();
+
+    expect($question->is_pyq)->toBeFalse()
+        ->and($question->pyq_exam_name)->toBeNull()
+        ->and($question->pyq_exam_year)->toBeNull();
+});
+
+it('tags a question as a previous-year question with exam name and year', function () {
+    Livewire::test(CreateQuestion::class)
+        ->fillForm([
+            'course_id' => $this->course->id,
+            'type' => 'mcq',
+            'stem' => 'What is 2 + 2?',
+            'options' => ['3', '4', '5'],
+            'correct_answer_mcq' => '4',
+            'difficulty' => 'easy',
+            'is_pyq' => true,
+            'pyq_exam_name' => 'JEE Main',
+            'pyq_exam_year' => 2024,
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $question = Question::sole();
+
+    expect($question->is_pyq)->toBeTrue()
+        ->and($question->pyq_exam_name)->toBe('JEE Main')
+        ->and($question->pyq_exam_year)->toBe(2024);
+});
+
+it('requires exam name and year once is_pyq is toggled on', function () {
+    Livewire::test(CreateQuestion::class)
+        ->fillForm([
+            'course_id' => $this->course->id,
+            'type' => 'mcq',
+            'stem' => 'What is 2 + 2?',
+            'options' => ['3', '4', '5'],
+            'correct_answer_mcq' => '4',
+            'difficulty' => 'easy',
+            'is_pyq' => true,
+        ])
+        ->call('create')
+        ->assertHasFormErrors(['pyq_exam_name', 'pyq_exam_year']);
+});

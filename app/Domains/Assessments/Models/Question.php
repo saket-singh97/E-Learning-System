@@ -46,6 +46,9 @@ class Question extends Model
         'source',
         'created_by',
         'token_cost',
+        'is_pyq',
+        'pyq_exam_name',
+        'pyq_exam_year',
     ];
 
     protected function casts(): array
@@ -54,6 +57,8 @@ class Question extends Model
             'options' => 'array',
             'correct_answer' => 'array',
             'token_cost' => 'array',
+            'is_pyq' => 'boolean',
+            'pyq_exam_year' => 'integer',
         ];
     }
 
