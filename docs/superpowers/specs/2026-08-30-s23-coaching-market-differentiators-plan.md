@@ -40,7 +40,7 @@ then stop and report before starting the next block.
 | B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ✅ done |
 | B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ✅ done |
 | B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ✅ done |
-| B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ⬜ not started |
+| B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ✅ done |
 | B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ⬜ not started |
 | B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ⬜ not started |
 | B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ⬜ not started |
@@ -506,15 +506,39 @@ same email across two different tests stays two rows) and
 up end-to-end). Cross-tenant isolation suite: 105/105 with both new models
 registered. Full Growth suite 51/51.
 
-### B13 — U12 pt.2: grading engine
+### B13 — U12 pt.2: grading engine ✅
 
-- [ ] `ScholarshipTestGradingService::grade(ScholarshipTestRegistration, array $answers)` —
+- [x] `ScholarshipTestGradingService::grade(ScholarshipTestRegistration, array $answers)` —
       grades in-memory against the linked `Quiz`'s questions, writes
       `score` directly, creates no `QuizAttempt` row (design §4 decision 2
       — keeps the trusted enrolled-attempt path untouched).
-- [ ] Tests: correct scoring against a known answer key; a registration
+- [x] Tests: correct scoring against a known answer key; a registration
       cannot be graded twice (idempotent — same posture S22's
       `fromSeedQuestions()` idempotency fix established).
+
+`grade(ScholarshipTestRegistration $registration, array $answers)` — `$answers`
+is `question_id => raw response`, same shape `QuizAttemptService::submit()`'s
+own `$responses` takes. Looks up each answered question, scoped to the
+linked quiz's own course + `status = approved` (same pool-scoping
+`QuizAttemptService::draw()` already applies — a tampered id from a
+different course/quiz can't be smuggled into the score), sums each
+question's 0..1 grade, writes `score` directly. The per-type grading
+dispatch is a deliberate duplicate of `QuizAttemptService`'s own protected
+grading methods (mcq/true_false/numerical/multi_select/fill_in_blank/
+matching/ordering — `short_answer` scores 0, no review queue exists for an
+unauthenticated prospect) — not a cross-domain call to it, same reasoning
+`StudentMetrics::coveragePercent()` already documents for duplicating
+`RecordVideoCoverageAttendance`'s own merge-interval math (CLAUDE.md: a
+service is not a model, calling into it would be a cross-domain service
+call, not the cross-domain model read this class does for `Question`
+itself). Idempotent by returning the already-graded row unchanged (`score`
+already set) rather than throwing or silently recomputing — same posture
+`QuestionGenerator::fromSeedQuestions()` already established. Tests in
+`ScholarshipTestGradingServiceTest.php` — 4 cases: correct scoring against
+a known 2-question answer key, a wrong answer scores that question 0, a
+question id from a different course is ignored rather than scored, and a
+second `grade()` call with different (wrong) answers leaves the original
+score untouched. Full Growth suite 55/55.
 
 ### B14 — U12 pt.3: admin builder + results
 
