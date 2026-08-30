@@ -5,6 +5,7 @@ namespace App\Domains\Batches\Filament\Resources\Batches\Pages;
 use App\Domains\Batches\Filament\Resources\Batches\BatchResource;
 use App\Filament\Teach\Widgets\BatchEngagementWidget;
 use App\Filament\Teach\Widgets\BatchWeakTopicsWidget;
+use App\Filament\Teach\Widgets\ConfusionSignalWidget;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
@@ -28,6 +29,7 @@ class EditBatch extends EditRecord
         return [
             BatchWeakTopicsWidget::class,
             BatchEngagementWidget::class,
+            ConfusionSignalWidget::class,
         ];
     }
 }

@@ -31,7 +31,7 @@ then stop and report before starting the next block.
 | B1 | U10 pt.2 — `SyllabusTracker` service (% complete) + student/parent/admin widget | ✅ done |
 | B2 | U16 — `CatchUpPlanService` (deterministic behind-schedule list) + student UI | ✅ done |
 | B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ✅ done |
-| B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ⬜ not started |
+| B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ✅ done |
 | B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ⬜ not started |
 | B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ⬜ not started |
 | B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ⬜ not started |
@@ -238,14 +238,45 @@ ones from B0-B2's runs, plus one new `DownloadEnrolmentExportControllerTest`
 `DownloadCompletionExportControllerTest` sibling, in the unrelated Comms
 exports area — nothing this block touched).
 
-### B4 — U9 pt.2: teacher widget
+### B4 — U9 pt.2: teacher widget ✅
 
-- [ ] Teach-panel widget per batch: ranked list with the human-readable
+- [x] Teach-panel widget per batch: ranked list with the human-readable
       line format from `docs/FEATURES.md`'s own example ("Your batch is
       stuck on X — N doubts, N rewatches of MM:SS-MM:SS, N% failed QN").
-- [ ] Tests: widget scoped to the instructor's own assigned batch only
+- [x] Tests: widget scoped to the instructor's own assigned batch only
       (reuses `EnrolmentApprovalPolicy::canDecide()`'s ownership check,
       same as every other Teach-panel-scoped view since S15).
+
+Built `ConfusionSignalWidget` (`app/Filament/Teach/Widgets/`), wired via
+`EditBatch::getFooterWidgets()` alongside `BatchWeakTopicsWidget`/
+`BatchEngagementWidget` (same `InteractsWithRecord::getWidgetData()`
+wiring). Top 5 (`TOP_N`, matching every sibling widget's own cap), one
+`Stat` per lesson: `{doubts} doubts, {N} rewatches of MM:SS-MM:SS, {N}%
+failed` — `docs/FEATURES.md`'s own U9 example as closely as B3's data
+supports (a single aggregate failure rate per lesson's quiz, not a
+per-question breakdown, so no literal "Q4" — noted as the deliberate gap
+this is, design §2.3's own "tuning pass after real usage" posture, not a
+day-one requirement). Empty state ("No lessons taught yet") for a batch
+with none.
+
+Ownership scoping needed **no new code**: `BatchResource::getEloquentQuery()`
+(S15) already restricts an instructor's Teach panel to their own
+`instructor_id` batches, so a non-owning instructor 404s before this
+footer widget ever mounts — already proven generically by the existing
+`TeachPanelBatchScopingTest`, the same reliance `BatchWeakTopicsWidget`/
+`BatchEngagementWidget` already take rather than re-testing per widget.
+
+3 new tests (`tests/Feature/Analytics/ConfusionSignalWidgetTest.php`):
+empty state, populated line format (via `Livewire::test()` — footer
+widgets don't render in a full-page GET's initial HTML, confirmed against
+B1's own `CourseSyllabusTrackerWidget` finding before writing these), and
+one full-page load for the owning instructor proving the wiring itself
+doesn't error. `Batches`+`Analytics` domain suites 310/310;
+`CrossTenantTest` 103/103 (no new tenant model this block).
+
+`composer test`: 1953/1957 — back to the identical 4 pre-existing/unrelated
+failures from B0-B2's runs (B3's extra sibling export-controller flake
+didn't reproduce this run), none touching this block's code.
 
 ### B5 — U11 pt.1: PYQ schema + tagging
 
