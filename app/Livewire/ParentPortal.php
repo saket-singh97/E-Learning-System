@@ -2,8 +2,12 @@
 
 namespace App\Livewire;
 
+use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Comms\Services\StudentMetrics;
+use App\Domains\Content\Models\Course;
+use App\Domains\Content\Services\SyllabusTracker;
 use App\Domains\Tenancy\Services\TenantAuthenticator;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -180,6 +184,21 @@ class ParentPortal extends Component
             'linkedStudents' => $linkedStudents,
             'selectedStudent' => $selectedStudent,
             'metrics' => $selectedStudent !== null ? app(StudentMetrics::class)->summarize($selectedStudent) : null,
+            'syllabusByCourse' => $selectedStudent !== null ? $this->syllabusByCourse($selectedStudent) : collect(),
         ]);
+    }
+
+    /**
+     * @return Collection<string, array<string, float>> course title => SyllabusTracker::percentCompleteFor() result
+     */
+    protected function syllabusByCourse(User $student): Collection
+    {
+        $tracker = app(SyllabusTracker::class);
+
+        $courseIds = Batch::whereIn('id', Enrolment::where('user_id', $student->id)->where('status', 'active')->pluck('batch_id'))
+            ->pluck('course_id');
+
+        return Course::whereIn('id', $courseIds)->get()
+            ->mapWithKeys(fn (Course $course) => [$course->title => $tracker->percentCompleteFor($course, $student)]);
     }
 }

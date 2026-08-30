@@ -35,6 +35,14 @@
                         <dd>{{ ucwords(str_replace('_', ' ', $metrics['fee_status'])) }}</dd>
                     </dl>
 
+                    @if ($syllabusByCourse->isNotEmpty())
+                        <h3>Syllabus coverage</h3>
+                        @foreach ($syllabusByCourse as $courseTitle => $tracker)
+                            <h4>{{ $courseTitle }}</h4>
+                            @include('content::syllabus-tracker', ['tracker' => $tracker])
+                        @endforeach
+                    @endif
+
                     @if ($metrics['outstanding_invoices']->isNotEmpty())
                         <h3>Outstanding invoices</h3>
                         <ul>

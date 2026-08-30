@@ -8,6 +8,7 @@ use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Content\Services\LessonAccess;
+use App\Domains\Content\Services\SyllabusTracker;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
@@ -82,6 +83,10 @@ class SyllabusTree extends Component
         return view('livewire.syllabus-tree', [
             'sections' => $sections,
             'subdomain' => app(CurrentTenant::class)->get()->subdomain,
+            // A guest previewing a published course's syllabus has no
+            // completion signal to compute — percentCompleteFor() requires
+            // an authenticated User.
+            'syllabusTracker' => $viewer !== null ? app(SyllabusTracker::class)->percentCompleteFor($this->course, $viewer) : [],
         ]);
     }
 }

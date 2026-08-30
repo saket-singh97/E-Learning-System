@@ -4,6 +4,10 @@ use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Comms\Models\ParentGuardianLink;
 use App\Domains\Content\Models\Course;
+use App\Domains\Content\Models\CourseSection;
+use App\Domains\Content\Models\Lesson;
+use App\Domains\Content\Models\SyllabusTopic;
+use App\Domains\Content\Models\VideoWatchEvent;
 use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Livewire\ParentPortal;
@@ -106,6 +110,48 @@ it('defaults to the first linked student and switches to another on request', fu
 
     $component->call('selectStudent', $studentB->id)
         ->assertSet('selectedStudentId', $studentB->id);
+});
+
+it('shows the linked students syllabus coverage per enrolled course', function () {
+    $student = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $student->assignRole('student');
+    ParentGuardianLink::create([
+        'parent_user_id' => $this->parent->id,
+        'student_user_id' => $student->id,
+        'relationship' => 'father',
+    ]);
+
+    $course = Course::create(['title' => 'Physics', 'slug' => 'physics-'.uniqid(), 'status' => 'published']);
+    $section = CourseSection::create(['course_id' => $course->id, 'title' => 'Mechanics', 'position' => 0]);
+    $lesson = Lesson::create(['course_section_id' => $section->id, 'title' => 'L1', 'type' => 'text', 'position' => 0]);
+    $topic = SyllabusTopic::create(['course_id' => $course->id, 'board_or_exam' => 'CBSE Class 10', 'title' => 'Kinematics', 'sequence' => 0]);
+    $topic->lessons()->sync([$lesson->id]);
+    VideoWatchEvent::create(['lesson_id' => $lesson->id, 'user_id' => $student->id, 'start_s' => 0, 'end_s' => 10]);
+
+    $batch = Batch::create([
+        'course_id' => $course->id,
+        'title' => 'Batch',
+        'slug' => 'batch-'.uniqid(),
+        'starts_on' => now()->toDateString(),
+        'ends_on' => now()->addMonth()->toDateString(),
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'published',
+    ]);
+    Enrolment::create([
+        'batch_id' => $batch->id,
+        'user_id' => $student->id,
+        'status' => 'active',
+        'source' => 'manual_add',
+        'requested_at' => now(),
+    ]);
+
+    Livewire::test(ParentPortal::class)
+        ->set('email', $this->parent->email)
+        ->set('password', 'secret-password')
+        ->call('login')
+        ->assertSee('Physics')
+        ->assertSee('CBSE Class 10')
+        ->assertSee('100.0% complete');
 });
 
 it('cannot select a student it is not linked to — no data leaks through the switcher', function () {

@@ -1,6 +1,8 @@
 <div>
     <h1>{{ $course->title }}</h1>
 
+    @include('content::syllabus-tracker', ['tracker' => $syllabusTracker])
+
     @foreach ($sections as $entry)
         <h2>{{ $entry['section']->title }}</h2>
 

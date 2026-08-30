@@ -28,7 +28,7 @@ then stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | U10 pt.1 — `syllabus_topics` + `lesson_syllabus_topic` schema, Admin mapping UI | ✅ done |
-| B1 | U10 pt.2 — `SyllabusTracker` service (% complete) + student/parent/admin widget | ⬜ not started |
+| B1 | U10 pt.2 — `SyllabusTracker` service (% complete) + student/parent/admin widget | ✅ done |
 | B2 | U16 — `CatchUpPlanService` (deterministic behind-schedule list) + student UI | ⬜ not started |
 | B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ⬜ not started |
 | B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ⬜ not started |
@@ -98,15 +98,61 @@ isolation — order flake), `CalendarTest` (Planner) and
 `BackupConfigurationTest` (Support) both reproduce standalone but are
 unrelated domains, not a B0 regression.
 
-### B1 — U10 pt.2: tracker widget
+### B1 — U10 pt.2: tracker widget ✅
 
-- [ ] `SyllabusTracker::percentCompleteFor(Course $course, User $viewer)` —
+- [x] `SyllabusTracker::percentCompleteFor(Course $course, User $viewer)` —
       `LessonCompletion` rows for the viewer over mapped lessons ÷ total
       mapped lessons, grouped by `board_or_exam`.
-- [ ] Widget on student dashboard, parent portal, and Admin course view
+- [x] Widget on student dashboard, parent portal, and Admin course view
       ("Physics 62% complete").
-- [ ] Tests: 0 topics mapped → no divide-by-zero (0% or "not tracked", not
+- [x] Tests: 0 topics mapped → no divide-by-zero (0% or "not tracked", not
       a crash); partial completion computes correctly.
+
+Built `SyllabusTracker` (Content) with the one method the checklist scopes —
+`percentCompleteFor()` groups a course's `syllabusTopics()` by
+`board_or_exam`, unions each group's mapped lessons, and divides completed
+(via the existing `LessonCompletion::isComplete()` heuristic, S13 C8, no
+second "done" signal) by total. A group with topics but zero lessons mapped
+returns 0.0 rather than dividing by zero; a course with zero topics returns
+`[]`. Reusable Blade partial `content::syllabus-tracker` renders the
+resulting `board_or_exam => percent` array.
+
+Three surfaces, one shared partial:
+- **Student dashboard** — no such page exists yet (`StudentPortal` is a bare
+  login shell); `SyllabusTree`/`ShowSyllabusController` (the per-course
+  syllabus browse page every enrolled/previewing viewer already hits) is the
+  real student-facing surface, so the tracker renders there, guarded for a
+  guest preview (`auth()->user()` can be null — `percentCompleteFor()`
+  requires a real viewer).
+- **Parent portal** — `ParentPortal::syllabusByCourse()` (a plain
+  cross-domain **model** read via `Batch`/`Enrolment`/`Course`, same posture
+  `StudentMetrics`'s own docblock establishes — `ParentPortal` sits outside
+  every domain namespace so calling `SyllabusTracker` directly isn't a
+  domain-to-domain service call either) maps each of the selected linked
+  student's actively-enrolled courses to its tracker result.
+- **Admin/Teach course view** — new `CourseSyllabusTrackerWidget`
+  (`app/Filament/Teach/Widgets/`), wired via `EditCourse::getFooterWidgets()`
+  — exact `InteractsWithRecord`/footer-widget pattern `BatchEngagementWidget`
+  (S18 B1) already established. `percentCompleteFor()` is per-viewer, so
+  rather than adding a second aggregate service method, the widget averages
+  it across the course's actively-enrolled students itself (same "aggregate
+  only, never per-student" posture `BatchEngagementWidget`'s own docblock
+  states) — empty states for "no students enrolled yet" and "syllabus not
+  mapped yet".
+
+9 new tests (`tests/Feature/Content/SyllabusTrackerTest.php`: the two
+edge cases plus grouping/partial-completion math plus both non-widget UI
+surfaces; `tests/Feature/Comms/ParentPortalDashboardTest.php` gained one
+case) + 2 widget tests via `Livewire::test()` (footer widgets aren't present
+in a full-page GET's initial HTML — confirmed against
+`BatchEngagementWidgetTest`'s own pattern before writing these). All pass;
+`Content`+`Comms` domain suites 493/494 (same lone pre-existing
+`CourseSlugUniquenessTest` fail); `CrossTenantTest` 103/103.
+
+`composer test`: 1940/1944 — identical 4 pre-existing/unrelated failures as
+B0's run (`CourseSlugUniquenessTest`, and `DownloadCompletionExportControllerTest`/
+`CalendarTest`/`BackupConfigurationTest` in Comms/Planner/Support, none
+touching Content/Comms code this block changed).
 
 ### B2 — U16: backlog/catch-up mode
 
