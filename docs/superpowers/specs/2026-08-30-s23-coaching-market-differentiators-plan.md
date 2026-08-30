@@ -33,7 +33,7 @@ then stop and report before starting the next block.
 | B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ✅ done |
 | B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ✅ done |
 | B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ✅ done |
-| B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ⬜ not started |
+| B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ✅ done |
 | B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ⬜ not started |
 | B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ⬜ not started |
 | B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ⬜ not started |
@@ -310,14 +310,30 @@ needed).
 `composer test`: 1956/1960 — the identical 4 pre-existing/unrelated
 failures from every prior block's run, none touching this block's code.
 
-### B6 — U11 pt.2: PYQ browse page
+### B6 — U11 pt.2: PYQ browse page ✅
 
-- [ ] Student-facing page: filter by `concept` (topic), `pyq_exam_name`,
+- [x] Student-facing page: filter by `concept` (topic), `pyq_exam_name`,
       `pyq_exam_year`; gated the same way any other question-bank view is
       (enrolled + `canStream()` on the question's originating lesson,
       where one exists).
-- [ ] Tests: filter combinations return correct subsets; a non-enrolled
+- [x] Tests: filter combinations return correct subsets; a non-enrolled
       viewer sees none.
+
+Built `PyqBrowser` Livewire component (`app/Domains/Assessments/Livewire/PyqBrowser.php`),
+course-scoped (Question belongs to a course, not a batch) — mount() gates on
+an active `Enrolment` into any batch of the course, same posture
+DailyPracticeBoard/CatchUpPlan already established. `questions()` queries
+`is_pyq = true`, `status = approved` (draft PYQ stay hidden, same
+approved-only pool `QuizAttemptService` already draws from), applies the
+three optional filters, then drops any question whose `lesson_id` is set and
+`LessonAccess::canStream()` denies it (a PYQ seeded from a still-locked
+lesson stays hidden). Route `GET /courses/{course}/pyq` (`course.pyq`) in
+`routes/assessments.php`, host view `resources/views/assessments/course-pyq.blade.php`,
+component view `app/Domains/Assessments/Views/pyq-browser.blade.php`,
+registered in `AppServiceProvider` as `assessments.pyq-browser`. Tests in
+`tests/Feature/Assessments/PyqBrowserTest.php` — 5 tests, 9 assertions,
+covering happy-path listing, concept filter, exam-name+year filter, a
+lesson-locked PYQ hidden, and 404 for a non-enrolled viewer.
 
 ### B7 — U17 pt.1: dual-language schema + linking
 

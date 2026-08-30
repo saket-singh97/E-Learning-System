@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Assessments\Models\TestSeries;
+use App\Domains\Content\Models\Course;
 use App\Http\Controllers\Assessments\DownloadOmrTemplateController;
 use App\Http\Controllers\Assessments\ShowQuizController;
 use Illuminate\Http\Request;
@@ -23,3 +24,15 @@ Route::get('/test-series/{series}/results', function (Request $request) {
 
     return view('assessments.test-series-results', ['series' => $series]);
 })->middleware(['auth'])->name('test-series.results');
+
+// S23 B6 — same "add a small host route" shape as routes/content.php's own
+// course-section.formula-sheet. Question belongs to a course, not a batch
+// (design doc §3.2), so this is course-scoped rather than reusing the
+// batch-scoped DailyPracticeBoard/CatchUpPlan route shape. Auth-required —
+// PyqBrowser::mount() itself enforces the actual enrolled-in-this-course
+// gate (design §5 "enrolled + canStream()").
+Route::get('/courses/{course}/pyq', function (Request $request) {
+    $course = Course::findOrFail($request->route('course'));
+
+    return view('assessments.course-pyq', ['course' => $course]);
+})->middleware(['auth'])->name('course.pyq');

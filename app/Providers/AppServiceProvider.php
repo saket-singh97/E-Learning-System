@@ -9,6 +9,7 @@ use App\Domains\AI\Livewire\DoubtChat;
 use App\Domains\AI\Livewire\FormulaSheet;
 use App\Domains\Assessments\Listeners\GenerateQuizFromLiveClass;
 use App\Domains\Assessments\Livewire\DailyPracticeBoard;
+use App\Domains\Assessments\Livewire\PyqBrowser;
 use App\Domains\Growth\Listeners\ConfirmCommissionOnPaymentCaptured;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
 use App\Domains\AI\Livewire\PhotoDoubtUpload;
@@ -255,6 +256,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('ai.chapter-markers', ChapterMarkers::class);
         Livewire::component('ai.formula-sheet', FormulaSheet::class);
         Livewire::component('assessments.daily-practice-board', DailyPracticeBoard::class);
+        Livewire::component('assessments.pyq-browser', PyqBrowser::class);
         Livewire::component('ai.semantic-search', SemanticSearch::class);
         Livewire::component('ai.weak-topics', WeakTopics::class);
         Livewire::component('ai.photo-doubt-upload', PhotoDoubtUpload::class);
