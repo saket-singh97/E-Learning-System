@@ -30,7 +30,7 @@ then stop and report before starting the next block.
 | B0 | U10 pt.1 — `syllabus_topics` + `lesson_syllabus_topic` schema, Admin mapping UI | ✅ done |
 | B1 | U10 pt.2 — `SyllabusTracker` service (% complete) + student/parent/admin widget | ✅ done |
 | B2 | U16 — `CatchUpPlanService` (deterministic behind-schedule list) + student UI | ✅ done |
-| B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ⬜ not started |
+| B3 | U9 pt.1 — `ConfusionSignalService` (composes heatmap + doubt volume + quiz failure) | ✅ done |
 | B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ⬜ not started |
 | B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ⬜ not started |
 | B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ⬜ not started |
@@ -196,17 +196,47 @@ pre-existing `CourseSlugUniquenessTest` fail); `CrossTenantTest` 103/103
 `composer test`: 1948/1952 — identical 4 pre-existing/unrelated failures as
 B0/B1's runs, none touching this block's code.
 
-### B3 — U9 pt.1: confusion signal service
+### B3 — U9 pt.1: confusion signal service ✅
 
-- [ ] `ConfusionSignalService::rankedFor(Batch $batch)` — per lesson,
+- [x] `ConfusionSignalService::rankedFor(Batch $batch)` — per lesson,
       combine `RewatchHeatmapService::heatmapFor()`'s hottest segment,
       `DoubtChatMessage` count grouped by lesson, and quiz question
       failure rate (existing `WeakTopicDetectionService` query shape) into
       one normalized rank score.
-- [ ] No new table — pure composition, matches `RewatchHeatmapService`/
+- [x] No new table — pure composition, matches `RewatchHeatmapService`/
       `DropOffService`'s no-schema precedent (design §4 decision 6).
-- [ ] Tests: a lesson with zero signals ranks last, not excluded/error; the
+- [x] Tests: a lesson with zero signals ranks last, not excluded/error; the
       composed rank is stable (same inputs → same order).
+
+Built `ConfusionSignalService` (Analytics). Lesson set = the batch's own
+taught lessons, same `BatchSession.lesson_id`-on/before-today definition
+`CatchUpPlanService`/`DailyPracticeSetGenerator` already established — a
+confusion signal for a lesson the batch hasn't reached yet has no meaning.
+Per lesson: `RewatchHeatmapService::heatmapFor()->first()` (already sorted
+hottest-first), a plain `DoubtChatMessage::where('lesson_id', ...)->count()`,
+and a failure rate scoped to the lesson's own `Quiz` using the identical
+`whereNotNull('is_correct')` correct/total query shape
+`WeakTopicDetectionService::weakTopicsFor()` already uses (course-wide
+concept grouping swapped for a single lesson's quiz — no concept-taxonomy
+dependency needed here). Min-max normalized per signal against the batch's
+own worst offender (a lesson with zero of a signal contributes zero for it,
+never excluded), summed into one `score`, sorted score-desc with lesson id
+as a stable tie-break so two equally-quiet lessons never reorder between
+calls. No new schema — matches `RewatchHeatmapService`/`DropOffService`'s
+own no-table, compute-on-request precedent (design §4 decision 6). The
+Teach-panel widget consuming this is B4, out of this block's scope.
+
+2 new tests (`tests/Feature/Analytics/ConfusionSignalServiceTest.php`):
+zero-signal lesson still present and ranked last; repeated calls with
+unchanged data produce identical order. `CrossTenantTest` 103/103 (no new
+tenant model this block).
+
+`composer test`: 1949/1954. 5 failures — the same 4 pre-existing/unrelated
+ones from B0-B2's runs, plus one new `DownloadEnrolmentExportControllerTest`
+"404s before register generated" failure that passes clean in isolation
+(same order-flake family as the already-baselined
+`DownloadCompletionExportControllerTest` sibling, in the unrelated Comms
+exports area — nothing this block touched).
 
 ### B4 — U9 pt.2: teacher widget
 
