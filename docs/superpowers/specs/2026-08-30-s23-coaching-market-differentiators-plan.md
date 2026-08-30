@@ -36,7 +36,7 @@ then stop and report before starting the next block.
 | B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ✅ done |
 | B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ✅ done |
 | B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ✅ done |
-| B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ⬜ not started |
+| B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ✅ done |
 | B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ⬜ not started |
 | B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ⬜ not started |
 | B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ⬜ not started |
@@ -385,16 +385,34 @@ Tests: `CourseCatalogTest::filters by language` (1 test), and 4 new tests in
 translation→original, absent with no link, and a draft counterpart hidden
 from a guest. Full suite: 17/17 new/changed assertions green.
 
-### B9 — U18: attendance-linked access
+### B9 — U18: attendance-linked access ✅
 
-- [ ] Migration adds `attendance_linked_access_enabled` to `tenants`,
+- [x] Migration adds `attendance_linked_access_enabled` to `tenants`,
       `min_attendance_percent` (nullable) to `batches`.
-- [ ] `LessonAccess::canStream()` gains a check: if tenant flag on AND
+- [x] `LessonAccess::canStream()` gains a check: if tenant flag on AND
       batch threshold set AND the viewer's computed attendance % (from
       existing `AttendanceRecord`) is below it, deny — same chokepoint
       pattern as S20's fee-based restriction (design §4 decision 4).
-- [ ] Tests: flag off → no change; flag on, batch threshold unset →
+- [x] Tests: flag off → no change; flag on, batch threshold unset →
       exempt; flag on, threshold set, viewer below/above it.
+
+Migration `2026_08_30_100004_add_attendance_linked_access_fields.php` adds
+both columns. `LessonAccess::isBlockedByLowAttendance()` mirrors
+`isBlockedByOverdueFee()`'s exact two-key shape and "every relevant
+enrolment must fail" semantics: resolves the viewer's active enrolments into
+batches offering the lesson's course, then blocks only if *every* one of
+those batches both has `min_attendance_percent` set and the viewer's own
+attendance in that batch's sessions (present-count / total `AttendanceRecord`
+rows, scoped to that one batch's `BatchSession` ids — not the student's
+whole tenure, since the threshold is batch-configured) falls below it. A
+batch with no threshold, or one with no attendance rows yet for this viewer,
+each read as a pass (same "absence of evidence, not evidence of struggling"
+posture `StudentMetrics::isAtRisk()` already takes) — so any one compliant/
+unconfigured enrolment keeps access, exactly like the fee gate. Tests in
+`tests/Feature/Content/AttendanceLinkedAccessGateTest.php` — 5 tests, 10
+assertions: flag off (no change even with bad attendance + threshold set),
+threshold unset (exempt), below threshold (blocked), at/above threshold
+(allowed), no attendance rows yet (not blocked).
 
 ### B10 — U13 pt.1: demo class access
 

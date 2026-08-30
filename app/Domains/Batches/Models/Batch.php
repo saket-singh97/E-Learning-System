@@ -35,6 +35,7 @@ class Batch extends Model
         'instalment_plan',
         'self_enrol_mode',
         'status',
+        'min_attendance_percent',
     ];
 
     protected array $sanitizable = [
@@ -50,6 +51,7 @@ class Batch extends Model
             'price' => 'decimal:2',
             'is_paid' => 'boolean',
             'instalment_plan' => 'array',
+            'min_attendance_percent' => 'integer',
         ];
     }
 

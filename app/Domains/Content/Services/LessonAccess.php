@@ -2,8 +2,10 @@
 
 namespace App\Domains\Content\Services;
 
+use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\Enrolment;
+use App\Domains\Content\Models\AttendanceRecord;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Fees\Models\FeeInvoice;
@@ -121,6 +123,10 @@ class LessonAccess
             return false;
         }
 
+        if ($this->isBlockedByLowAttendance($lesson, $viewer)) {
+            return false;
+        }
+
         return $lesson->prerequisites->every(
             fn (Lesson $prerequisite) => $this->completion->isComplete($prerequisite, $viewer),
         );
@@ -171,6 +177,65 @@ class LessonAccess
                 ->where('due_date', '<', $cutoff)
                 ->exists(),
         );
+    }
+
+    /**
+     * S23 B9 (U18, design doc §4 decision 4) — same two-key shape
+     * isBlockedByOverdueFee() already established: `attendance_linked_access_enabled`
+     * unlocks the feature per-tenant, `min_attendance_percent` carries the
+     * actual number per-batch. A tenant that never flips the flag sees zero
+     * behavior change. Blocks only when *every* relevant enrolment's batch
+     * both has a threshold set and this viewer's own attendance in that
+     * batch is below it — a batch with no threshold, or one this viewer has
+     * no attendance rows for yet (absence of evidence, not evidence of
+     * struggling, same posture StudentMetrics::isAtRisk() already takes),
+     * each count as a pass, exactly mirroring "any one compliant enrolment
+     * is enough" from the fee gate above.
+     */
+    protected function isBlockedByLowAttendance(Lesson $lesson, User $viewer): bool
+    {
+        $tenant = Tenant::find($lesson->tenant_id);
+
+        if (! $tenant?->attendance_linked_access_enabled) {
+            return false;
+        }
+
+        $courseId = $lesson->section?->course?->id;
+
+        if ($courseId === null) {
+            return false;
+        }
+
+        $batchIds = Enrolment::query()
+            ->where('user_id', $viewer->id)
+            ->where('status', 'active')
+            ->whereHas('batch', fn ($query) => $query->where('course_id', $courseId))
+            ->pluck('batch_id');
+
+        if ($batchIds->isEmpty()) {
+            return false;
+        }
+
+        return Batch::whereIn('id', $batchIds)->get()->every(function (Batch $batch) use ($viewer): bool {
+            if ($batch->min_attendance_percent === null) {
+                return false;
+            }
+
+            $sessionIds = BatchSession::where('batch_id', $batch->id)->pluck('id');
+
+            $records = AttendanceRecord::where('user_id', $viewer->id)
+                ->where('attendable_type', BatchSession::class)
+                ->whereIn('attendable_id', $sessionIds)
+                ->get();
+
+            if ($records->isEmpty()) {
+                return false;
+            }
+
+            $percent = $records->where('status', 'present')->count() / $records->count() * 100;
+
+            return $percent < $batch->min_attendance_percent;
+        });
     }
 
     /**

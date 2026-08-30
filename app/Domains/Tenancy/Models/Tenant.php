@@ -59,6 +59,7 @@ class Tenant extends Model
         'default_currency',
         'tax_rate',
         'tax_label',
+        'attendance_linked_access_enabled',
     ];
 
     protected function casts(): array
@@ -70,6 +71,7 @@ class Tenant extends Model
             'refund_window_days' => 'integer',
             'fee_grace_period_days' => 'integer',
             'tax_rate' => 'float',
+            'attendance_linked_access_enabled' => 'boolean',
         ];
     }
 
