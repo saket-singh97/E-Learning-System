@@ -34,7 +34,7 @@ then stop and report before starting the next block.
 | B4 | U9 pt.2 — Teach-panel confusion-signal widget per batch | ✅ done |
 | B5 | U11 pt.1 — `questions.is_pyq`/`pyq_exam_name`/`pyq_exam_year` + Admin tagging UI | ✅ done |
 | B6 | U11 pt.2 — Student-facing PYQ bank browse/filter page | ✅ done |
-| B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ⬜ not started |
+| B7 | U17 pt.1 — `courses.language`/`translation_of_course_id` schema + Admin link UI | ✅ done |
 | B8 | U17 pt.2 — Catalog language filter + course-detail track switcher | ⬜ not started |
 | B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ⬜ not started |
 | B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ⬜ not started |
@@ -335,16 +335,32 @@ registered in `AppServiceProvider` as `assessments.pyq-browser`. Tests in
 covering happy-path listing, concept filter, exam-name+year filter, a
 lesson-locked PYQ hidden, and 404 for a non-enrolled viewer.
 
-### B7 — U17 pt.1: dual-language schema + linking
+### B7 — U17 pt.1: dual-language schema + linking ✅
 
-- [ ] Migration adds `language` (default `'en'`) and
+- [x] Migration adds `language` (default `'en'`) and
       `translation_of_course_id` (nullable, self-referencing) to
       `courses`.
-- [ ] Admin `CourseResource`: language select + "translation of" course
+- [x] Admin `CourseResource`: language select + "translation of" course
       picker, scoped to same-tenant courses only (`->rule()` server-side
       check, same class of fix S13 B17 already applied to
       `LessonResource`'s prerequisite field).
-- [ ] Tests: cross-tenant course cannot be picked as a translation link.
+- [x] Tests: cross-tenant course cannot be picked as a translation link.
+
+Migration `2026_08_30_100003_add_language_fields_to_courses_table.php` adds
+both columns (`language` varchar(10) default `'en'`,
+`translation_of_course_id` nullable self-FK, `nullOnDelete`).
+`Course::LANGUAGES = ['en', 'hi']` (only the two this slice's design doc
+actually names). `CourseResource` gains a `language` Select and a
+`translation_of_course_id` Select — the latter is a plain scalar column, not
+a Filament `->relationship()` field, so a tampered payload writes straight
+to it with no query in between; the `->rule()` is the real gate
+(`Course::find()` is itself tenant-scoped via `BelongsToTenant`, so a
+cross-tenant id returns null and fails exactly like a bogus one would — same
+class of fix S13 B17 applied to `categories`/`tags`/`prerequisites`), plus a
+self-reference check. Tests in
+`tests/Feature/Content/CourseTranslationLinkTest.php` — 3 tests, 18
+assertions: cross-tenant id rejected, self-reference rejected, real
+same-tenant link accepted.
 
 ### B8 — U17 pt.2: catalog filter + switcher
 

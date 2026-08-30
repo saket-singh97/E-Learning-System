@@ -72,6 +72,45 @@ class CourseResource extends Resource
                 ->required()
                 ->default('draft')
                 ->native(false),
+            Select::make('language')
+                ->options(array_combine(Course::LANGUAGES, Course::LANGUAGES))
+                ->required()
+                ->default('en')
+                ->native(false),
+            // Self-referencing FK, not a Filament ->relationship() Select — a
+            // tampered payload just overwrites this scalar column directly,
+            // no sync()/query ever runs through it, so options() narrowing
+            // the dropdown is cosmetic only. The ->rule() below is the real
+            // server-side gate (same class of fix S13 B17 already applied to
+            // LessonResource's prerequisites field): Course::find() is
+            // itself tenant-scoped (BelongsToTenant), so a cross-tenant id
+            // returns null and fails here exactly like a bogus one would.
+            Select::make('translation_of_course_id')
+                ->label('Translation of')
+                ->options(fn (?Course $record): array => Course::query()
+                    ->when($record, fn (Builder $query, Course $record) => $query->whereKeyNot($record->id))
+                    ->pluck('title', 'id')
+                    ->all())
+                ->searchable()
+                ->native(false)
+                ->helperText('Link this course as a translated track of another independently-authored course.')
+                ->rule(fn (?Course $record): Closure => function (string $attribute, mixed $value, Closure $fail) use ($record): void {
+                    if (! $value) {
+                        return;
+                    }
+
+                    $translationOf = Course::find($value);
+
+                    if (! $translationOf) {
+                        $fail('Selected translation-of course is invalid.');
+
+                        return;
+                    }
+
+                    if ($record && $translationOf->id === $record->id) {
+                        $fail('A course cannot be a translation of itself.');
+                    }
+                }),
             // S10 B0's migration defaults ({"quiz":50,"assignment":50} /
             // 40.00) already apply to every existing course at the DB
             // level — these fields just let an admin override them, no

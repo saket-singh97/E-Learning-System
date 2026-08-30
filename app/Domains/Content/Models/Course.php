@@ -15,6 +15,9 @@ class Course extends Model
 
     public const STATUSES = ['draft', 'published', 'archived'];
 
+    /** @var array<int, string> S23 B7 (U17) — dual-language content tracks. */
+    public const LANGUAGES = ['en', 'hi'];
+
     protected $fillable = [
         'tenant_id',
         'title',
@@ -23,6 +26,8 @@ class Course extends Model
         'status',
         'gradebook_weights',
         'passing_threshold',
+        'language',
+        'translation_of_course_id',
     ];
 
     protected array $sanitizable = [
