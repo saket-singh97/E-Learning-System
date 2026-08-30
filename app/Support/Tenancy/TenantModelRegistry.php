@@ -95,6 +95,8 @@ use App\Domains\Growth\Models\AffiliatePayoutRequest;
 use App\Domains\Growth\Models\AffiliateReferral;
 use App\Domains\Growth\Models\CourseInterestSignup;
 use App\Domains\Growth\Models\InstructorPayout;
+use App\Domains\Growth\Models\ScholarshipTest;
+use App\Domains\Growth\Models\ScholarshipTestRegistration;
 use App\Domains\Fees\Models\StudentMembershipPlan;
 use App\Domains\Fees\Models\StudentSubscription;
 use App\Domains\Security\Models\AccountSharingFlag;
@@ -219,6 +221,8 @@ class TenantModelRegistry
         EnrolmentImportBatch::class,
         PaymentHistoryImportBatch::class,
         SyllabusTopic::class,
+        ScholarshipTest::class,
+        ScholarshipTestRegistration::class,
     ];
 
     /**
@@ -1342,6 +1346,52 @@ class TenantModelRegistry
                 'title' => 'Row',
                 'sequence' => 0,
             ],
+            ScholarshipTest::class => [
+                'title' => 'Row Scholarship Test',
+                'quiz_id' => Quiz::create([
+                    'lesson_id' => Lesson::create([
+                        'course_section_id' => CourseSection::create([
+                            'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                            'title' => 'Parent',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Parent',
+                        'type' => 'quiz',
+                        'position' => 0,
+                    ])->id,
+                    'title' => 'Parent Quiz',
+                    'blueprint' => [],
+                    'time_limit_minutes' => 30,
+                    'max_attempts' => 3,
+                ])->id,
+                'opens_at' => now(),
+                'closes_at' => now()->addWeek(),
+            ],
+            ScholarshipTestRegistration::class => [
+                'scholarship_test_id' => ScholarshipTest::create([
+                    'title' => 'Parent Scholarship Test',
+                    'quiz_id' => Quiz::create([
+                        'lesson_id' => Lesson::create([
+                            'course_section_id' => CourseSection::create([
+                                'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                                'title' => 'Parent',
+                                'position' => 0,
+                            ])->id,
+                            'title' => 'Parent',
+                            'type' => 'quiz',
+                            'position' => 0,
+                        ])->id,
+                        'title' => 'Parent Quiz',
+                        'blueprint' => [],
+                        'time_limit_minutes' => 30,
+                        'max_attempts' => 3,
+                    ])->id,
+                    'opens_at' => now(),
+                    'closes_at' => now()->addWeek(),
+                ])->id,
+                'name' => 'Row Prospect',
+                'email' => 'row-'.uniqid().'@example.com',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1462,6 +1512,8 @@ class TenantModelRegistry
             WebhookEndpoint::class => ['status' => 'disabled'],
             WebhookDelivery::class => ['status' => 'failed'],
             SyllabusTopic::class => ['title' => 'tampered'],
+            ScholarshipTest::class => ['title' => 'tampered'],
+            ScholarshipTestRegistration::class => ['name' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

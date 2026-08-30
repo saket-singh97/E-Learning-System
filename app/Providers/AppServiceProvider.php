@@ -36,6 +36,7 @@ use App\Domains\Comms\Livewire\NoticeBoard;
 use App\Domains\Comms\Livewire\SurveyRunner;
 use App\Domains\Growth\Livewire\AffiliateDashboard;
 use App\Domains\Growth\Livewire\CourseInterestForm;
+use App\Domains\Growth\Livewire\ScholarshipTestRegistrationForm;
 use App\Domains\Planner\Livewire\Calendar;
 use App\Domains\Content\Livewire\CatchUpPlan;
 use App\Domains\Content\Livewire\CourseReviews;
@@ -278,6 +279,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('planner.calendar', Calendar::class);
         Livewire::component('growth.affiliate-dashboard', AffiliateDashboard::class);
         Livewire::component('growth.course-interest-form', CourseInterestForm::class);
+        Livewire::component('growth.scholarship-test-registration-form', ScholarshipTestRegistrationForm::class);
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
         Livewire::component('analytics.gamification-widget', GamificationWidget::class);

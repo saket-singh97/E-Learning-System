@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Growth\ShowCourseInterestController;
+use App\Http\Controllers\Growth\ShowScholarshipTestRegistrationController;
 use Illuminate\Support\Facades\Route;
 
 // S20 R2 — no 'auth' middleware, same "guest sees a log-in prompt inside
@@ -15,3 +16,10 @@ Route::get('/affiliate', fn () => view('growth.affiliate-dashboard'))
 // hardened as the S5 B8 review left them for guests on a real syllabus page.
 Route::get('/courses/{course}/interest', ShowCourseInterestController::class)
     ->name('course-interest.show');
+
+// S23 B12 (U12 pt.1) — same public, unauthenticated posture as
+// /courses/{course}/interest above (design doc §4): a scholarship-test
+// acquisition test is deliberately open to a guest with no publish-status
+// gate.
+Route::get('/scholarship-tests/{scholarshipTest}/register', ShowScholarshipTestRegistrationController::class)
+    ->name('scholarship-test.register');

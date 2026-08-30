@@ -39,7 +39,7 @@ then stop and report before starting the next block.
 | B9 | U18 — `tenants.attendance_linked_access_enabled` + `batches.min_attendance_percent`, `LessonAccess` gate | ✅ done |
 | B10 | U13 pt.1 — `lessons.is_demo` + `LessonAccess` demo grant for unauthenticated prospects | ✅ done |
 | B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ✅ done |
-| B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ⬜ not started |
+| B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ✅ done |
 | B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ⬜ not started |
 | B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ⬜ not started |
 | B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ⬜ not started |
@@ -473,15 +473,38 @@ redirects; no button when no demo lesson exists) and a new
 enrolment, and a same-email signup for a different course never falsely
 matches. Full Growth suite 47/47.
 
-### B12 — U12 pt.1: scholarship test schema + registration
+### B12 — U12 pt.1: scholarship test schema + registration ✅
 
-- [ ] `scholarship_tests` + `scholarship_test_registrations` migrations +
+- [x] `scholarship_tests` + `scholarship_test_registrations` migrations +
       models (Growth), registered in `TenantModelRegistry`.
-- [ ] Public, unauthenticated registration page (mirrors S20 B12's
+- [x] Public, unauthenticated registration page (mirrors S20 B12's
       `/courses/{course}/interest` public-route posture) — name/email/
       phone, upsert by `(scholarship_test_id, email)` so a repeat signup
       updates rather than duplicates (same idiom as `CourseInterestSignup`).
-- [ ] Tests: duplicate email re-registers cleanly, doesn't duplicate.
+- [x] Tests: duplicate email re-registers cleanly, doesn't duplicate.
+
+`ScholarshipTest` (`course_id` nullable, `quiz_id`, `opens_at`/`closes_at`)
+and `ScholarshipTestRegistration` (`name`/`email`/`phone`, no `user_id` —
+same prospect shape as `CourseInterestSignup`, `score` nullable, unique on
+`(scholarship_test_id, email)`) both in `app/Domains/Growth/Models/`,
+registered in `TenantModelRegistry` (seed/update attributes added).
+Deliberate deviation from the design doc's own SQL sketch: skipped the
+sketch's `converted_enrolment_id` column — B14's own plan wording already
+commits to a read-only `DemoConversionService`-style query for conversion
+status (same "query not event" posture design §4 decision 3 established for
+U13), so a column that would immediately go stale alongside that query is
+dropped rather than carried as unused schema.
+`ScholarshipTestRegistrationService::register()` mirrors
+`CourseInterestSignupService::signup()` exactly — `firstOrNew` on
+`(scholarship_test_id, email)`. Public route `GET /scholarship-tests/{scholarshipTest}/register`
+(`scholarship-test.register`, no auth middleware) embeds
+`ScholarshipTestRegistrationForm`, itself a line-for-line mirror of
+`CourseInterestForm`. Tests: `ScholarshipTestRegistrationServiceTest.php` (3
+cases — new registration persists, duplicate email updates in place,
+same email across two different tests stays two rows) and
+`ScholarshipTestRegistrationPageTest.php` (guest opens the page and signs
+up end-to-end). Cross-tenant isolation suite: 105/105 with both new models
+registered. Full Growth suite 51/51.
 
 ### B13 — U12 pt.2: grading engine
 
