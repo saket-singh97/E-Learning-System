@@ -33,7 +33,7 @@ then stop and report before starting the next block.
 | B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ✅ done |
 | B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ✅ done |
 | B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ✅ done |
-| B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ⬜ not started |
+| B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ✅ done |
 | B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ⬜ not started |
 | B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ⬜ not started |
 | B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ⬜ not started |
@@ -303,17 +303,41 @@ baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
 `BackupConfigurationTest`, both rotating export-controller order-flake
 siblings) — no new failures.
 
-### B6 — U23 pt.1: fee analytics service
+### B6 — U23 pt.1: fee analytics service ✅
 
-- [ ] `FeeAnalyticsService` (Fees domain): `collectionRate(Tenant)` (paid /
+- [x] `FeeAnalyticsService` (Fees domain): `collectionRate(Tenant)` (paid /
       total_amount, current period), `projectedRevenue(Tenant)` (sum of
       unpaid invoices with a future `due_date`), `defaulterAgeing(Tenant)`
       (days-past-due buckets: 0-30/31-60/60+, same bucketing shape
       `AccountSharingFlag`'s threshold classification already uses).
-- [ ] Tests: collection rate matches a hand-computed value against a real
+- [x] Tests: collection rate matches a hand-computed value against a real
       seeded mix of paid/unpaid/partial invoices; an overdue invoice lands
       in the correct ageing bucket at the exact boundary (30/31, 60/61
       days).
+
+**Build notes:** two of the plan's own named assumptions didn't hold,
+confirmed rather than guessed: `FeeInvoice::STATUSES` is
+`['pending', 'paid', 'overdue', 'cancelled']` — there is no `'partial'`
+status anywhere in this codebase, and no billing-period/cycle column on
+`FeeInvoice` either, so "current period" (collection rate) covers every
+non-cancelled invoice for the tenant, not a narrowed period — an accepted
+v1 scope, not a silently wrong filter. `AccountSharingFlag`'s own
+"threshold classification" is a single binary threshold
+(`distinctCount &lt; $threshold`), not a 0-30/31-60/60+ split — no bucketing
+precedent existed anywhere to reuse, so `defaulterAgeing()` computes its
+own three buckets directly from `due_date`, not from `FlagOverdueInvoices`'
+`status = 'overdue'` flip (a `pending` row whose due date has already
+passed is just as much a defaulter as an already-flagged one, and
+shouldn't wait on that sweep job to have run). Followed the established
+`SeatQuota`/`StorageQuota` convention for a service taking an explicit
+`Tenant $tenant` argument: `withoutGlobalScope('tenant')` plus an explicit
+`tenant_id` filter, never trusting ambient `CurrentTenant` to already
+match the argument. Same plain-array/float return-shape convention
+`PlatformRevenueAnalytics` (Billing domain) already established — no DTO
+classes. `composer test`: 2054/2061 passed; the 7 failures are all
+pre-existing baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest`
+x3, `BackupConfigurationTest`, both rotating export-controller
+order-flake siblings) — no new failures.
 
 ### B7 — U23 pt.2: admin dashboard widget
 
