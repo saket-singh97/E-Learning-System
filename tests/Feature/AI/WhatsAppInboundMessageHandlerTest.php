@@ -3,7 +3,9 @@
 use App\Domains\AI\Models\DoubtChatMessage;
 use App\Domains\AI\Models\LessonArtifact;
 use App\Domains\AI\Models\LessonArtifactChunk;
+use App\Domains\AI\Models\PhotoDoubtQuery;
 use App\Domains\AI\Models\WhatsAppLink;
+use App\Domains\AI\Services\PhotoDoubtService;
 use App\Domains\AI\Services\WhatsAppLinkService;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
@@ -18,7 +20,9 @@ use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -179,6 +183,47 @@ it('replies with a try-typing message and writes no row when transcription fails
         ->and(RecordingCommsDriver::$sent)->toHaveCount(1)
         ->and(RecordingCommsDriver::$sent[0]['to'])->toBe('+919876500060')
         ->and(RecordingCommsDriver::$sent[0]['text'])->toContain('try typing');
+});
+
+it('creates an identical PhotoDoubtQuery row/answer shape via WhatsApp as an in-app upload, distinguished only by channel', function () {
+    Storage::fake('local');
+    app()->bind(CommsProvider::class, RecordingCommsDriver::class);
+    RecordingCommsDriver::$sent = [];
+
+    WhatsAppLink::create(['user_id' => $this->student->id, 'phone_e164' => '+919876500070', 'verified_at' => now()]);
+
+    $inAppQuery = app(PhotoDoubtService::class)->submit(
+        UploadedFile::fake()->image('question.jpg'),
+        $this->student,
+        null,
+    );
+
+    Http::fake(['https://cdn.example.com/photo.jpg' => Http::response('fake image bytes')]);
+
+    $payload = json_encode(['from' => '+919876500070', 'type' => 'image', 'image' => ['url' => 'https://cdn.example.com/photo.jpg']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    $whatsappQuery = PhotoDoubtQuery::where('source_phone', '+919876500070')->sole();
+
+    expect($whatsappQuery->channel)->toBe('whatsapp')
+        ->and($whatsappQuery->status)->toBe('ready')
+        ->and($whatsappQuery->solution)->not->toBeEmpty()
+        ->and($inAppQuery->fresh()->status)->toBe('ready')
+        ->and($inAppQuery->fresh()->channel)->toBe('web')
+        ->and($inAppQuery->fresh()->source_phone)->toBeNull();
+
+    // Only the WhatsApp-sourced query triggers a reply — the in-app one
+    // (channel=web) is a silent no-op in ProcessPhotoDoubtQuery's own
+    // notifyWhatsApp() guard.
+    expect(RecordingCommsDriver::$sent)->toHaveCount(1)
+        ->and(RecordingCommsDriver::$sent[0]['to'])->toBe('+919876500070');
+});
+
+it('replies with a link-prompt and writes no PhotoDoubtQuery row for an unlinked number sending a photo', function () {
+    $payload = json_encode(['from' => '+919876500080', 'type' => 'image', 'image' => ['url' => 'https://cdn.example.com/photo.jpg']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    expect(PhotoDoubtQuery::count())->toBe(0);
 });
 
 it('verifies a linking code sent as a WhatsApp text message', function () {

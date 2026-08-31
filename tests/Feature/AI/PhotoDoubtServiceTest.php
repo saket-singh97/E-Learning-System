@@ -8,6 +8,7 @@ use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\PhotoTooLargeException;
 use App\Integrations\AiProvider;
 use App\Integrations\ChatResult;
+use App\Integrations\CommsProvider;
 use App\Integrations\Drivers\FakeAiDriver;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -68,7 +69,7 @@ it('transitions pending to ready with a solution from the fake driver', function
     $image = UploadedFile::fake()->image('question.jpg');
     $query = app(PhotoDoubtService::class)->submit($image, $this->student, null);
 
-    (new ProcessPhotoDoubtQuery($query->id, $query->tenant_id))->handle(app(AiProvider::class));
+    (new ProcessPhotoDoubtQuery($query->id, $query->tenant_id))->handle(app(AiProvider::class), app(CommsProvider::class));
 
     $query->refresh();
 
@@ -83,7 +84,7 @@ it('transitions to failed instead of throwing when the driver fails', function (
     $image = UploadedFile::fake()->image('question.jpg');
     $query = app(PhotoDoubtService::class)->submit($image, $this->student, null);
 
-    (new ProcessPhotoDoubtQuery($query->id, $query->tenant_id))->handle(app(AiProvider::class));
+    (new ProcessPhotoDoubtQuery($query->id, $query->tenant_id))->handle(app(AiProvider::class), app(CommsProvider::class));
 
     expect($query->refresh()->status)->toBe('failed');
 });

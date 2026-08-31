@@ -23,6 +23,8 @@ class PhotoDoubtQuery extends Model
         'extracted_question',
         'solution',
         'token_cost',
+        'channel',
+        'source_phone',
     ];
 
     protected function casts(): array

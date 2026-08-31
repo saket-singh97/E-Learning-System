@@ -30,7 +30,7 @@ then stop and report before starting the next block.
 | B0 | U19 pt.1 — `doubt_chat_messages.channel`/`source_phone` + `whatsapp_links` schema/model | ✅ done |
 | B1 | U19 pt.2 — inbound webhook, phone-link verification, `SemanticSearchService`-resolved lesson → `DoubtChatService::ask()` → reply | ✅ done |
 | B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ✅ done |
-| B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ⬜ not started |
+| B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ✅ done |
 | B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ⬜ not started |
 | B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ⬜ not started |
 | B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ⬜ not started |
@@ -180,20 +180,51 @@ baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
 order-flake — 2 of its siblings this time, both confirmed passing in
 isolation) — no new failures.
 
-### B3 — U21: photo doubt over WhatsApp
+### B3 — U21: photo doubt over WhatsApp ✅
 
-- [ ] Inbound webhook handler branches on an image message: downloads to
+- [x] Inbound webhook handler branches on an image message: downloads to
       the same disk convention `PhotoDoubtQuery::image_disk_path` already
       uses, creates a real `PhotoDoubtQuery` row (`channel`/`source_phone`
       set, same fields B0 added to `doubt_chat_messages` — confirm whether
       `PhotoDoubtQuery` needs its own migration for these 2 columns or
       shares a trait/scope with `DoubtChatMessage`), the *existing* S17
       L14 async job processes it unchanged.
-- [ ] Reply sent once the job completes (poll or listener on the job's own
+- [x] Reply sent once the job completes (poll or listener on the job's own
       completion — confirm existing job's completion signal).
-- [ ] Tests: a WhatsApp-sourced photo doubt produces an identical
+- [x] Tests: a WhatsApp-sourced photo doubt produces an identical
       `PhotoDoubtQuery` row/answer shape to an in-app upload, distinguished
       only by `channel`.
+
+**Build notes:** `PhotoDoubtQuery` needed its own migration for
+`channel`/`source_phone` — confirmed it does **not** share a trait/scope
+with `DoubtChatMessage` (each has its own fillable/migration; both now
+carry the same 2 columns independently, same shape, no shared trait
+introduced for 2 columns on 2 models). `WhatsAppInboundMessageHandler`
+gained a `handleImage()` branch: resolves the `WhatsAppLink` first (needed
+to rebind tenant before validating/storing, unlike audio which is
+tenant-agnostic), then re-validates against `PhotoDoubtService::ALLOWED_EXTENSIONS`/
+`MAX_SIZE_KB` and stores to the exact same `photo-doubts/{tenant}/{student}/{uniqid}.ext`
+convention `PhotoDoubtService::submit()` uses — creates a real
+`PhotoDoubtQuery` row and dispatches the *existing*, unmodified
+`ProcessPhotoDoubtQuery` job. Confirmed the job's completion signal: there
+is no event/broadcast anywhere in this codebase for a finished
+`PhotoDoubtQuery` (the in-app UI just `wire:poll`s and re-queries) — so the
+job itself is the only place that knows the terminal state, and
+`ProcessPhotoDoubtQuery::handle()` now takes `CommsProvider` and calls a
+`notifyWhatsApp()` step at the end that no-ops for `channel !== 'whatsapp'`
+(byte-identical behavior for every existing in-app upload). No separate
+immediate "got it" ack — one reply, sent once, matching the plan's own
+"reply sent once the job completes" wording and the single-reply shape the
+text/audio paths already have. Extracted a small `runAsTenant()` helper in
+the handler (3rd use of the same bind/restore block that was previously
+duplicated inline) rather than adding a 3rd copy. Fixed 2 pre-existing
+`PhotoDoubtServiceTest` call sites that invoked `ProcessPhotoDoubtQuery::handle()`
+directly with only 1 arg — a real regression from the signature change,
+caught by `composer test`, not a pre-existing flake.
+`composer test`: 2045/2052 passed; all 7 failures are pre-existing baseline
+flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
+`BackupConfigurationTest`, both rotating export-controller order-flake
+siblings) — no new failures.
 
 ### B4 — U22 pt.1: auto-scheduler proposal engine
 

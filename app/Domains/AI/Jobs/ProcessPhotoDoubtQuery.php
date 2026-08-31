@@ -4,6 +4,7 @@ namespace App\Domains\AI\Jobs;
 
 use App\Domains\AI\Models\PhotoDoubtQuery;
 use App\Integrations\AiProvider;
+use App\Integrations\CommsProvider;
 use App\Support\Tenancy\RebindsTenant;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,7 +46,7 @@ class ProcessPhotoDoubtQuery implements ShouldQueue
         return [new RebindsTenant];
     }
 
-    public function handle(AiProvider $ai): void
+    public function handle(AiProvider $ai, CommsProvider $comms): void
     {
         $query = PhotoDoubtQuery::findOrFail($this->queryId);
         $query->update(['status' => 'processing']);
@@ -71,6 +72,29 @@ class ProcessPhotoDoubtQuery implements ShouldQueue
         } catch (Throwable) {
             $query->update(['status' => 'failed']);
         }
+
+        $this->notifyWhatsApp($query->fresh(), $comms);
+    }
+
+    /**
+     * A WhatsApp-sourced query (S24 B3) has no Livewire UI polling its
+     * status, so this job's own completion is the only signal available —
+     * the row itself is the source of truth (channel/source_phone), same
+     * "the job is the completion signal" posture with no event/listener
+     * layer added for what is currently this job's only such consumer. A
+     * web-sourced query (channel defaults to 'web') never reaches here.
+     */
+    private function notifyWhatsApp(PhotoDoubtQuery $query, CommsProvider $comms): void
+    {
+        if ($query->channel !== 'whatsapp' || blank($query->source_phone)) {
+            return;
+        }
+
+        $reply = $query->status === 'ready'
+            ? "Here's the solution:\n\n{$query->solution}"
+            : "Sorry, couldn't solve that photo — try sending a clearer picture.";
+
+        $comms->sendSessionMessage($query->source_phone, $reply);
     }
 
     /**

@@ -2,13 +2,18 @@
 
 namespace App\Domains\AI\Services;
 
+use App\Domains\AI\Jobs\ProcessPhotoDoubtQuery;
+use App\Domains\AI\Models\PhotoDoubtQuery;
 use App\Domains\AI\Models\WhatsAppLink;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Exceptions\InvalidFileTypeException;
 use App\Exceptions\InvalidWebhookSignatureException;
+use App\Exceptions\PhotoTooLargeException;
 use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Closure;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -20,11 +25,10 @@ use Throwable;
  * verification and everything after it" shape PaymentReconciler already
  * established for the Razorpay webhook.
  *
- * Only `type: text` and `type: audio` messages are handled (design §2.2/§4
- * decision 4 — photos are B3, branching onto this same handler later).
- * Anything else is a silent no-op 200, not an error, since the vendor's
- * own delivery retries would otherwise hammer an endpoint that simply
- * doesn't support that message type yet.
+ * `type: text`, `audio`, and `image` messages are handled. Anything else
+ * is a silent no-op 200, not an error, since the vendor's own delivery
+ * retries would otherwise hammer an endpoint that simply doesn't support
+ * that message type yet.
  */
 class WhatsAppInboundMessageHandler
 {
@@ -35,6 +39,8 @@ class WhatsAppInboundMessageHandler
         .'or ask it from inside the lesson player instead.';
 
     private const TRANSCRIPTION_FAILED_REPLY = "Couldn't understand that voice note — try typing your question instead.";
+
+    private const PHOTO_FAILED_REPLY = "Couldn't process that photo — send a JPG, PNG, or WebP under 5MB.";
 
     public function __construct(
         private readonly WhatsAppLinkService $links,
@@ -57,6 +63,16 @@ class WhatsAppInboundMessageHandler
 
             if ($from !== '' && $mediaUrl !== '') {
                 $this->handleAudio($from, $mediaUrl);
+            }
+
+            return;
+        }
+
+        if ($type === 'image') {
+            $mediaUrl = (string) data_get($data, 'image.url', '');
+
+            if ($from !== '' && $mediaUrl !== '') {
+                $this->handleImage($from, $mediaUrl);
             }
 
             return;
@@ -111,6 +127,89 @@ class WhatsAppInboundMessageHandler
         $this->handleDoubt($phone, $transcript);
     }
 
+    /**
+     * Downloads, validates, and stores the image using the exact same
+     * convention/limits PhotoDoubtService::submit() enforces for an in-app
+     * upload (design §4 decision 4), then creates a real PhotoDoubtQuery
+     * row and dispatches the *existing* S17 L14 job unchanged — WhatsApp
+     * is purely an alternate creation path. The job itself (not this
+     * handler) sends the reply once processing finishes, since that's the
+     * only place that knows the terminal status.
+     */
+    private function handleImage(string $phone, string $mediaUrl): void
+    {
+        $link = WhatsAppLink::withoutGlobalScope('tenant')->where('phone_e164', $phone)->first();
+
+        if ($link === null) {
+            $this->comms->sendSessionMessage($phone, self::UNLINKED_REPLY);
+
+            return;
+        }
+
+        $this->runAsTenant($link->tenant_id, function () use ($link, $phone, $mediaUrl): void {
+            try {
+                $viewer = User::findOrFail($link->user_id);
+
+                $extension = strtolower(pathinfo(parse_url($mediaUrl, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+
+                if (! in_array($extension, PhotoDoubtService::ALLOWED_EXTENSIONS, true)) {
+                    throw InvalidFileTypeException::forField('image', $extension, PhotoDoubtService::ALLOWED_EXTENSIONS);
+                }
+
+                $bytes = Http::get($mediaUrl)->throw()->body();
+                $sizeKb = (int) ceil(strlen($bytes) / 1024);
+
+                if ($sizeKb > PhotoDoubtService::MAX_SIZE_KB) {
+                    throw PhotoTooLargeException::forSize($sizeKb, PhotoDoubtService::MAX_SIZE_KB);
+                }
+
+                $diskPath = "photo-doubts/{$viewer->tenant_id}/{$viewer->id}/".uniqid().'.'.$extension;
+                Storage::disk('local')->put($diskPath, $bytes);
+
+                $query = PhotoDoubtQuery::create([
+                    'user_id' => $viewer->id,
+                    'course_id' => null,
+                    'image_disk_path' => $diskPath,
+                    'status' => 'pending',
+                    'channel' => 'whatsapp',
+                    'source_phone' => $phone,
+                ]);
+
+                // No immediate ack here — ProcessPhotoDoubtQuery's own
+                // notifyWhatsApp() sends the one reply once processing
+                // actually finishes (design's "reply sent once the job
+                // completes"), same single-reply shape the text/audio
+                // paths already have.
+                ProcessPhotoDoubtQuery::dispatch($query->id, $query->tenant_id);
+            } catch (Throwable) {
+                $this->comms->sendSessionMessage($phone, self::PHOTO_FAILED_REPLY);
+            }
+        });
+    }
+
+    /**
+     * No tenant subdomain to resolve from (this route is platform-wide) —
+     * rebind to the linked student's own tenant for the duration of
+     * $callback, then restore, same shape WhatsAppLinkService::verifyCode()
+     * and ParentInviteCodeService::redeem() already use inline.
+     */
+    private function runAsTenant(int $tenantId, Closure $callback): void
+    {
+        $currentTenant = app(CurrentTenant::class);
+        $previousTenant = $currentTenant->isBound() ? $currentTenant->get() : null;
+        $currentTenant->set(Tenant::findOrFail($tenantId));
+
+        try {
+            $callback();
+        } finally {
+            if ($previousTenant !== null) {
+                $currentTenant->set($previousTenant);
+            } else {
+                $currentTenant->clear();
+            }
+        }
+    }
+
     private function verifySignature(string $payload, string $signature): void
     {
         $secret = config('services.aisensy.webhook_secret');
@@ -140,15 +239,7 @@ class WhatsAppInboundMessageHandler
             return;
         }
 
-        // No tenant subdomain to resolve from (this route is platform-wide)
-        // — rebind to the linked student's own tenant for this call only,
-        // same restore-after shape WhatsAppLinkService::verifyCode() and
-        // ParentInviteCodeService::redeem() already use.
-        $currentTenant = app(CurrentTenant::class);
-        $previousTenant = $currentTenant->isBound() ? $currentTenant->get() : null;
-        $currentTenant->set(Tenant::findOrFail($link->tenant_id));
-
-        try {
+        $this->runAsTenant($link->tenant_id, function () use ($link, $phone, $question): void {
             $viewer = User::findOrFail($link->user_id);
             $chunks = $this->search->search($question, $viewer, $link->tenant_id);
 
@@ -167,12 +258,6 @@ class WhatsAppInboundMessageHandler
             $message->update(['channel' => 'whatsapp', 'source_phone' => $phone]);
 
             $this->comms->sendSessionMessage($phone, $message->answer);
-        } finally {
-            if ($previousTenant !== null) {
-                $currentTenant->set($previousTenant);
-            } else {
-                $currentTenant->clear();
-            }
-        }
+        });
     }
 }
