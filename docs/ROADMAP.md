@@ -15,8 +15,8 @@ regenerate it from this file.
 |---|---|
 | **Slices in the full plan** | 26 |
 | **Shipped** | 23 (S1–S23) |
-| **Designed, not built** | 0 |
-| **Proposed, not yet scoped** | 3 (S24–S26) |
+| **Designed, not built** | 1 (S24) |
+| **Proposed, not yet scoped** | 2 (S25–S26) |
 
 **Phase completion:**
 
@@ -63,17 +63,23 @@ Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-plat
 
 ---
 
-## Full roadmap — S24 onward (proposed)
+## S24 — WhatsApp-Native AI & Ops (designed, not built)
+
+Design + block-by-block plan written 2026-08-31, all 7 roadmap-pinned items
+(U19-U25) covered, none cut:
+`docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`,
+`...-plan.md` (15 blocks, B0-B14 — not yet started).
+
+## Full roadmap — S25 onward (proposed)
 
 **Not locked.** This is a first-pass grouping of every remaining backlog
 item into slice-sized chunks, so the whole plan is visible in one place.
 None of these have a real design/plan doc yet — that happens when each
-slice's turn comes, the same way S10-S23 were each shaped only once they
+slice's turn comes, the same way S10-S24 were each shaped only once they
 were picked, not decided years in advance.
 
 | Slice | Scope | Items | Draws from |
 |---|---|---|---|
-| S24 | WhatsApp-Native AI & Ops — WhatsApp doubt bot, voice-note doubts, photo doubt over WhatsApp, auto-scheduler, fee analytics, peer comparison | 7 | U19-U25 |
 | S25 | Mobile App: Core Shell — Capacitor shell, screen-record block, per-institute branding, offline downloads, camera/voice doubts, push | 6 | W1-W6 |
 | S26 | Mobile App: Build & Store — white-label build pipeline, store submission runbook, forced updates, background audio, biometric lock, iOS build | 6 | W7-W12 |
 

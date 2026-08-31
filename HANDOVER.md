@@ -7,6 +7,18 @@ at the source.
 
 ## Right now (2026-08-31)
 
+- **S24 — WhatsApp-Native AI & Ops: DESIGNED, NOT BUILT.** Design +
+  15-block plan written, all 7 roadmap-pinned items (U19-U25) covered, none
+  cut — `docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`,
+  `...-plan.md`. No blocks started yet; next session picks up at B0. Real
+  gaps confirmed before designing (not assumed): no inbound WhatsApp
+  webhook exists anywhere in this codebase today (outbound-only via
+  `CommsProvider::sendTemplate()`); phone numbers aren't unique across
+  tenants on this platform, so a new `whatsapp_links` table + one-time
+  linking-code flow resolves identity (design's own named limitation, not
+  hidden); U19-U21 all reuse existing `AiProvider`/`DoubtChatService`/
+  `PhotoDoubtQuery` engines as new entry points, no new AI subsystem.
+
 - **S23 — Coaching-Market Differentiators: COMPLETE, all 22 blocks (2026-08-30–31).**
   `docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,
   `...-plan.md` (full per-block build log lives there, not repeated here).
