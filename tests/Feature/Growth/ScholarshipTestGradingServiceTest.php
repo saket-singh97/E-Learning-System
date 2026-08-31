@@ -118,3 +118,32 @@ it('does not re-grade an already-graded registration', function () {
 
     expect((float) $regraded->score)->toBe(2.0);
 });
+
+it('draws the blueprint-configured question count from the linked quiz\'s own course pool', function () {
+    $this->test->quiz->update(['blueprint' => [['count' => 2]]]);
+
+    $drawn = $this->service->drawQuestions($this->test->fresh());
+
+    expect($drawn)->toHaveCount(2)
+        ->and(collect($drawn)->diff([$this->mcq->id, $this->numerical->id]))->toBeEmpty();
+});
+
+it('never draws a question from a different course', function () {
+    $otherCourse = Course::create(['title' => 'Chemistry', 'slug' => 'chemistry']);
+    Question::create([
+        'course_id' => $otherCourse->id,
+        'type' => 'mcq',
+        'stem' => 'Foreign',
+        'options' => ['A', 'B'],
+        'correct_answer' => 'A',
+        'difficulty' => 'easy',
+        'status' => 'approved',
+        'source' => 'manual',
+    ]);
+
+    $this->test->quiz->update(['blueprint' => [['count' => 10]]]);
+
+    $drawn = $this->service->drawQuestions($this->test->fresh());
+
+    expect($drawn)->toHaveCount(2);
+});

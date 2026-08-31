@@ -47,7 +47,7 @@ then stop and report before starting the next block.
 | B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ✅ done |
 | B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ✅ done |
 | B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ✅ done |
-| B20 | Multi-angle review pass over the whole slice's diff (same discipline S13-S22 B-final each used) | ⬜ not started |
+| B20 | Multi-angle review pass over the whole slice's diff (same discipline S13-S22 B-final each used) | ✅ done |
 | B21 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 **Test suite baseline:** carry forward S22's own closing count (1929+/1932+,
@@ -884,13 +884,105 @@ family every prior block's run already documented
 `DownloadEnrolmentExportControllerTest`/`DownloadCompletionExportControllerTest`
 order-flake sibling), none touching this block's two edited test files.
 
-### B20 — Multi-angle review pass
+### B20 — Multi-angle review pass ✅
 
-- [ ] Same discipline S13-S22's own closing review block each ran:
+- [x] Same discipline S13-S22's own closing review block each ran:
       correctness/convention pass + security/tenant-isolation pass over
       the whole slice's diff, independently.
-- [ ] Fix any real bugs found; document anything confirmed-clean-not-new
+- [x] Fix any real bugs found; document anything confirmed-clean-not-new
       the same way every prior slice's plan file did.
+
+Dispatched a 2-angle background-agent review pass over the whole slice's
+diff (`cb2158a..20853f5`, 20 commits) — correctness/convention angle and
+security/tenant-isolation angle, same S21/S22 pattern. Found and fixed 2
+real issues (one from each angle, independently converging on the same
+root cause):
+
+**1. U12's scholarship test was never actually a test — `grade()` had no
+caller anywhere in the app.** The registration flow (B12) only ever
+collected name/email/phone; nothing presented the linked `Quiz`'s
+questions or submitted `$answers`, so `ScholarshipTestGradingService::grade()`
+(B13) was reachable only from its own unit test, and B14's results view
+showed a permanent "Not graded" placeholder with no code path that could
+ever replace it. Fixed by wiring the missing step into
+`ScholarshipTestRegistrationForm` itself (no new route/page — same screen
+already at `/scholarship-tests/{id}/register`): a new
+`ScholarshipTestGradingService::drawQuestions()` duplicates
+`QuizAttemptService::draw()`'s blueprint-based selection (same
+cross-domain-service reason this class's own docblock already gives for
+`grade1()`'s dispatch — a service is not a model, so calling `draw()`
+directly would violate CLAUDE.md's domains-talk-through-Events rule),
+drawn once on successful registration and kept in the component's own
+Livewire state; the confirmation view now renders the drawn questions
+(same per-type input markup `quiz-runner.blade.php` already established)
+behind the test's own `opens_at`/`closes_at` window, and a new
+`submitAnswers()` action calls `grade()`. A submitted answer is filtered
+to only the questions actually drawn before grading (`array_intersect_key`)
+— closes the correctness reviewer's own secondary/latent finding that
+`grade()`'s course-wide pool scoping alone would otherwise let a tampered
+payload answer (and score) every approved question in the course, not
+just the ones this one test offered.
+
+**2. Hall-ticket hijack + registration overwrite via the unverified
+email-upsert idiom.** `ScholarshipTestRegistrationService::register()`
+(B12) mirrored `CourseInterestSignupService`'s own "repeat email updates
+the row" idiom — fine for a low-stakes interest signup, but this row now
+backs a real printed document (B17's hall ticket: name + QR-coded roll
+number). Submitting a victim's already-registered email with an
+attacker's own name would silently overwrite the victim's stored name,
+and — because the Livewire component exposed the hall-ticket download
+link and the test-taking form on *every* successful `submit()` call, not
+just a genuinely new one — hand the attacker a link to the victim's own
+hall ticket and let them answer the test in the victim's name. Fixed at
+two levels: `register()` now only fills `name`/`phone` when the row
+`! $registration->exists` (a repeat submission is still deduplicated at
+the DB level, just no longer trusted to overwrite what's already there);
+`ScholarshipTestRegistrationForm` now gates the hall-ticket link, the
+question form, and hall-ticket generation itself behind
+`$registration->wasRecentlyCreated` — same "no identity-carrying link
+across an unauthenticated page boundary" posture B11's
+`CourseInterestForm::watchDemo()` already established, applied here to a
+second, unnoticed instance of the same class of gap. A repeat submission
+now sees a neutral "already registered" message only.
+
+Reviewed and accepted as pre-existing, unrelated-to-this-fix, low-risk:
+`CourseInterestForm::watchDemo()`'s own demo-attendance flag can be set by
+anyone who knows a prospect's email (same root email-trust pattern as
+finding #2, flagged by the security agent as LOW/INFO) — this only skews
+`DemoConversionService`'s own read-only conversion metric, exposes no
+data, and matches design §4 decision 3's already-accepted trust model for
+this whole unauthenticated-prospect surface; not touched.
+
+Confirmed clean by both agents independently (no findings): all 5 new
+`BelongsToTenant` models registered in `TenantModelRegistry` with matching
+seed/update attributes; no raw SQL/`$guarded = []`/mass-assignment risk
+anywhere in the diff; every new domain controller reads route params via
+`$request->route()`, not a type-hinted scalar; `DownloadRankCardController`/
+`DownloadHallTicketController` both sit inside the strict `resolve.tenant`
+domain group so `findOrFail` is already tenant-scoped before either
+controller's own owner/staff or signed-URL check runs; `LessonAccess` stays
+the sole chokepoint for U13's demo bypass and U18's attendance gate; every
+other service/generator's locking, scoping, and query-not-event posture
+matched its own stated design decision on inspection.
+
+5 new/changed tests: `ScholarshipTestTakingTest.php` (4 new) — the test
+renders and scores a submitted answer, stays closed outside its own
+opens/closes window, ignores an answer for a question outside the drawn
+set, and a repeat submission under an already-registered email sees
+neither the hall ticket nor the test and leaves the original registrant's
+row untouched. 2 new cases in `ScholarshipTestGradingServiceTest.php` —
+`drawQuestions()` respects the blueprint's own count and never draws
+across a course boundary. 1 existing case in
+`ScholarshipTestRegistrationServiceTest.php` rewritten for the new
+no-overwrite-on-repeat semantics. `Growth`+`Assessments` domain suites
+253/253.
+
+`composer test`: 2025/2031. 6 failures — the same pre-existing/unrelated
+family every prior block's run already documented
+(`CourseSlugUniquenessTest`, `CalendarTest` x3 in Planner,
+`BackupConfigurationTest` in Support, the rotating
+`DownloadEnrolmentExportControllerTest`/`DownloadCompletionExportControllerTest`
+order-flake sibling), none touching this block's fixes.
 
 ### B21 — Lifecycle E2E + docs
 

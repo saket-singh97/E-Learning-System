@@ -3,6 +3,7 @@
 namespace App\Domains\Growth\Services;
 
 use App\Domains\Assessments\Models\Question;
+use App\Domains\Growth\Models\ScholarshipTest;
 use App\Domains\Growth\Models\ScholarshipTestRegistration;
 
 /**
@@ -28,6 +29,46 @@ use App\Domains\Growth\Models\ScholarshipTestRegistration;
  */
 class ScholarshipTestGradingService
 {
+    /**
+     * S23 B20 review-pass fix — the registration flow (B12) never actually
+     * presented this test's own questions, so `grade()` below had no
+     * caller anywhere in the app (found in independent review: U12 shipped
+     * as a lead-capture form, not a test). Draws this test's linked
+     * `Quiz.blueprint` the same way `QuizAttemptService::draw()` does for
+     * an enrolled attempt — duplicated, not called, for the identical
+     * cross-domain-service reason this class's own docblock already gives
+     * for `grade1()`'s dispatch. No previous-attempt avoidance (that
+     * method's own second parameter): a scholarship test is one-shot, no
+     * repeat-attempt concept exists for an unauthenticated prospect.
+     *
+     * @return array<int, int>
+     */
+    public function drawQuestions(ScholarshipTest $test): array
+    {
+        $quiz = $test->quiz;
+        $courseId = $quiz->lesson->section->course_id;
+        $drawn = [];
+
+        foreach ($quiz->blueprint as $line) {
+            $count = max(1, (int) ($line['count'] ?? 1));
+
+            $picked = Question::query()
+                ->where('course_id', $courseId)
+                ->where('status', 'approved')
+                ->whereNotIn('id', $drawn)
+                ->when(! empty($line['type']), fn ($query) => $query->where('type', $line['type']))
+                ->when(! empty($line['difficulty']), fn ($query) => $query->where('difficulty', $line['difficulty']))
+                ->when(! empty($line['concept']), fn ($query) => $query->where('concept', $line['concept']))
+                ->inRandomOrder()
+                ->take($count)
+                ->pluck('id');
+
+            $drawn = array_merge($drawn, $picked->all());
+        }
+
+        return $drawn;
+    }
+
     /**
      * Idempotent by returning the already-graded row unchanged, not by
      * throwing — same posture QuestionGenerator::fromSeedQuestions()/

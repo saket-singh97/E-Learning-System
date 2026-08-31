@@ -49,15 +49,20 @@ it('persists a new registration correctly', function () {
         ->and(ScholarshipTestRegistration::count())->toBe(1);
 });
 
-it('updates the existing row for a duplicate email on the same test instead of creating a second one', function () {
+it('deduplicates a repeat email on the same test without overwriting the original name/phone', function () {
     $this->service->register($this->test, 'Asha', 'asha@example.com', '1111111111');
-    $this->service->register($this->test, 'Asha Verma', 'asha@example.com', '2222222222');
+    $this->service->register($this->test, 'Someone Else', 'asha@example.com', '2222222222');
 
     expect(ScholarshipTestRegistration::count())->toBe(1);
 
+    // S23 B20 review-pass fix — a repeat submission under an
+    // already-registered email is deduplicated (no second row), but the
+    // first submission's own name/phone win: this row backs a printed
+    // hall ticket, and there's no way to verify a repeat submitter is the
+    // original registrant, not an attacker who guessed their email.
     $registration = ScholarshipTestRegistration::sole();
-    expect($registration->name)->toBe('Asha Verma')
-        ->and($registration->phone)->toBe('2222222222');
+    expect($registration->name)->toBe('Asha')
+        ->and($registration->phone)->toBe('1111111111');
 });
 
 it('allows the same email to register for two different scholarship tests', function () {
