@@ -34,7 +34,7 @@ then stop and report before starting the next block.
 | B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ✅ done |
 | B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ✅ done |
 | B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ✅ done |
-| B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ⬜ not started |
+| B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ✅ done |
 | B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ⬜ not started |
 | B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ⬜ not started |
 | B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ⬜ not started |
@@ -339,15 +339,32 @@ pre-existing baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest`
 x3, `BackupConfigurationTest`, both rotating export-controller
 order-flake siblings) — no new failures.
 
-### B7 — U23 pt.2: admin dashboard widget
+### B7 — U23 pt.2: admin dashboard widget ✅
 
-- [ ] `FeeAnalyticsWidget` (Admin panel) surfacing all 3 `FeeAnalyticsService`
+- [x] `FeeAnalyticsWidget` (Admin panel) surfacing all 3 `FeeAnalyticsService`
       numbers, same aggregate-only posture `InstituteOverviewWidget`/
       `BatchEngagementWidget` already establish (no per-student breakdown
       on this widget).
-- [ ] Tests: widget renders correct numbers for a real seeded tenant; a
+- [x] Tests: widget renders correct numbers for a real seeded tenant; a
       tenant with zero invoices shows 0%/empty state, not a divide-by-zero
       crash.
+
+**Build notes:** `app/Filament/Admin/Widgets/FeeAnalyticsWidget.php` —
+same directory `InstituteOverviewWidget` already lives in, so it's
+auto-discovered by `AdminPanelProvider`'s `discoverWidgets()`, no explicit
+`->widgets([...])` entry needed. Confirmed this codebase doesn't use
+Filament's own multi-tenancy feature at all (`Filament::getTenant()` has
+zero matches anywhere) — tenant access is `app(CurrentTenant::class)`,
+same as every other widget/Livewire component. Unlike
+`BatchEngagementWidget`'s two-tier empty-state text swap (needed because
+*that* service's own ratios could divide by zero), `FeeAnalyticsService`'s
+3 numbers are already divide-by-zero-safe at the service layer (B6) — a
+zero-invoice tenant just renders 0%/₹0.00/0 defaulters through the exact
+same `Stat::make()` calls, no special-cased branch needed in the widget
+itself. `composer test`: 2056/2063 passed; the 7 failures are all
+pre-existing baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest`
+x3, `BackupConfigurationTest`, both rotating export-controller
+order-flake siblings) — no new failures. This closes out U23.
 
 ### B8 — U24 pt.1: peer comparison service
 
