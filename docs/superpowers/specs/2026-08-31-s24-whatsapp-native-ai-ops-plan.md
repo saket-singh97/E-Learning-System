@@ -31,7 +31,7 @@ then stop and report before starting the next block.
 | B1 | U19 pt.2 — inbound webhook, phone-link verification, `SemanticSearchService`-resolved lesson → `DoubtChatService::ask()` → reply | ✅ done |
 | B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ✅ done |
 | B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ✅ done |
-| B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ⬜ not started |
+| B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ✅ done |
 | B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ⬜ not started |
 | B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ⬜ not started |
 | B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ⬜ not started |
@@ -226,20 +226,46 @@ flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
 `BackupConfigurationTest`, both rotating export-controller order-flake
 siblings) — no new failures.
 
-### B4 — U22 pt.1: auto-scheduler proposal engine
+### B4 — U22 pt.1: auto-scheduler proposal engine ✅
 
-- [ ] `AutoSchedulerService::propose(Batch $batch, int $sessionCount):
+- [x] `AutoSchedulerService::propose(Batch $batch, int $sessionCount):
       array` — for each of `$sessionCount` unscheduled sessions, proposes a
       `{teacher, room, day_of_week, time}` candidate, checking each against
       `TeacherConflictDetector::wouldConflict()` across every batch's real
       sessions (not persisted — design §4 decision 5, §2.3).
-- [ ] Room-limit constraint: confirm how "room" is currently modeled in
+- [x] Room-limit constraint: confirm how "room" is currently modeled in
       this codebase (a `BatchSession` field? Not modeled at all today?) —
       real gap-check before assuming a column exists.
-- [ ] Tests: two batches sharing a teacher never get proposed overlapping
+- [x] Tests: two batches sharing a teacher never get proposed overlapping
       slots; a batch with no room-limit configured (if rooms aren't
       currently modeled) documented as an accepted v1 gap, not silently
       wrong.
+
+**Build notes:** confirmed rooms are genuinely unmodeled — grepping the
+whole Batches domain (models + migrations) found no physical-room/location
+column or model anywhere; `BatchSession`'s only "room" fields
+(`room_created_at`, `createLiveRoom()`) are the virtual live-class meeting
+room, an unrelated concept. Every proposed candidate carries `room => null`
+always — the accepted v1 gap, documented in the service's own docblock
+rather than silently dropped from the candidate shape. `propose()` cycles
+through the tenant's own `TimetableTemplate` rows (the only reusable
+weekly-slot shape this codebase has — the same source
+`BatchSessionsRelationManager`'s "prefill from template" field already
+reads), computing each template's next calendar occurrence the identical
+way that relation manager's own `afterStateUpdated()` callback does
+(`Carbon::now()->next($day)->setTimeFrom($time)`), advancing a template's
+cursor by a week each time it's used or found conflicting — bounded to 8
+attempts per template so a fully-booked teacher returns fewer than
+`$sessionCount` candidates rather than looping forever. `teacher` is
+always `$batch->instructor_id` (confirmed `BatchSession` has no
+teacher/instructor column of its own — the single-instructor-per-batch
+model this whole domain already has). Added a small in-memory overlap
+check for candidates proposed within the *same* call, since
+`TeacherConflictDetector::wouldConflict()` only sees persisted rows and
+can't catch two of this call's own not-yet-saved proposals colliding with
+each other. `composer test`: 2050/2055 passed; the 5 failures are all
+pre-existing baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest`
+x3, `BackupConfigurationTest`) — no new failures.
 
 ### B5 — U22 pt.2: admin review + accept UI
 
