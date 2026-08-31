@@ -2,6 +2,7 @@
 
 use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAttempt;
+use App\Domains\Assessments\Models\RankCard;
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
@@ -88,4 +89,22 @@ it('shows a not-yet-attempted message rather than a rank for a student with no s
     Livewire::actingAs($notYetAttempted)
         ->test(TestSeriesResults::class, ['series' => $this->series])
         ->assertSee('submitted any attempt');
+});
+
+it('shows a download link once a rank card has been generated', function () {
+    RankCard::create([
+        'test_series_id' => $this->series->id,
+        'user_id' => $this->student->id,
+        'pdf_path' => 'rank-cards/row.pdf',
+    ]);
+
+    Livewire::actingAs($this->student)
+        ->test(TestSeriesResults::class, ['series' => $this->series])
+        ->assertSee('Download rank card');
+});
+
+it('shows no download link before a rank card has been generated', function () {
+    Livewire::actingAs($this->student)
+        ->test(TestSeriesResults::class, ['series' => $this->series])
+        ->assertDontSee('Download rank card');
 });

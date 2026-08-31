@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Domains\Assessments\Models\RankCard;
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Assessments\Services\TestSeriesRankingService;
 use Illuminate\Contracts\View\View;
@@ -31,18 +32,26 @@ class TestSeriesResults extends Component
         $ownRow = null;
         $topScore = null;
         $totalParticipants = 0;
+        $rankCard = null;
 
         if ($viewer !== null) {
             $rankings = app(TestSeriesRankingService::class)->rankingsFor($this->series, $viewer);
             $totalParticipants = $rankings->count();
             $topScore = $rankings->first()['total_score'] ?? null;
             $ownRow = $rankings->firstWhere('user_id', $viewer->id);
+
+            if ($ownRow !== null) {
+                $rankCard = RankCard::where('test_series_id', $this->series->id)
+                    ->where('user_id', $viewer->id)
+                    ->first();
+            }
         }
 
         return view('livewire.test-series-results', [
             'ownRow' => $ownRow,
             'topScore' => $topScore,
             'totalParticipants' => $totalParticipants,
+            'rankCard' => $rankCard,
         ]);
     }
 }

@@ -3,6 +3,7 @@
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Content\Models\Course;
 use App\Http\Controllers\Assessments\DownloadOmrTemplateController;
+use App\Http\Controllers\Assessments\DownloadRankCardController;
 use App\Http\Controllers\Assessments\ShowQuizController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +25,13 @@ Route::get('/test-series/{series}/results', function (Request $request) {
 
     return view('assessments.test-series-results', ['series' => $series]);
 })->middleware(['auth'])->name('test-series.results');
+
+// S23 B16 (U15 pt.2) — student-owned PDF, same DownloadInvoiceController
+// owner-or-staff gating shape (design §5 "gated the same as any other
+// student-owned PDF").
+Route::get('/rank-cards/{rankCard}/download', DownloadRankCardController::class)
+    ->middleware(['auth'])
+    ->name('rank-cards.download');
 
 // S23 B6 — same "add a small host route" shape as routes/content.php's own
 // course-section.formula-sheet. Question belongs to a course, not a batch

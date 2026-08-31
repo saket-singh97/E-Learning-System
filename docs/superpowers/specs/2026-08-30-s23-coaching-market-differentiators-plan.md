@@ -43,7 +43,7 @@ then stop and report before starting the next block.
 | B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ✅ done |
 | B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ✅ done |
 | B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ✅ done |
-| B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ⬜ not started |
+| B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ✅ done |
 | B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ⬜ not started |
 | B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ⬜ not started |
 | B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
@@ -666,13 +666,62 @@ the known `DownloadCompletionExportControllerTest` order-flake sibling B3's
 own run already documented), none touching Assessments/Filament code this
 block changed.
 
-### B16 — U15 pt.2: rank card delivery
+### B16 — U15 pt.2: rank card delivery ✅
 
-- [ ] Student-facing download link on the test series results page; Admin
+- [x] Student-facing download link on the test series results page; Admin
       bulk-view/regenerate action.
-- [ ] Gated the same as any other student-owned PDF (`CertificateService`'s
+- [x] Gated the same as any other student-owned PDF (`CertificateService`'s
       posture) — only the owning student or staff can download.
-- [ ] Tests: cross-student download attempt denied.
+- [x] Tests: cross-student download attempt denied.
+
+`DownloadRankCardController` (`GET /rank-cards/{rankCard}/download`, plain
+non-Filament route in `routes/assessments.php`) is a line-for-line mirror
+of `DownloadInvoiceController`'s own owner-or-staff gate — closer precedent
+than `CertificateService` itself, which has no download controller
+(verify-only). Role alone isn't the gate: Spatie roles carry no `tenant_id`,
+so the check is `$rankCard->user_id === $viewer->id ||
+($viewer->hasAnyRole(['instructor','institute_admin']) &&
+$viewer->tenant_id === $rankCard->tenant_id)` — same cross-tenant-staff
+finding class `DownloadInvoiceController`'s own docblock documents.
+`{rankCard}` read off `$request->route()`, not method-injected (CLAUDE.md's
+domain-route splicing gotcha).
+
+Student-facing: `TestSeriesResults` (the existing S16 B13 Livewire
+component embedded on the `test-series.results` page) now also looks up
+the viewer's own `RankCard` for the series and renders a "Download rank
+card" link when one exists — absent otherwise, no dead link before a card
+is generated. Every `route()` call to a `Route::domain()`-scoped named
+route in this app needs an explicit `subdomain` key (confirmed against
+`syllabus-tree.blade.php`'s own `route('lessons.watch', ['subdomain' =>
+...])` calls) — missed on the first pass here too (caught by the test
+suite, fixed before commit).
+
+Admin: new `RankCardsRelationManager` on `TestSeriesResource` (added
+`TestSeries::rankCards()` hasMany) — browse-only list (student, email,
+generated date) plus a header action "Generate/regenerate all rank cards"
+that loops every `TestSeriesRankingService::rankingsFor()` participant and
+calls `RankCardGenerator::generate()` for each; safe to click repeatedly
+since `generate()` itself already overwrites-not-duplicates (B15, design
+§4 decision 8). Each row also has a same-tab "download" action reusing the
+identical gated controller (an admin passes the staff branch of the same
+check).
+
+6 new tests (`DownloadRankCardControllerTest.php`): 404 before the PDF
+exists on disk, owning student downloads, a **different** student is
+forbidden (the plan's own "cross-student download attempt denied" case),
+this tenant's `institute_admin` can download any student's card, a
+different tenant's `institute_admin` is forbidden. 2 new tests appended to
+`TestSeriesResultsTest.php`: link shown once a card exists, absent before.
+2 new tests (`RankCardsRelationManagerTest.php`): header action generates
+one card per participant tenant-scoped; the relation table lists exactly
+those cards. `Assessments` domain suite 176/176; `CrossTenantTest` 106/106
+(no new tenant model this block).
+
+`composer test`: 2009/2015. 6 failures — the same pre-existing/unrelated
+family as every prior block's run (`CourseSlugUniquenessTest`,
+`CalendarTest` x3 in Planner, `BackupConfigurationTest` in Support,
+`DownloadCompletionExportControllerTest` order-flake), none touching
+Assessments/Filament/routes code this block changed.
 
 ### B17 — U14: hall ticket / admit card
 

@@ -35,4 +35,9 @@ class TestSeries extends Model
     {
         return $this->hasMany(Quiz::class);
     }
+
+    public function rankCards(): HasMany
+    {
+        return $this->hasMany(RankCard::class);
+    }
 }

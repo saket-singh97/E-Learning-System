@@ -5,6 +5,7 @@ namespace App\Domains\Assessments\Filament\Resources\TestSeries;
 use App\Domains\Assessments\Filament\Resources\TestSeries\Pages\CreateTestSeries;
 use App\Domains\Assessments\Filament\Resources\TestSeries\Pages\EditTestSeries;
 use App\Domains\Assessments\Filament\Resources\TestSeries\Pages\ListTestSeries;
+use App\Domains\Assessments\Filament\Resources\TestSeries\RelationManagers\RankCardsRelationManager;
 use App\Domains\Assessments\Models\TestSeries as TestSeriesModel;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -63,6 +64,13 @@ class TestSeriesResource extends Resource
                 EditAction::make(),
                 DeleteAction::make(),
             ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            RankCardsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

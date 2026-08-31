@@ -10,5 +10,8 @@
         @if ($topScore !== null)
             <p>Gap to topper: {{ round($topScore - $ownRow['total_score'], 2) }}</p>
         @endif
+        @if ($rankCard !== null)
+            <p><a href="{{ route('rank-cards.download', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'rankCard' => $rankCard->id]) }}">Download rank card</a></p>
+        @endif
     @endif
 </div>
