@@ -2,6 +2,7 @@
 
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Content\Models\Course;
+use App\Http\Controllers\Assessments\DownloadHallTicketController;
 use App\Http\Controllers\Assessments\DownloadOmrTemplateController;
 use App\Http\Controllers\Assessments\DownloadRankCardController;
 use App\Http\Controllers\Assessments\ShowQuizController;
@@ -32,6 +33,13 @@ Route::get('/test-series/{series}/results', function (Request $request) {
 Route::get('/rank-cards/{rankCard}/download', DownloadRankCardController::class)
     ->middleware(['auth'])
     ->name('rank-cards.download');
+
+// S23 B17 (U14) — no 'auth', a scholarship-test registrant has no User row
+// (design §4 decision 2). 'signed'-only, same DownloadCalendarFeedController
+// posture.
+Route::get('/hall-tickets/{hallTicket}/download', DownloadHallTicketController::class)
+    ->middleware(['signed'])
+    ->name('hall-tickets.download');
 
 // S23 B6 — same "add a small host route" shape as routes/content.php's own
 // course-section.formula-sheet. Question belongs to a course, not a batch

@@ -44,7 +44,7 @@ then stop and report before starting the next block.
 | B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ✅ done |
 | B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ✅ done |
 | B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ✅ done |
-| B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ⬜ not started |
+| B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ✅ done |
 | B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ⬜ not started |
 | B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
 | B20 | Multi-angle review pass over the whole slice's diff (same discipline S13-S22 B-final each used) | ⬜ not started |
@@ -723,18 +723,82 @@ family as every prior block's run (`CourseSlugUniquenessTest`,
 `DownloadCompletionExportControllerTest` order-flake), none touching
 Assessments/Filament/routes code this block changed.
 
-### B17 — U14: hall ticket / admit card
+### B17 — U14: hall ticket / admit card ✅
 
-- [ ] `hall_tickets` migration + model (Assessments), registered in
+- [x] `hall_tickets` migration + model (Assessments), registered in
       `TenantModelRegistry`.
-- [ ] `HallTicketGenerator` — one per `ScholarshipTestRegistration`, roll
+- [x] `HallTicketGenerator` — one per `ScholarshipTestRegistration`, roll
       number assigned on first generation (sequential per test, not
       globally), QR baked in as base64 PNG (same as `IdCardGenerator`'s
       QR, not `Certificate`'s inline-SVG — design §2.2 precedent), same
       transaction+lock guard as B15.
-- [ ] Download link on the registration confirmation page.
-- [ ] Tests: roll numbers unique and sequential per test; regenerating
+- [x] Download link on the registration confirmation page.
+- [x] Tests: roll numbers unique and sequential per test; regenerating
       keeps the same roll number.
+
+Migration `2026_08_31_100000_create_hall_tickets_table.php` — `tenant_id`,
+`scholarship_test_registration_id`, `roll_number`, `pdf_path`, unique on
+`scholarship_test_registration_id` (design §3.2). `HallTicket` model lives
+in **Assessments** per design §3.1's own domain table, even though its FK
+points at Growth's `ScholarshipTestRegistration` — a deliberate cross-domain
+model read, the same class of precedent `Question::lesson()` already
+established (Assessments -> Content), just pointed the other way this
+time. `ScholarshipTestRegistration` gained a `hallTicket()` hasOne.
+Registered in `TenantModelRegistry`.
+
+`HallTicketGenerator::generate()` reuses `IdCardGenerator`'s exact dompdf +
+base64-QR-PNG shape (`Endroid\QrCode`, design §2.2's own precedent — not
+`Certificate`'s inline-SVG QR, a different rendering context). Unlike
+`RankCardGenerator`'s overwrite-on-regenerate (B15), a hall ticket is
+idempotent on repeat call — same posture `IdCardGenerator` itself takes,
+since a roll number, once printed and carried to an exam hall, must never
+change under the registrant. Roll numbers are sequential *per test*
+(`"{scholarship_test_id}-{sequence:04d}"`), which needs a coarser lock than
+`IdCardGenerator`'s own per-enrolment one: two registrations of the *same*
+test generating concurrently would otherwise race on the same next
+sequence number. This locks the parent `ScholarshipTest` row inside the
+transaction — the identical "lock the parent that scopes the sequence"
+idiom `RankCardGenerator` (B15) already used for `TestSeries` — which also
+serializes the existing-row idempotency check for any single registration.
+
+Delivery: `DownloadHallTicketController` (`GET
+/hall-tickets/{hallTicket}/download`, `signed`-middleware-only, no `auth`)
+— a scholarship-test registrant has no `User` row at all (design §4
+decision 2), so there's no session-based owner check to fall back to,
+unlike B16's `DownloadRankCardController`. `URL::signedRoute()`, not
+`temporarySignedRoute()` — same no-expiry reasoning
+`DownloadCalendarFeedController` already established: the link is handed
+once on the registration confirmation page with no delivery channel (no
+WhatsApp job, no email) to refresh it later, so it has to keep working
+whenever the registrant returns to print it before the exam.
+`ScholarshipTestRegistrationForm::submit()` (B12) now also calls
+`HallTicketGenerator::generate()` right after registering — a hall ticket
+is issued at registration time, not on demand later, since there's no
+login for a prospect to come back and trigger generation themselves — and
+`render()` exposes the signed download URL once one exists, surfaced as a
+"Download your hall ticket" link on the same confirmation view B11's demo
+button already established the shape for.
+
+9 new tests: `HallTicketGeneratorTest.php` (3) — PDF + row with a QR-baked
+roll number, roll numbers sequential per test and independently restarting
+at 1 for a different test (the plan's own "not globally" case), regenerate
+keeps the same roll number and row count stays 1;
+`DownloadHallTicketControllerTest.php` (4) — valid signed URL downloads
+with no auth, an unsigned request is forbidden, a tampered signature is
+forbidden, 404 if the PDF is missing from disk; 1 new case appended to
+`ScholarshipTestRegistrationPageTest.php` — the confirmation view shows the
+download link and the registration's own `hallTicket` relation resolves.
+`CrossTenantTest` 107/107 (`HallTicket` newly registered, count up from
+106). `Growth`+`Assessments` domain suites 245/245.
+
+`composer test`: 2017/2023. 6 failures — the same pre-existing/unrelated
+family as every prior block's run (`CourseSlugUniquenessTest`,
+`CalendarTest` x3 in Planner, `BackupConfigurationTest` in Support, plus
+the known order-flake sibling — `DownloadEnrolmentExportControllerTest`
+this run, `DownloadCompletionExportControllerTest`/
+`DownloadEnrolmentExportControllerTest` rotate across runs, same family
+B3/B16 already documented), none touching Assessments/Growth code this
+block changed.
 
 ### B18 — TenantModelRegistry sweep
 

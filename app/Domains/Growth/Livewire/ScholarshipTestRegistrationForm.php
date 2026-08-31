@@ -2,9 +2,13 @@
 
 namespace App\Domains\Growth\Livewire;
 
+use App\Domains\Assessments\Services\HallTicketGenerator;
 use App\Domains\Growth\Models\ScholarshipTest;
+use App\Domains\Growth\Models\ScholarshipTestRegistration;
 use App\Domains\Growth\Services\ScholarshipTestRegistrationService;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\URL;
 use Livewire\Component;
 
 /**
@@ -24,6 +28,8 @@ class ScholarshipTestRegistrationForm extends Component
 
     public bool $submitted = false;
 
+    public ?int $registrationId = null;
+
     public function mount(int $scholarshipTestId): void
     {
         $this->scholarshipTestId = $scholarshipTestId;
@@ -39,18 +45,39 @@ class ScholarshipTestRegistrationForm extends Component
 
         $test = ScholarshipTest::findOrFail($this->scholarshipTestId);
 
-        app(ScholarshipTestRegistrationService::class)->register(
+        $registration = app(ScholarshipTestRegistrationService::class)->register(
             $test,
             $this->name,
             $this->email,
             $this->phone !== '' ? $this->phone : null,
         );
 
+        // S23 B17 (U14) — a hall ticket is issued at registration time, not
+        // on demand later, since a prospect has no login to come back and
+        // trigger generation themselves.
+        app(HallTicketGenerator::class)->generate($registration);
+
+        $this->registrationId = $registration->id;
         $this->submitted = true;
     }
 
     public function render(): View
     {
-        return view('growth::scholarship-test-registration-form');
+        $hallTicketDownloadUrl = null;
+
+        if ($this->registrationId !== null) {
+            $hallTicket = ScholarshipTestRegistration::findOrFail($this->registrationId)->hallTicket;
+
+            if ($hallTicket !== null) {
+                $hallTicketDownloadUrl = URL::signedRoute('hall-tickets.download', [
+                    'subdomain' => app(CurrentTenant::class)->get()->subdomain,
+                    'hallTicket' => $hallTicket->id,
+                ]);
+            }
+        }
+
+        return view('growth::scholarship-test-registration-form', [
+            'hallTicketDownloadUrl' => $hallTicketDownloadUrl,
+        ]);
     }
 }

@@ -2,9 +2,11 @@
 
 namespace App\Domains\Growth\Models;
 
+use App\Domains\Assessments\Models\HallTicket;
 use App\Support\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * A prospect isn't a user yet, so this takes a bare name/email/phone, no
@@ -33,5 +35,10 @@ class ScholarshipTestRegistration extends Model
     public function scholarshipTest(): BelongsTo
     {
         return $this->belongsTo(ScholarshipTest::class);
+    }
+
+    public function hallTicket(): HasOne
+    {
+        return $this->hasOne(HallTicket::class);
     }
 }

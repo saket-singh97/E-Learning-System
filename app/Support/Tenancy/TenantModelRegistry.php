@@ -25,6 +25,7 @@ use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Models\QuizProctoringEvent;
 use App\Domains\Assessments\Models\OmrSheetScan;
 use App\Domains\Assessments\Models\OmrTemplate;
+use App\Domains\Assessments\Models\HallTicket;
 use App\Domains\Assessments\Models\RankCard;
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Assignments\Models\Assignment;
@@ -225,6 +226,7 @@ class TenantModelRegistry
         ScholarshipTest::class,
         ScholarshipTestRegistration::class,
         RankCard::class,
+        HallTicket::class,
     ];
 
     /**
@@ -1399,6 +1401,35 @@ class TenantModelRegistry
                 'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
                 'pdf_path' => 'rank-cards/row.pdf',
             ],
+            HallTicket::class => [
+                'scholarship_test_registration_id' => ScholarshipTestRegistration::create([
+                    'scholarship_test_id' => ScholarshipTest::create([
+                        'title' => 'Parent Scholarship Test',
+                        'quiz_id' => Quiz::create([
+                            'lesson_id' => Lesson::create([
+                                'course_section_id' => CourseSection::create([
+                                    'course_id' => Course::create(['title' => 'Parent', 'slug' => 'parent-'.uniqid()])->id,
+                                    'title' => 'Parent',
+                                    'position' => 0,
+                                ])->id,
+                                'title' => 'Parent',
+                                'type' => 'quiz',
+                                'position' => 0,
+                            ])->id,
+                            'title' => 'Parent Quiz',
+                            'blueprint' => [],
+                            'time_limit_minutes' => 30,
+                            'max_attempts' => 3,
+                        ])->id,
+                        'opens_at' => now(),
+                        'closes_at' => now()->addWeek(),
+                    ])->id,
+                    'name' => 'Row Prospect',
+                    'email' => 'row-'.uniqid().'@example.com',
+                ])->id,
+                'roll_number' => '1-0001',
+                'pdf_path' => 'hall-tickets/row.pdf',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1522,6 +1553,7 @@ class TenantModelRegistry
             ScholarshipTest::class => ['title' => 'tampered'],
             ScholarshipTestRegistration::class => ['name' => 'tampered'],
             RankCard::class => ['pdf_path' => 'tampered.pdf'],
+            HallTicket::class => ['roll_number' => 'tampered'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

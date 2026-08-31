@@ -1,6 +1,9 @@
 <div>
     @if ($submitted)
         <p>Thanks — you're registered for the scholarship test.</p>
+        @if ($hallTicketDownloadUrl !== null)
+            <p><a href="{{ $hallTicketDownloadUrl }}">Download your hall ticket</a></p>
+        @endif
     @else
         <form wire:submit="submit">
             <input type="text" wire:model="name" placeholder="Your name">

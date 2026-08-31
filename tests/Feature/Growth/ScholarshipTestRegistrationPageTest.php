@@ -10,11 +10,13 @@ use App\Domains\Growth\Models\ScholarshipTestRegistration;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
 it('lets a guest open the scholarship-test registration page and sign up', function () {
+    Storage::fake('local');
     $tenant = Tenant::factory()->create(['subdomain' => 'physics']);
     app(CurrentTenant::class)->set($tenant);
 
@@ -44,7 +46,9 @@ it('lets a guest open the scholarship-test registration page and sign up', funct
         ->set('name', 'Guest Prospect')
         ->set('email', 'guest@example.com')
         ->call('submit')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertSee('Download your hall ticket');
 
     expect(ScholarshipTestRegistration::sole()->email)->toBe('guest@example.com');
+    expect(ScholarshipTestRegistration::sole()->hallTicket)->not->toBeNull();
 });
