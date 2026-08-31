@@ -32,7 +32,7 @@ then stop and report before starting the next block.
 | B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ✅ done |
 | B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ✅ done |
 | B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ✅ done |
-| B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ⬜ not started |
+| B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ✅ done |
 | B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ⬜ not started |
 | B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ⬜ not started |
 | B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ⬜ not started |
@@ -267,17 +267,41 @@ each other. `composer test`: 2050/2055 passed; the 5 failures are all
 pre-existing baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest`
 x3, `BackupConfigurationTest`) — no new failures.
 
-### B5 — U22 pt.2: admin review + accept UI
+### B5 — U22 pt.2: admin review + accept UI ✅
 
-- [ ] Admin-panel action on `BatchResource`/`EditBatch`: "Auto-schedule
+- [x] Admin-panel action on `BatchResource`/`EditBatch`: "Auto-schedule
       remaining sessions" → lists `AutoSchedulerService::propose()`'s
       candidates, one row per proposed session, each with an "Accept"
       button that submits through the *existing*
       `BatchSessionsRelationManager` create action (prefill-from-template
       shape, S15 B3-B4) — no new persistence path.
-- [ ] Tests: accepting a proposed slot creates a real `BatchSession` row
+- [x] Tests: accepting a proposed slot creates a real `BatchSession` row
       identical in shape to one created through the pre-existing manual
       flow; rejecting/skipping a proposal writes nothing.
+
+**Build notes:** built as `BatchResource::autoScheduleAction()`, a table
+row action alongside the existing `geofenceAction()` (same admin-panel-only
+exclusion from the `teach` panel's action array, same `fillForm`/`schema`/
+`action` shape) — no dedicated `EditBatch` header action needed since this
+codebase's own "small modal on the resource" precedent already lives at
+this exact level. No prior precedent existed anywhere in this Filament
+admin for a computed (non-Eloquent) candidate list reviewed inside a
+modal, so this is the first: a `Repeater` fed `AutoSchedulerService::propose()`'s
+output (mapped to plain arrays via a `proposalCandidates()` helper),
+each item a per-row `Toggle` (default checked) plus the slot's own
+read-only `Placeholder` display — changing the `session_count` field
+(`->live()`) recomputes the repeater's candidates. `->action()` loops the
+submitted candidates and creates a `BatchSession` per accepted one via the
+exact same `BatchSession::create()` + `position = max('position') + 1`
+shape `BatchSessionsRelationManager`'s own `CreateAction::make()->mutateFormDataUsing()`
+already uses — a skipped/unchecked candidate is simply never created, no
+new persistence path. The action itself is hidden entirely when the
+tenant has no `TimetableTemplate` rows (nothing `propose()` could ever
+return, same `AutoSchedulerService`-confirmed empty-state from B4).
+`composer test`: 2050/2057 passed; the 7 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
+`BackupConfigurationTest`, both rotating export-controller order-flake
+siblings) — no new failures.
 
 ### B6 — U23 pt.1: fee analytics service
 

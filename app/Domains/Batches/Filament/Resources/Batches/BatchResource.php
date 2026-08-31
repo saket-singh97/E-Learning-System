@@ -10,6 +10,9 @@ use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\EnrolmentsRe
 use App\Domains\Batches\Filament\Resources\Batches\RelationManagers\FeedbackRelationManager;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchGeofence;
+use App\Domains\Batches\Models\BatchSession;
+use App\Domains\Batches\Models\TimetableTemplate;
+use App\Domains\Batches\Services\AutoSchedulerService;
 use App\Domains\Content\Models\Course;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -21,6 +24,8 @@ use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -230,6 +235,7 @@ class BatchResource extends Resource
                 EditAction::make(),
                 ...(Filament::getCurrentPanel()?->getId() === 'teach' ? [] : [
                     static::geofenceAction(),
+                    static::autoScheduleAction(),
                     DeleteAction::make(),
                     ForceDeleteAction::make(),
                     RestoreAction::make(),
@@ -285,6 +291,87 @@ class BatchResource extends Resource
                     ],
                 );
             });
+    }
+
+    /**
+     * S24 B5 (U22 pt.2) — reviews `AutoSchedulerService::propose()`'s
+     * in-memory candidates (S24 B4, never persisted by that service
+     * itself) then writes the accepted ones through the *same*
+     * position-auto-increment shape `BatchSessionsRelationManager`'s own
+     * `CreateAction` already uses — no new persistence path, same
+     * `BatchSession::create()` this whole domain already writes through.
+     * A skipped/unaccepted candidate is simply never created. Admin-panel
+     * only, same instructor/admin split every other action in this array
+     * already draws.
+     */
+    protected static function autoScheduleAction(): Action
+    {
+        return Action::make('autoSchedule')
+            ->label('Auto-schedule remaining sessions')
+            ->visible(fn (): bool => TimetableTemplate::query()->exists())
+            ->fillForm(fn (Batch $record): array => [
+                'session_count' => 4,
+                'candidates' => static::proposalCandidates($record, 4),
+            ])
+            ->schema([
+                TextInput::make('session_count')
+                    ->label('How many sessions to propose')
+                    ->numeric()
+                    ->minValue(1)
+                    ->maxValue(20)
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function (?string $state, callable $set, Batch $record): void {
+                        $set('candidates', static::proposalCandidates($record, (int) $state));
+                    }),
+                Repeater::make('candidates')
+                    ->label('Proposed sessions — uncheck any you don\'t want')
+                    ->schema([
+                        Toggle::make('accept')->label('Accept')->default(true),
+                        Placeholder::make('when_display')
+                            ->label('When')
+                            ->content(fn (callable $get): string => $get('when')),
+                        Hidden::make('when'),
+                        Hidden::make('starts_at'),
+                        Hidden::make('duration_minutes'),
+                    ])
+                    ->columns(2)
+                    ->addable(false)
+                    ->deletable(false)
+                    ->reorderable(false)
+                    ->default([]),
+            ])
+            ->action(function (Batch $record, array $data): void {
+                foreach ($data['candidates'] ?? [] as $candidate) {
+                    if (! ($candidate['accept'] ?? false)) {
+                        continue;
+                    }
+
+                    $position = (int) BatchSession::where('batch_id', $record->id)->max('position') + 1;
+
+                    BatchSession::create([
+                        'batch_id' => $record->id,
+                        'starts_at' => $candidate['starts_at'],
+                        'duration_minutes' => $candidate['duration_minutes'],
+                        'position' => $position,
+                    ]);
+                }
+            });
+    }
+
+    /**
+     * @return array<int, array{accept: bool, when: string, starts_at: string, duration_minutes: int}>
+     */
+    protected static function proposalCandidates(Batch $record, int $sessionCount): array
+    {
+        return app(AutoSchedulerService::class)->propose($record, max(1, $sessionCount))
+            ->map(fn (array $proposal): array => [
+                'accept' => true,
+                'when' => TimetableTemplate::DAYS_OF_WEEK[$proposal['day_of_week']].' '.$proposal['starts_at']->format('Y-m-d H:i'),
+                'starts_at' => $proposal['starts_at']->format('Y-m-d H:i:s'),
+                'duration_minutes' => $proposal['duration_minutes'],
+            ])
+            ->all();
     }
 
     public static function getRelations(): array

@@ -6,6 +6,9 @@ use App\Domains\Batches\Filament\Resources\Batches\Pages\EditBatch;
 use App\Domains\Batches\Filament\Resources\Batches\Pages\ListBatches;
 use App\Domains\Batches\Models\Batch;
 use App\Domains\Batches\Models\BatchGeofence;
+use App\Domains\Batches\Models\BatchSession;
+use App\Domains\Batches\Models\TimetableTemplate;
+use App\Domains\Batches\Services\AutoSchedulerService;
 use App\Domains\Content\Models\Course;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -285,4 +288,72 @@ it('updates an existing geofence rather than creating a duplicate', function () 
 
     expect(BatchGeofence::where('batch_id', $batch->id)->count())->toBe(1);
     expect(BatchGeofence::where('batch_id', $batch->id)->sole()->radius_meters)->toBe(200);
+});
+
+// S24 B5 (U22 pt.2) — auto-schedule review/accept table action.
+it('accepts a proposed auto-schedule slot and creates a real BatchSession row', function () {
+    TimetableTemplate::create(['title' => 'Mon 4pm', 'day_of_week' => 1, 'starts_at' => '16:00:00', 'duration_minutes' => 60]);
+
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'title' => 'Auto Batch',
+        'slug' => 'auto-batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    $proposal = app(AutoSchedulerService::class)->propose($batch, 1)->first();
+
+    Livewire::test(ListBatches::class)
+        ->callTableAction('autoSchedule', $batch, data: [
+            'session_count' => 1,
+            'candidates' => [
+                [
+                    'accept' => true,
+                    'when' => 'irrelevant display text',
+                    'starts_at' => $proposal['starts_at']->format('Y-m-d H:i:s'),
+                    'duration_minutes' => $proposal['duration_minutes'],
+                ],
+            ],
+        ]);
+
+    $session = BatchSession::where('batch_id', $batch->id)->sole();
+    expect($session->tenant_id)->toBe($this->tenant->id)
+        ->and($session->duration_minutes)->toBe(60)
+        ->and($session->position)->toBe(1)
+        ->and($session->lesson_id)->toBeNull()
+        ->and($session->starts_at->format('Y-m-d H:i:s'))->toBe($proposal['starts_at']->format('Y-m-d H:i:s'));
+});
+
+it('writes no BatchSession when every proposed auto-schedule slot is rejected', function () {
+    TimetableTemplate::create(['title' => 'Mon 4pm', 'day_of_week' => 1, 'starts_at' => '16:00:00', 'duration_minutes' => 60]);
+
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'title' => 'Skipped Batch',
+        'slug' => 'skipped-batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    $proposal = app(AutoSchedulerService::class)->propose($batch, 1)->first();
+
+    Livewire::test(ListBatches::class)
+        ->callTableAction('autoSchedule', $batch, data: [
+            'session_count' => 1,
+            'candidates' => [
+                [
+                    'accept' => false,
+                    'when' => 'irrelevant display text',
+                    'starts_at' => $proposal['starts_at']->format('Y-m-d H:i:s'),
+                    'duration_minutes' => $proposal['duration_minutes'],
+                ],
+            ],
+        ]);
+
+    expect(BatchSession::where('batch_id', $batch->id)->count())->toBe(0);
 });
