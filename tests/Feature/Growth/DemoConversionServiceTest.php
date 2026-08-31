@@ -70,3 +70,28 @@ it('does not match a same-email signup for a different course', function () {
 
     expect($this->service->hasConverted($signup))->toBeFalse();
 });
+
+it('does not match when the prospect enrols under a different email than they signed up with', function () {
+    $course = Course::create(['title' => 'Physics', 'slug' => 'physics', 'status' => 'published']);
+    $signup = CourseInterestSignup::create(['course_id' => $course->id, 'name' => 'Prospect', 'email' => 'personal@example.com']);
+
+    $user = User::factory()->create(['tenant_id' => $this->tenant->id, 'email' => 'work@example.com']);
+    $batch = Batch::create([
+        'course_id' => $course->id,
+        'title' => 'Batch',
+        'slug' => 'batch-'.uniqid(),
+        'starts_on' => now()->toDateString(),
+        'ends_on' => now()->addMonth()->toDateString(),
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'published',
+    ]);
+    Enrolment::create([
+        'batch_id' => $batch->id,
+        'user_id' => $user->id,
+        'status' => 'active',
+        'source' => 'manual_add',
+        'requested_at' => now(),
+    ]);
+
+    expect($this->service->hasConverted($signup))->toBeFalse();
+});

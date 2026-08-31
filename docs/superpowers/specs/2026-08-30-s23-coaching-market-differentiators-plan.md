@@ -46,7 +46,7 @@ then stop and report before starting the next block.
 | B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ✅ done |
 | B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ✅ done |
 | B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ✅ done |
-| B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
+| B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ✅ done |
 | B20 | Multi-angle review pass over the whole slice's diff (same discipline S13-S22 B-final each used) | ⬜ not started |
 | B21 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -842,13 +842,47 @@ the rotating `DownloadEnrolmentExportControllerTest`/
 `DownloadCompletionExportControllerTest` order-flake sibling), identical
 count to B17's own run since this block changed no application code.
 
-### B19 — Full test coverage pass
+### B19 — Full test coverage pass ✅
 
-- [ ] One feature test per new service/generator not already covered
+- [x] One feature test per new service/generator not already covered
       inline in its own block, plus the specific edge cases design §5
       names (U18 tenant-on/batch-threshold-unset exemption, U13 different-
       email non-match, U12 double-grading guard).
-- [ ] `composer test` green, baseline flakes only.
+- [x] `composer test` green, baseline flakes only.
+
+Audited every service/generator/component this slice added by diffing
+`app/Domains/*/Services/*.php` and `app/Domains/*/Livewire/*.php` between
+B0's own commit and HEAD (12 new files:
+`SyllabusTracker`, `CatchUpPlanService`+`CatchUpPlan`, `ConfusionSignalService`,
+`PyqBrowser`, `DemoConversionService`, `ScholarshipTestRegistrationService`,
+`ScholarshipTestGradingService`, `ScholarshipConversionService`,
+`RankCardGenerator`, `HallTicketGenerator`, plus the two download
+controllers) against `tests/Feature/**` — every one already had its own
+dedicated test file from the block that introduced it, so this pass found
+no missing-coverage gap on that front.
+
+Checked design §5's three explicitly-named edge cases against what each
+block actually tested: U18's "tenant on, batch threshold unset" exemption
+was already covered (B9's `AttendanceLinkedAccessGateTest`, "exempts a
+batch with no attendance threshold set even when the tenant flag is on").
+U12's double-grading guard was already covered (B13's
+`ScholarshipTestGradingServiceTest`, "does not re-grade an already-graded
+registration"). U13's "prospect enrols under a different email" non-match
+was genuinely **not** covered — every existing `DemoConversionServiceTest`
+case varied the *course*, never the *email* itself, so a bug that matched
+on tenant+course alone (ignoring email) would have slipped through. Added
+that case; while there, added the identical missing case to
+`ScholarshipConversionServiceTest` too (B14 shares the exact same
+email-matching logic pattern via design §4 decision 3, so the same gap
+existed there un-named by §5 but real all the same). Both pass — the
+services correctly key on email, not just tenant/course.
+
+`composer test`: 2019/2025. 6 failures — the same pre-existing/unrelated
+family every prior block's run already documented
+(`CourseSlugUniquenessTest`, `CalendarTest` x3 in Planner,
+`BackupConfigurationTest` in Support, the rotating
+`DownloadEnrolmentExportControllerTest`/`DownloadCompletionExportControllerTest`
+order-flake sibling), none touching this block's two edited test files.
 
 ### B20 — Multi-angle review pass
 

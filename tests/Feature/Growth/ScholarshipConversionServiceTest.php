@@ -84,3 +84,13 @@ it('matches any enrolment by email+tenant when the test has no linked course', f
 
     expect($this->service->hasConverted($registration))->toBeTrue();
 });
+
+it('does not match when the registrant enrols under a different email than they registered with', function () {
+    $course = Course::create(['title' => 'Physics', 'slug' => 'physics', 'status' => 'published']);
+    $test = ScholarshipTest::create(['course_id' => $course->id, 'title' => 'T', 'quiz_id' => $this->quiz->id, 'opens_at' => now(), 'closes_at' => now()->addWeek()]);
+    $registration = ScholarshipTestRegistration::create(['scholarship_test_id' => $test->id, 'name' => 'Asha', 'email' => 'personal@example.com']);
+
+    scholarshipConversionEnrol($course, 'work@example.com', $this->tenant);
+
+    expect($this->service->hasConverted($registration))->toBeFalse();
+});
