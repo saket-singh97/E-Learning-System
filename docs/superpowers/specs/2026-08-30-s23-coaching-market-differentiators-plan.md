@@ -41,7 +41,7 @@ then stop and report before starting the next block.
 | B11 | U13 pt.2 — `course_interest_signups.demo_attended_at` + `DemoConversionService` | ✅ done |
 | B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ✅ done |
 | B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ✅ done |
-| B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ⬜ not started |
+| B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ✅ done |
 | B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ⬜ not started |
 | B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ⬜ not started |
 | B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ⬜ not started |
@@ -540,16 +540,62 @@ question id from a different course is ignored rather than scored, and a
 second `grade()` call with different (wrong) answers leaves the original
 score untouched. Full Growth suite 55/55.
 
-### B14 — U12 pt.3: admin builder + results
+### B14 — U12 pt.3: admin builder + results ✅
 
-- [ ] Admin `ScholarshipTestResource` — create test, link an existing
+- [x] Admin `ScholarshipTestResource` — create test, link an existing
       `Quiz`, set open/close window.
-- [ ] Results/conversion view: registrations sorted by score, each row
+- [x] Results/conversion view: registrations sorted by score, each row
       showing `DemoConversionService`-style conversion status (did this
       registrant later enrol — same read-only match approach as U13, by
       email+tenant).
-- [ ] Tests: results view tenant-scoped; conversion flag matches only a
+- [x] Tests: results view tenant-scoped; conversion flag matches only a
       real `Enrolment`.
+
+Built `ScholarshipTestResource` (Growth, discovered via `AdminPanelProvider`'s
+existing `discoverResources(in: .../Growth/Filament/Resources)` — no provider
+edit needed, same as `CourseInterestSignupResource`). Form: `title`, optional
+`course_id` (tenant-wide test when blank), required `quiz_id`
+(`->relationship()` selects, both auto-tenant-scoped via `BelongsToTenant`'s
+global scope — no extra `->rule()` gate needed since Filament's own
+relationship query is the only source of truth here, unlike
+`SyllabusTopicsRelationManager`'s multi-select pivot-sync gap), and
+`opens_at`/`closes_at` (`->after('opens_at')`). Table: title, course,
+quiz, both dates, registration count.
+
+`ScholarshipConversionService::hasConverted()` (Growth) is a line-for-line
+mirror of `DemoConversionService` — tenant+email match against `Enrolment`
+via the enrolled user's email — with one addition `DemoConversionService`
+didn't need: `ScholarshipTest.course_id` is nullable (design §3.2, a test
+can be tenant-wide), so the course scope is applied with `->when()` only
+when the linked test actually has one; a course-less test matches any
+enrolment for that email in the tenant.
+
+Results view is `RegistrationsRelationManager` on `ScholarshipTestResource`
+(`registrations` relation), browse-only — same posture
+`CourseInterestSignupResource` already takes, since every row is
+sourced from the public registration page (B12), never a manual admin
+entry. Columns: name/email/phone, `score` (sortable, default-sorted
+desc so the results view *is* the ranking), a `converted` `IconColumn`
+computed per row via `ScholarshipConversionService::hasConverted()`
+(query, not a stored column — same design §4 decision 3 posture U13
+already established), registered date.
+
+4 new tests (`ScholarshipTestResourceTest.php`): create test from Admin
+panel with a linked quiz + course; `closes_at` before `opens_at` rejected;
+a cross-tenant admin 404s trying to edit another tenant's test (tenant
+scoping on the results view, since `EditScholarshipTest` 404ing means the
+`RegistrationsRelationManager` never mounts for a foreign tenant either);
+results view lists registrations sorted score-desc. 3 new tests
+(`ScholarshipConversionServiceTest.php`): converted once a real matching
+enrolment exists for a course-scoped test, no false match on a different
+course, and a course-less test matches any tenant enrolment by email alone.
+Growth domain suite 62/62; `CrossTenantTest` 105/105 (no new tenant model
+this block — both models were already registered in B12).
+
+`composer test`: 1997/2002. 5 failures — the same pre-existing/unrelated
+family as B0-B13's runs (`CourseSlugUniquenessTest`, `CalendarTest` x3 in
+Planner, `BackupConfigurationTest` in Support), none touching Growth/Filament
+code this block changed.
 
 ### B15 — U15 pt.1: rank card generator
 
