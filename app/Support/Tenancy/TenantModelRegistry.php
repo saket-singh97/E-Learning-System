@@ -25,6 +25,7 @@ use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Models\QuizProctoringEvent;
 use App\Domains\Assessments\Models\OmrSheetScan;
 use App\Domains\Assessments\Models\OmrTemplate;
+use App\Domains\Assessments\Models\RankCard;
 use App\Domains\Assessments\Models\TestSeries;
 use App\Domains\Assignments\Models\Assignment;
 use App\Domains\Assignments\Models\AssignmentSubmission;
@@ -223,6 +224,7 @@ class TenantModelRegistry
         SyllabusTopic::class,
         ScholarshipTest::class,
         ScholarshipTestRegistration::class,
+        RankCard::class,
     ];
 
     /**
@@ -1392,6 +1394,11 @@ class TenantModelRegistry
                 'name' => 'Row Prospect',
                 'email' => 'row-'.uniqid().'@example.com',
             ],
+            RankCard::class => [
+                'test_series_id' => TestSeries::create(['title' => 'Parent Series'])->id,
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'pdf_path' => 'rank-cards/row.pdf',
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1514,6 +1521,7 @@ class TenantModelRegistry
             SyllabusTopic::class => ['title' => 'tampered'],
             ScholarshipTest::class => ['title' => 'tampered'],
             ScholarshipTestRegistration::class => ['name' => 'tampered'],
+            RankCard::class => ['pdf_path' => 'tampered.pdf'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

@@ -42,7 +42,7 @@ then stop and report before starting the next block.
 | B12 | U12 pt.1 — `scholarship_tests`/`scholarship_test_registrations` schema + public registration page | ✅ done |
 | B13 | U12 pt.2 — `ScholarshipTestGradingService` (no-`User`-row grading against linked `Quiz`) | ✅ done |
 | B14 | U12 pt.3 — Admin scholarship-test builder + results/conversion view | ✅ done |
-| B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ⬜ not started |
+| B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ✅ done |
 | B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ⬜ not started |
 | B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ⬜ not started |
 | B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ⬜ not started |
@@ -597,20 +597,74 @@ family as B0-B13's runs (`CourseSlugUniquenessTest`, `CalendarTest` x3 in
 Planner, `BackupConfigurationTest` in Support), none touching Growth/Filament
 code this block changed.
 
-### B15 — U15 pt.1: rank card generator
+### B15 — U15 pt.1: rank card generator ✅
 
-- [ ] `rank_cards` migration + model (Assessments), registered in
+- [x] `rank_cards` migration + model (Assessments), registered in
       `TenantModelRegistry`.
-- [ ] `RankCardGenerator` — calls `TestSeriesRankingService::rankingsFor()`
+- [x] `RankCardGenerator` — calls `TestSeriesRankingService::rankingsFor()`
       for the rank/percentile/score, groups the series's questions by
       `concept` for the subject breakdown (design §4 decision 1), renders
       via `Pdf::loadView()->save()` (same shape as `IdCardGenerator`,
       design §4 decision 8), `DB::transaction()`+`lockForUpdate()` guard
       against the double-click race S15 B21 already fixed once for
       `IdCardGenerator`.
-- [ ] Tests: subject breakdown sums to the total score; regenerating
+- [x] Tests: subject breakdown sums to the total score; regenerating
       overwrites the same unique `(test_series_id, user_id)` row, no
       duplicate race under concurrent calls.
+
+Migration `2026_08_31_090000_create_rank_cards_table.php` — `tenant_id`,
+`test_series_id`, `user_id`, `pdf_path`, unique on
+`(test_series_id, user_id)` (design §3.2 schema verbatim — no `rank`/
+`percentile` columns, those are rendered into the PDF only, never
+persisted, matching the design's own SQL sketch). `RankCard` model
+(Assessments), registered in `TenantModelRegistry`.
+
+`RankCardGenerator::generate(TestSeries, User)` pulls rank/percentile/
+total_score straight from `TestSeriesRankingService::rankingsFor()`
+(matched to this user's row — design §2.3, no second ranking algorithm)
+and computes a subject breakdown separately via
+`subjectBreakdown()` (public — the results view or a future block can call
+it directly without duplicating the "best attempt per quiz" selection):
+for each quiz in the series, picks this user's own highest-scoring
+non-`in_progress` attempt (identical selection `TestSeriesRankingService`
+itself uses), loads that attempt's `QuizAnswer` rows with their
+`Question`, and sums `score` grouped by `concept` (falling back to
+`'General'` for a null concept). Because
+`QuizAttemptService::recomputeScore()` already guarantees
+`attempt.score === sum(answers.score)`, the breakdown's own sum always
+equals the ranking's `total_score` by construction — verified by test, not
+assumed. Rendered via `Pdf::loadView('assessments.rank-card-pdf')->save()`,
+same dompdf shape as `IdCardGenerator`.
+
+One deliberate deviation from `IdCardGenerator`'s own posture (design §4
+decision 8 flagged this explicitly): a rank card can go stale — a student
+can attempt another quiz in the series after their card was first
+generated — so a repeat `generate()` call recomputes and overwrites the
+same row/PDF via `updateOrCreate()`, rather than short-circuiting to the
+first result the way `IdCardGenerator` does for an ID card (which never
+changes after issue). The double-click race still needs a guard, but
+there's no existing child row to `lockForUpdate()` before the very first
+call the way `IdCardGenerator` locks the parent `Enrolment` — so this
+locks the parent `TestSeries` row instead inside the same
+`DB::transaction()`, serializing concurrent `generate()` calls for the
+whole series. Coarser than per-student, but `generate()` is an on-demand
+Admin/staff action, not a hot path, so the extra contention is free.
+
+3 new tests (`RankCardGeneratorTest.php`): PDF + row created with the
+ranking service's own rank/percentile;  subject breakdown sums to the same
+`total_score` `TestSeriesRankingService::rankingsFor()` reports, and each
+concept's own contribution checked individually; regenerating after a new
+quiz attempt updates the same row (`id` unchanged, exactly one row for the
+`(test_series_id, user_id)` pair) and the ranking service's own total
+reflects the new attempt. `Assessments` domain suite 167/167;
+`CrossTenantTest` 106/106 (`RankCard` newly registered, count up from 105).
+
+`composer test`: 2000/2006. 6 failures — the same pre-existing/unrelated
+family as every prior block's run (`CourseSlugUniquenessTest`,
+`CalendarTest` x3 in Planner, `BackupConfigurationTest` in Support, plus
+the known `DownloadCompletionExportControllerTest` order-flake sibling B3's
+own run already documented), none touching Assessments/Filament code this
+block changed.
 
 ### B16 — U15 pt.2: rank card delivery
 
