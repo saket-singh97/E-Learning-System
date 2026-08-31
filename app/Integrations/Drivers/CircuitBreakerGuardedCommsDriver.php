@@ -22,4 +22,9 @@ class CircuitBreakerGuardedCommsDriver implements CommsProvider
     {
         return $this->breaker->call(self::BREAKER_KEY, fn (): array => $this->inner->sendTemplate($toE164, $template, $params));
     }
+
+    public function sendSessionMessage(string $toE164, string $text): array
+    {
+        return $this->breaker->call(self::BREAKER_KEY, fn (): array => $this->inner->sendSessionMessage($toE164, $text));
+    }
 }

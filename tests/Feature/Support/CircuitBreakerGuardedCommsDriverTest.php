@@ -14,6 +14,11 @@ function failingCommsProvider(): CommsProvider
         {
             throw new RuntimeException('provider down');
         }
+
+        public function sendSessionMessage(string $toE164, string $text): array
+        {
+            throw new RuntimeException('provider down');
+        }
     };
 }
 

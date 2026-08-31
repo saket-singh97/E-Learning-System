@@ -21,4 +21,12 @@ class FakeWhatsAppDriver implements CommsProvider
             'status' => 'sent',
         ];
     }
+
+    public function sendSessionMessage(string $toE164, string $text): array
+    {
+        return [
+            'message_id' => 'wamid_fake_'.dechex(crc32("{$toE164}#{$text}#".uniqid('', true))),
+            'status' => 'sent',
+        ];
+    }
 }

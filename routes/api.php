@@ -3,6 +3,7 @@
 use App\Http\Controllers\Batches\DeviceWebhookController;
 use App\Http\Controllers\Batches\ZoomRecordingWebhookController;
 use App\Http\Controllers\Billing\RazorpaySubscriptionWebhookController;
+use App\Http\Controllers\AI\WhatsAppWebhookController;
 use App\Http\Controllers\Fees\RazorpayWebhookController;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Http\Request;
@@ -52,3 +53,9 @@ Route::post('/webhooks/zoom-recording', ZoomRecordingWebhookController::class)
 // checking its signature.
 Route::post('/webhooks/device/{credential}', DeviceWebhookController::class)
     ->name('webhooks.device');
+
+// S24 B1 (U19) — same "one fixed URL, no tenant subdomain" reasoning as
+// every webhook above; the tenant is resolved from the linked student's
+// own WhatsAppLink row inside the handler, not the route.
+Route::post('/webhooks/whatsapp', WhatsAppWebhookController::class)
+    ->name('webhooks.whatsapp');

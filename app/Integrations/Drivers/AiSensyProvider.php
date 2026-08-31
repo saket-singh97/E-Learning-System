@@ -40,6 +40,20 @@ class AiSensyProvider implements CommsProvider
         ];
     }
 
+    public function sendSessionMessage(string $toE164, string $text): array
+    {
+        $response = Http::post(self::ENDPOINT, [
+            'apiKey' => $this->apiKey(),
+            'destination' => $toE164,
+            'message' => $text,
+        ])->throw()->json();
+
+        return [
+            'message_id' => (string) ($response['submitted_message_id'] ?? $response['id'] ?? ''),
+            'status' => ($response['success'] ?? false) ? 'submitted' : 'failed',
+        ];
+    }
+
     protected function apiKey(): string
     {
         $apiKey = config('services.aisensy.api_key');

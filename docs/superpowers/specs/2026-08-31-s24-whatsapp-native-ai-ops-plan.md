@@ -28,7 +28,7 @@ then stop and report before starting the next block.
 | Block | What | Status |
 |---|---|---|
 | B0 | U19 pt.1 — `doubt_chat_messages.channel`/`source_phone` + `whatsapp_links` schema/model | ✅ done |
-| B1 | U19 pt.2 — inbound webhook, phone-link verification, `SemanticSearchService`-resolved lesson → `DoubtChatService::ask()` → reply | ⬜ not started |
+| B1 | U19 pt.2 — inbound webhook, phone-link verification, `SemanticSearchService`-resolved lesson → `DoubtChatService::ask()` → reply | ✅ done |
 | B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ⬜ not started |
 | B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ⬜ not started |
 | B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ⬜ not started |
@@ -91,27 +91,62 @@ the class (`Str::snake('WhatsAppLink')`) came out `whats_app_links`, not
 baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
 `BackupConfigurationTest`) — no new failures.
 
-### B1 — U19 pt.2: inbound webhook + doubt routing
+### B1 — U19 pt.2: inbound webhook + doubt routing ✅
 
-- [ ] Inbound WhatsApp webhook controller (platform-wide route, no tenant
+- [x] Inbound WhatsApp webhook controller (platform-wide route, no tenant
       subdomain to resolve from — same `ResolveTenant`-bypass reasoning
       Livewire's own `/livewire/update` endpoint already established,
       design §2.2). Verifies the vendor's own webhook signature.
-- [ ] Unlinked phone number → one templated reply directing them to link
+- [x] Unlinked phone number → one templated reply directing them to link
       first (design §4 decision 1) — never guessed against.
-- [ ] Linked phone + text message → `SemanticSearchService::search()`
+- [x] Linked phone + text message → `SemanticSearchService::search()`
       resolves the nearest matching lesson (scoped to the linked student's
       own enrolled courses) → `DoubtChatService::ask($resolvedLesson, ...)`
       unchanged → reply sent via `CommsProvider` (freeform session reply,
       not `sendTemplate()` — confirm/build whichever driver method the
       24-hour session window actually needs).
-- [ ] `DoubtChatMessage` row written with `channel = 'whatsapp'` and
+- [x] `DoubtChatMessage` row written with `channel = 'whatsapp'` and
       `source_phone` set.
-- [ ] Tests: linked student's text doubt resolves to the correct lesson and
+- [x] Tests: linked student's text doubt resolves to the correct lesson and
       gets answered; unlinked number gets the link-prompt reply, no
       `DoubtChatMessage` row created; a question with no confident semantic
       match handled the same way the in-app fallback already is (design
       §2.2's own "falls back to whole-lesson search" precedent).
+
+**Build notes:** route lives in `routes/api.php` (`POST /webhooks/whatsapp`),
+same host-agnostic convention every other vendor webhook there already
+uses (Razorpay/Zoom/Device) — no `Route::domain(...)` constraint.
+`WhatsAppWebhookController` stays thin (verify + delegate + `response('ok')`),
+same shape as `RazorpayWebhookController`; all real logic lives in the new
+`WhatsAppInboundMessageHandler` (AI domain). Signature check is a plain
+`hash_hmac('sha256', $payload, config('services.aisensy.webhook_secret'))`
+compared with `hash_equals()` against the `X-Webhook-Signature` header —
+same shape `RazorpayProvider::verifyWebhookSignature()` already uses, kept
+local to the handler rather than added to `CommsProvider` since it's a
+webhook-only concern, not part of the send-side contract. Reused the
+already-generic `InvalidWebhookSignatureException` (renders 400) rather
+than adding a WhatsApp-specific one. `CommsProvider` gained
+`sendSessionMessage()` (freeform reply, no template) — implemented on
+`AiSensyProvider`, `FakeWhatsAppDriver`, and the
+`CircuitBreakerGuardedCommsDriver` decorator; `CommsProvider` is still
+bound to the Fake by default (AiSensy stays unbound/real-driver-ready but
+inactive, same as before this block). `DoubtChatService::ask()` itself
+stays byte-identical (design §4 decision 2) — `channel`/`source_phone` are
+set with one follow-up `->update()` on the row it returns, not a new
+`ask()` param. An inbound "LINK <code>" text message routes to
+`WhatsAppLinkService::verifyCode()` (built in B0) rather than duplicating
+that logic — this is the "phone-link verification" the PROGRESS row names,
+wired here since B0 only exposed the method, not an entry point that calls
+it. A message with no confident semantic match (empty
+`SemanticSearchService::search()` result) gets a clear "couldn't find a
+matching lesson" reply and writes no `DoubtChatMessage` row, same
+never-silently-drop posture the unlinked-number path already takes.
+`composer test`: 2042/2048 passed; the 6 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
+`BackupConfigurationTest`, and this run's own rotating
+`DownloadEnrolmentExportControllerTest` order-flake — confirmed passing
+in isolation, matching the plan's own documented flake list above) — no
+new failures.
 
 ### B2 — U20: voice-note doubts
 

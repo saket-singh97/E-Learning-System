@@ -61,6 +61,10 @@ return [
 
     'aisensy' => [
         'api_key' => env('AISENSY_API_KEY'),
+        // Inbound WhatsApp webhook (S24 B1) — verifies the payload actually
+        // came from the vendor, same hash_hmac shape razorpay.webhook_secret
+        // already uses above.
+        'webhook_secret' => env('AISENSY_WEBHOOK_SECRET'),
     ],
 
     'google' => [
