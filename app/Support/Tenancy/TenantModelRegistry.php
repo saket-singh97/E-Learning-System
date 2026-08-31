@@ -9,6 +9,7 @@ use App\Domains\AI\Models\LessonArtifactChunk;
 use App\Domains\AI\Models\LessonPdfNote;
 use App\Domains\AI\Models\LessonRevisionNote;
 use App\Domains\AI\Models\PhotoDoubtQuery;
+use App\Domains\AI\Models\WhatsAppLink;
 use App\Domains\Content\Models\SyllabusTopic;
 use App\Domains\Api\Models\ApiKey;
 use App\Domains\Api\Models\WebhookDelivery;
@@ -227,6 +228,7 @@ class TenantModelRegistry
         ScholarshipTestRegistration::class,
         RankCard::class,
         HallTicket::class,
+        WhatsAppLink::class,
     ];
 
     /**
@@ -1430,6 +1432,11 @@ class TenantModelRegistry
                 'roll_number' => '1-0001',
                 'pdf_path' => 'hall-tickets/row.pdf',
             ],
+            WhatsAppLink::class => [
+                'user_id' => User::factory()->create(['tenant_id' => app(CurrentTenant::class)->id()])->id,
+                'phone_e164' => '+91'.random_int(6000000000, 9999999999),
+                'verified_at' => now(),
+            ],
             default => throw new RuntimeException("No seed attributes registered for [{$modelClass}]."),
         };
     }
@@ -1554,6 +1561,7 @@ class TenantModelRegistry
             ScholarshipTestRegistration::class => ['name' => 'tampered'],
             RankCard::class => ['pdf_path' => 'tampered.pdf'],
             HallTicket::class => ['roll_number' => 'tampered'],
+            WhatsAppLink::class => ['phone_e164' => '+911111111111'],
             default => throw new RuntimeException("No update attributes registered for [{$modelClass}]."),
         };
     }

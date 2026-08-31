@@ -22,6 +22,8 @@ class DoubtChatMessage extends Model
         'answer',
         'cited_chunk_idxs',
         'token_cost',
+        'channel',
+        'source_phone',
     ];
 
     protected function casts(): array

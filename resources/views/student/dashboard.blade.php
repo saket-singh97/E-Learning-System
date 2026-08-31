@@ -30,6 +30,11 @@
          embed point, same reasoning as semantic search above. --}}
     <livewire:ai.photo-doubt-upload />
 
+    {{-- S24 B0 — student-side code generation; the phone gets verified
+         once the student texts this code to the platform's WhatsApp
+         number (B1's inbound webhook). --}}
+    <livewire:ai.whatsapp-link-code />
+
     <livewire:comms.notice-board />
     <livewire:notification-centre />
     <livewire:impersonation-banner />

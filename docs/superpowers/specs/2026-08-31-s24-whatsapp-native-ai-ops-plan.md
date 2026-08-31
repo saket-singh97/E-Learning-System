@@ -27,7 +27,7 @@ then stop and report before starting the next block.
 
 | Block | What | Status |
 |---|---|---|
-| B0 | U19 pt.1 — `doubt_chat_messages.channel`/`source_phone` + `whatsapp_links` schema/model | ⬜ not started |
+| B0 | U19 pt.1 — `doubt_chat_messages.channel`/`source_phone` + `whatsapp_links` schema/model | ✅ done |
 | B1 | U19 pt.2 — inbound webhook, phone-link verification, `SemanticSearchService`-resolved lesson → `DoubtChatService::ask()` → reply | ⬜ not started |
 | B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ⬜ not started |
 | B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ⬜ not started |
@@ -54,20 +54,42 @@ established).
 
 ## Block detail (checklist — expand into a build narrative as each block actually lands, same as every prior plan file)
 
-### B0 — U19 pt.1: WhatsApp channel schema
+### B0 — U19 pt.1: WhatsApp channel schema ✅
 
-- [ ] Migration adds `channel` (`VARCHAR(20) DEFAULT 'web'`) and
+- [x] Migration adds `channel` (`VARCHAR(20) DEFAULT 'web'`) and
       `source_phone` (nullable) to `doubt_chat_messages` — every existing
       row/query stays byte-identical (design §4 decision 2).
-- [ ] `whatsapp_links` migration (`tenant_id`, `user_id`, `phone_e164`
+- [x] `whatsapp_links` migration (`tenant_id`, `user_id`, `phone_e164`
       unique platform-wide, `verified_at`) + `WhatsAppLink` model (AI
       domain), registered in `TenantModelRegistry` immediately (S17
       precedent, not deferred to B11).
-- [ ] Student-portal "Link WhatsApp" UI: generates a linking code, student
+- [x] Student-portal "Link WhatsApp" UI: generates a linking code, student
       texts it to the platform number to verify (design §4 decision 1).
-- [ ] Tests: linking a code creates a `whatsapp_links` row with
+- [x] Tests: linking a code creates a `whatsapp_links` row with
       `verified_at` set; a second student cannot link an already-linked
       phone number (unique constraint surfaced as a clean error, not a 500).
+
+**Build notes:** the pending code lives in `Cache` (15 min TTL), not a DB
+row — `whatsapp_links` schema per design §3.2 only ever holds *verified*
+rows (`verified_at NOT NULL`), so there's no pending-state column to write
+to before the phone is confirmed; a cache entry is the whole "state before
+identity is confirmed" step, nothing to clean up once it expires. Built
+`WhatsAppLinkService::generateCode()`/`verifyCode()` in the AI domain —
+`verifyCode()` is the exact step B1's inbound webhook will call once a code
+arrives over WhatsApp; this block exposes it as a directly callable method
+so B0's own tests exercise it ahead of the real webhook. `verifyCode()`
+rebinds `CurrentTenant` to the code's own tenant for the `WhatsAppLink::create()`
+call and restores it after, same pattern `ParentInviteCodeService::redeem()`
+already established for a platform-wide, no-subdomain entry point.
+`WhatsAppLinkCode` Livewire component (`ai.whatsapp-link-code`) mounted on
+the student dashboard, generation-only — verification/redemption UI is B1's
+job once the webhook exists. `WhatsAppLink::class` needed an explicit
+`protected $table = 'whatsapp_links'` — Eloquent's own inferred name from
+the class (`Str::snake('WhatsAppLink')`) came out `whats_app_links`, not
+`whatsapp_links`, caught by the new test's first run.
+`composer test`: 2038/2043 passed, the 5 failures are the already-documented
+baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
+`BackupConfigurationTest`) — no new failures.
 
 ### B1 — U19 pt.2: inbound webhook + doubt routing
 

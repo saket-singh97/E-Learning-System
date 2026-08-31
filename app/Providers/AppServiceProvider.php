@@ -13,6 +13,7 @@ use App\Domains\Assessments\Livewire\PyqBrowser;
 use App\Domains\Growth\Listeners\ConfirmCommissionOnPaymentCaptured;
 use App\Domains\AI\Livewire\LessonRevisionNotes;
 use App\Domains\AI\Livewire\PhotoDoubtUpload;
+use App\Domains\AI\Livewire\WhatsAppLinkCode;
 use App\Domains\AI\Livewire\SemanticSearch;
 use App\Domains\AI\Livewire\WeakTopics;
 use App\Domains\Api\Listeners\DispatchPaymentCapturedWebhook;
@@ -283,6 +284,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
         Livewire::component('analytics.gamification-widget', GamificationWidget::class);
+        Livewire::component('ai.whatsapp-link-code', WhatsAppLinkCode::class);
 
         // Unscoped (no third $scopes argument) — applies to all three
         // Filament panels (admin/teach/super) with one registration,
