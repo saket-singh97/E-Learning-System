@@ -5,10 +5,14 @@ namespace App\Domains\AI\Services;
 use App\Domains\AI\Models\WhatsAppLink;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Exceptions\InvalidWebhookSignatureException;
+use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Everything that happens once an inbound WhatsApp payload's signature is
@@ -16,11 +20,11 @@ use Illuminate\Validation\ValidationException;
  * verification and everything after it" shape PaymentReconciler already
  * established for the Razorpay webhook.
  *
- * Only `type: text` messages are handled (design §2.2/§4 decision 3-4 —
- * voice notes and photos are B2/B3, branching onto this same handler
- * later). Anything else is a silent no-op 200, not an error, since the
- * vendor's own delivery retries would otherwise hammer an endpoint that
- * simply doesn't support that message type yet.
+ * Only `type: text` and `type: audio` messages are handled (design §2.2/§4
+ * decision 4 — photos are B3, branching onto this same handler later).
+ * Anything else is a silent no-op 200, not an error, since the vendor's
+ * own delivery retries would otherwise hammer an endpoint that simply
+ * doesn't support that message type yet.
  */
 class WhatsAppInboundMessageHandler
 {
@@ -30,11 +34,14 @@ class WhatsAppInboundMessageHandler
     private const NO_MATCH_REPLY = "Couldn't find a lesson matching that question — try rephrasing, "
         .'or ask it from inside the lesson player instead.';
 
+    private const TRANSCRIPTION_FAILED_REPLY = "Couldn't understand that voice note — try typing your question instead.";
+
     public function __construct(
         private readonly WhatsAppLinkService $links,
         private readonly SemanticSearchService $search,
         private readonly DoubtChatService $doubtChat,
         private readonly CommsProvider $comms,
+        private readonly AiProvider $ai,
     ) {}
 
     public function handle(string $payload, string $signature): void
@@ -42,12 +49,23 @@ class WhatsAppInboundMessageHandler
         $this->verifySignature($payload, $signature);
 
         $data = json_decode($payload, true) ?? [];
+        $type = data_get($data, 'type');
+        $from = (string) data_get($data, 'from', '');
 
-        if (data_get($data, 'type') !== 'text') {
+        if ($type === 'audio') {
+            $mediaUrl = (string) data_get($data, 'audio.url', '');
+
+            if ($from !== '' && $mediaUrl !== '') {
+                $this->handleAudio($from, $mediaUrl);
+            }
+
             return;
         }
 
-        $from = (string) data_get($data, 'from', '');
+        if ($type !== 'text') {
+            return;
+        }
+
         $text = trim((string) data_get($data, 'text.body', ''));
 
         if ($from === '' || $text === '') {
@@ -61,6 +79,36 @@ class WhatsAppInboundMessageHandler
         }
 
         $this->handleDoubt($from, $text);
+    }
+
+    /**
+     * Downloads to a phone-keyed path (tenant isn't known yet — that's
+     * resolved, same as the text path, once handleDoubt() looks up the
+     * WhatsAppLink) then re-enters handleDoubt() with the transcript text
+     * verbatim, same shape a typed doubt already takes end to end
+     * (channel/source_phone included).
+     */
+    private function handleAudio(string $phone, string $mediaUrl): void
+    {
+        try {
+            $bytes = Http::get($mediaUrl)->throw()->body();
+            $diskPath = "whatsapp-audio/{$phone}/".uniqid().'.ogg';
+            Storage::disk('local')->put($diskPath, $bytes);
+
+            $transcript = trim($this->ai->transcribe($diskPath)->text);
+        } catch (Throwable) {
+            $this->comms->sendSessionMessage($phone, self::TRANSCRIPTION_FAILED_REPLY);
+
+            return;
+        }
+
+        if ($transcript === '') {
+            $this->comms->sendSessionMessage($phone, self::TRANSCRIPTION_FAILED_REPLY);
+
+            return;
+        }
+
+        $this->handleDoubt($phone, $transcript);
     }
 
     private function verifySignature(string $payload, string $signature): void

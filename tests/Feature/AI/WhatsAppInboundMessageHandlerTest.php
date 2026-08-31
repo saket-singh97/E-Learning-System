@@ -10,12 +10,46 @@ use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Integrations\AiProvider;
+use App\Integrations\CommsProvider;
+use App\Integrations\Drivers\FakeAiDriver;
+use App\Integrations\Drivers\FakeWhatsAppDriver;
+use App\Integrations\TranscriptResult;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
+
+class FixedTranscriptDriver extends FakeAiDriver
+{
+    public function transcribe(string $diskPath): TranscriptResult
+    {
+        return new TranscriptResult(text: 'Velocity is displacement over time.', segments: []);
+    }
+}
+
+class ThrowingTranscribeDriver extends FakeAiDriver
+{
+    public function transcribe(string $diskPath): TranscriptResult
+    {
+        throw new RuntimeException('vendor transcription failed');
+    }
+}
+
+class RecordingCommsDriver extends FakeWhatsAppDriver
+{
+    /** @var array<int, array{to: string, text: string}> */
+    public static array $sent = [];
+
+    public function sendSessionMessage(string $toE164, string $text): array
+    {
+        static::$sent[] = ['to' => $toE164, 'text' => $text];
+
+        return parent::sendSessionMessage($toE164, $text);
+    }
+}
 
 /**
  * Same requirement SemanticSearchServiceTest/DoubtChatTest already document:
@@ -106,6 +140,45 @@ it('rejects a webhook with a bad signature', function () {
     ], $payload)->assertStatus(400);
 
     expect(DoubtChatMessage::count())->toBe(0);
+});
+
+it('transcribes a voice note and produces the same DoubtChatMessage shape a text doubt would', function () {
+    app()->bind(AiProvider::class, FixedTranscriptDriver::class);
+
+    $artifact = LessonArtifact::create(['lesson_id' => $this->lesson->id, 'version' => 1, 'source_asset_version' => 'v1', 'status' => 'ready']);
+    whatsappChunk($artifact->id, $this->tenant->id, 'Velocity is displacement over time.');
+
+    WhatsAppLink::create(['user_id' => $this->student->id, 'phone_e164' => '+919876500050', 'verified_at' => now()]);
+
+    Http::fake(['https://cdn.example.com/note.ogg' => Http::response('fake audio bytes')]);
+
+    $payload = json_encode(['from' => '+919876500050', 'type' => 'audio', 'audio' => ['url' => 'https://cdn.example.com/note.ogg']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    $message = DoubtChatMessage::where('user_id', $this->student->id)->sole();
+    expect($message->lesson_id)->toBe($this->lesson->id)
+        ->and($message->channel)->toBe('whatsapp')
+        ->and($message->source_phone)->toBe('+919876500050')
+        ->and($message->question)->toBe('Velocity is displacement over time.')
+        ->and($message->answer)->not->toBeEmpty();
+});
+
+it('replies with a try-typing message and writes no row when transcription fails', function () {
+    app()->bind(AiProvider::class, ThrowingTranscribeDriver::class);
+    app()->bind(CommsProvider::class, RecordingCommsDriver::class);
+    RecordingCommsDriver::$sent = [];
+
+    WhatsAppLink::create(['user_id' => $this->student->id, 'phone_e164' => '+919876500060', 'verified_at' => now()]);
+
+    Http::fake(['https://cdn.example.com/bad.ogg' => Http::response('fake audio bytes')]);
+
+    $payload = json_encode(['from' => '+919876500060', 'type' => 'audio', 'audio' => ['url' => 'https://cdn.example.com/bad.ogg']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    expect(DoubtChatMessage::count())->toBe(0)
+        ->and(RecordingCommsDriver::$sent)->toHaveCount(1)
+        ->and(RecordingCommsDriver::$sent[0]['to'])->toBe('+919876500060')
+        ->and(RecordingCommsDriver::$sent[0]['text'])->toContain('try typing');
 });
 
 it('verifies a linking code sent as a WhatsApp text message', function () {

@@ -29,7 +29,7 @@ then stop and report before starting the next block.
 |---|---|---|
 | B0 | U19 pt.1 — `doubt_chat_messages.channel`/`source_phone` + `whatsapp_links` schema/model | ✅ done |
 | B1 | U19 pt.2 — inbound webhook, phone-link verification, `SemanticSearchService`-resolved lesson → `DoubtChatService::ask()` → reply | ✅ done |
-| B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ⬜ not started |
+| B2 | U20 — voice-note doubts: audio download + `AiProvider::transcribe()` → re-enters B1's text-doubt path | ✅ done |
 | B3 | U21 — photo doubt over WhatsApp: image download → real `PhotoDoubtQuery` row → existing S17 L14 pipeline | ⬜ not started |
 | B4 | U22 pt.1 — `AutoSchedulerService::propose()` (conflict-free slot proposals, reuses `TeacherConflictDetector`) | ⬜ not started |
 | B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ⬜ not started |
@@ -148,16 +148,37 @@ baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
 in isolation, matching the plan's own documented flake list above) — no
 new failures.
 
-### B2 — U20: voice-note doubts
+### B2 — U20: voice-note doubts ✅
 
-- [ ] Inbound webhook handler branches on message type: an audio message
+- [x] Inbound webhook handler branches on message type: an audio message
       downloads to disk, `AiProvider::transcribe()` (the same method
       lecture ingestion already calls), transcript text re-enters B1's
       exact text-doubt path.
-- [ ] Tests: a voice note produces the same `DoubtChatMessage` shape a text
+- [x] Tests: a voice note produces the same `DoubtChatMessage` shape a text
       doubt would, `channel = 'whatsapp'`; a transcription failure replies
       with a "couldn't understand that, try typing" message rather than
       silently dropping the doubt.
+
+**Build notes:** `WhatsAppInboundMessageHandler::handle()` gained an
+`audio` branch alongside `text` — downloads the media URL via `Http::get()`
+(same fetch-then-`Storage::put()` shape `DownloadLiveRecording` already
+uses for Zoom), disk path keyed by phone number
+(`whatsapp-audio/{phone}/{uniqid}.ogg`) since the tenant isn't known until
+`handleDoubt()` resolves the `WhatsAppLink` — same reasoning the text path
+already has for deferring tenant rebind. `AiProvider::transcribe()` runs
+against that path; the transcript then calls `handleDoubt()` directly, so
+every downstream step (link lookup, semantic search, `DoubtChatService::ask()`,
+`channel`/`source_phone` tagging, reply) is the exact same code path a
+text doubt already takes — no duplicated logic. A download or transcription
+failure (caught as `Throwable`, same generic-catch posture
+`TranscribeLesson`'s own ingestion job already takes) replies "couldn't
+understand that... try typing" and returns before anything is written, same
+never-silently-drop posture the rest of this handler already established.
+`composer test`: 2043/2050 passed; the 7 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest` x3,
+`BackupConfigurationTest`, and this run's own rotating export-controller
+order-flake — 2 of its siblings this time, both confirmed passing in
+isolation) — no new failures.
 
 ### B3 — U21: photo doubt over WhatsApp
 
