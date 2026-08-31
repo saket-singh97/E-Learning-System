@@ -147,3 +147,23 @@ it('never draws a question from a different course', function () {
 
     expect($drawn)->toHaveCount(2);
 });
+
+it('degrades gracefully instead of crashing when the linked quiz\'s lesson has been removed', function () {
+    // S23 B21 review-pass fix — $quiz->lesson->section->course_id was an
+    // unguarded chain; a soft-deleted Lesson (Lesson uses SoftDeletes)
+    // makes the belongsTo relation resolve to null, which used to
+    // null-deref here. Now reachable by any public registration, not just
+    // an admin misconfiguration caught in isolation.
+    $this->test->quiz->lesson->delete();
+
+    expect($this->service->drawQuestions($this->test->fresh()))->toBe([]);
+
+    $registration = ScholarshipTestRegistration::create([
+        'scholarship_test_id' => $this->test->id,
+        'name' => 'Asha',
+        'email' => 'orphaned@example.com',
+    ]);
+    $graded = $this->service->grade($registration, [$this->mcq->id => '4']);
+
+    expect((float) $graded->score)->toBe(0.0);
+});

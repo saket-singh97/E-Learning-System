@@ -48,7 +48,7 @@ then stop and report before starting the next block.
 | B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ✅ done |
 | B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ✅ done |
 | B20 | Multi-angle review pass over the whole slice's diff (same discipline S13-S22 B-final each used) | ✅ done |
-| B21 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B21 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite baseline:** carry forward S22's own closing count (1929+/1932+,
 1 pre-existing unrelated `CourseSlugUniquenessTest` failure since S1/S2, a
@@ -984,14 +984,136 @@ family every prior block's run already documented
 `DownloadEnrolmentExportControllerTest`/`DownloadCompletionExportControllerTest`
 order-flake sibling), none touching this block's fixes.
 
-### B21 — Lifecycle E2E + docs
+### B21 — Lifecycle E2E + docs ✅
 
-- [ ] New `S23CoachingMarketDifferentiatorsE2ETest` chaining at minimum:
+- [x] New `S23CoachingMarketDifferentiatorsE2ETest` chaining at minimum:
       scholarship test registration → graded → rank card + hall ticket
       generated → later real enrolment marks it converted; syllabus topic
       mapped to lessons → tracker % rises as lessons complete; attendance-
       gated batch blocks a low-attendance student's stream, an ungated
       batch does not.
-- [ ] Update `docs/PROJECT-STATUS.md` (new S23 section), `HANDOVER.md`
+- [x] Update `docs/PROJECT-STATUS.md` (new S23 section), `HANDOVER.md`
       ("Right now" entry), `docs/ROADMAP.md` (S23 row → ✅ Done, shipped
       count 22→23) — same close-out shape every prior slice used.
+
+**Lifecycle E2E.** Design §5's own wording chains "scholarship test
+registration → score → rank card + hall ticket generated → conversion
+tracked" as one pipeline — but `RankCard` (U15) needs an authenticated
+enrolled `User` + `TestSeries`, `HallTicket` (U14/U12) needs neither, and
+no schema links `ScholarshipTest` to `TestSeries` at all (verified against
+the actual migrations, not assumed from the sentence). Split into 4
+`it()` blocks instead of forcing an unbuildable literal pipeline, matching
+what's actually shippable: (1) scholarship test registration → drawn
+question graded → hall ticket issued (roll number + PDF on disk) →
+`ScholarshipConversionService::hasConverted()` flips true only once a real
+`Enrolment` lands under the same email; (2) a `RankCardGenerator` PDF for
+a real `TestSeries` participant, cross-checked against
+`TestSeriesRankingService::rankingsFor()`'s own rank/score for that same
+user; (3) `SyllabusTracker::percentCompleteFor()` rising 0% → 50% → 100%
+as `VideoWatchEvent` rows land for each of a topic's two mapped lessons;
+(4) `LessonAccess::canStream()` blocked only while a student's *only*
+enrolment is the gated, low-attendance batch — a second, un-gated
+enrolment into the same course keeps access, exactly `LessonAccess`'s own
+"every relevant enrolment must fail" semantics from B9. All 4 green on
+first run.
+
+**A second review pass, not one.** Per this session's own instruction to
+find and fix bugs and use multiple agents to move fast, dispatched a
+*second*, independent 2-angle background-agent review pass
+(`cb2158a..7d548b4`, i.e. re-covering B20's own fix commit specifically,
+not just the earlier blocks already reviewed once) — a fix a first pass
+writes is not automatically correct, same discipline as re-verifying
+rather than trusting a green commit message. **Found and fixed 4 more real
+issues**, the most important being that B20's own hijack fix was itself
+incomplete:
+
+**1. CRITICAL — the `$isNewRegistration`/`registrationId` gate B20 added
+does not hold against a crafted Livewire payload.** Livewire applies a
+request's `updates` to any public property *before* invoking the
+requested method (confirmed against `vendor/livewire/livewire/src/Mechanisms/HandleComponents/HandleComponents.php` —
+`updateProperties()` runs, then `callMethods()`), and neither property was
+guarded. A forged `/livewire/update` payload setting `registrationId` to
+any guessable id (a plain auto-increment) plus `isNewRegistration: true`
+reaches the exact hall-ticket-hijack B20's own docblock claims to have
+closed — no email-guessing needed at all — and since `grade()` is
+idempotent, a forged call straight to `submitAnswers()` with empty
+`$responses` would permanently lock a victim's score at 0 before they
+ever answered a real question. Fixed with Livewire's own `#[Locked]`
+attribute (`Livewire\Attributes\Locked`, new to this codebase — no prior
+usage anywhere to extend) on every property this component treats as
+server-authoritative state: `isNewRegistration`, `registrationId`,
+`questionIds`, `answersSubmitted`. `name`/`email`/`phone`/`responses` stay
+unlocked — genuine user input, already correctly re-validated/re-scoped
+server-side. New test asserts `Livewire::test(...)->set('registrationId', ...)`
+(and the other two) throws `CannotUpdateLockedPropertyException`.
+
+**2. HIGH — `submitAnswers()` never re-checked the test's own
+`opens_at`/`closes_at` window**, only `render()` did — gating what got
+*displayed*, not what got *accepted*. A tab left open past `closes_at`
+(or opened before `opens_at`) could still POST straight to `submitAnswers()`
+and get graded regardless, defeating the whole point of a timed window.
+Fixed by re-deriving `$test` via `$registration->scholarshipTest` and
+re-checking `now()->between(...)` inside the action itself, not trusted
+from a stale page load. New test: registers within the window, closes the
+window mid-session, confirms a subsequent `submitAnswers()` call leaves
+`score` `null`.
+
+**3. MEDIUM — `$quiz->lesson->section->course_id` was an unguarded
+null-dereference chain** in both `drawQuestions()` and `grade()`,
+inherited unmodified from `QuizAttemptService::draw()`'s own identical
+derivation (same duplication reason the class's own docblock already
+gives). Harmless while `grade()` had no real caller (B13-B19's own
+posture), but B20 made `drawQuestions()` fire on every public
+registration — a `ScholarshipTest` whose linked `Quiz.lesson` is
+soft-deleted (`Lesson` uses `SoftDeletes`, confirmed) now 500s for every
+prospect trying to register, not just an admin-caught misconfiguration.
+Fixed with a shared `courseIdFor(Quiz $quiz): ?int` helper using nullsafe
+chaining (`$quiz->lesson?->section?->course_id`); `drawQuestions()`
+returns `[]` and `grade()` scores `0.0` rather than crashing when it
+resolves to `null`. New test: soft-deletes the linked lesson, confirms
+both methods degrade instead of throwing.
+
+**4. LOW — no rate limiting anywhere on this newly-public write
+surface.** Every new email triggers a `lockForUpdate()` transaction +
+dompdf render + QR encode (`HallTicketGenerator::generate()`) plus B20's
+own `drawQuestions()` query — freely repeatable with disposable emails;
+the only other throttled route in this entire app is `routes/auth.php`.
+Added a per-IP cap (`RateLimiter::tooManyAttempts()`/`hit()`, 10/minute)
+directly inside `submit()` — no existing component-level throttle
+precedent to extend, so this is the simplest self-contained shape rather
+than a new app-wide middleware pattern. New test: 10 successful
+registrations from the same IP, an 11th refused with a form error and no
+row created.
+
+Confirmed clean, not newly found, by this second pass: the score-inflation
+guard (`array_intersect_key` against the drawn `questionIds`) genuinely
+holds once that property is locked; cross-tenant/cross-course question
+smuggling via a forged `$responses` payload stays blocked by `grade()`'s
+own `course_id`/`status=approved` re-scoping; no XSS anywhere in the new
+blade views (`{{ }}` throughout, no `{!! !!}`); `register()`'s
+no-overwrite-on-repeat fix genuinely holds for its own targeted vector,
+independently re-verified rather than trusted from B20's own commit
+message. Also fixed along the way (cosmetic, found by the correctness
+angle): the registration confirmation view showed the same "not currently
+open" message for both "outside the window" and "no questions configured
+at all" — now distinguished.
+
+9 new tests total: 4 lifecycle E2E
+(`tests/Feature/S23CoachingMarketDifferentiatorsE2ETest.php`), 5 more in
+`ScholarshipTestTakingTest.php`/`ScholarshipTestGradingServiceTest.php`
+covering the 4 fixes above. `Growth`+`Assessments` domain suites 257/257.
+
+Updated `HANDOVER.md`'s "Right now" entry (S23 now COMPLETE, replacing the
+"designed, not built" entry), added a full S23 section to
+`docs/PROJECT-STATUS.md` (same per-block + review-pass density as S22's
+own), and `docs/ROADMAP.md` — top summary (Shipped 22→23, Designed 1→0),
+S23 moved into the "Shipped — S1 to S23" table as `✅ Done`, the old
+"designed, not built" section removed.
+
+`composer test`: 2033/2039. 6 failures — the same pre-existing/unrelated
+family every prior block's run already documented
+(`CourseSlugUniquenessTest`, `CalendarTest` x3 in Planner,
+`BackupConfigurationTest` in Support, the rotating export-controller
+order-flake sibling), none touching this block's fixes.
+
+**All 22 S23 blocks are now built, tested, and reviewed.**

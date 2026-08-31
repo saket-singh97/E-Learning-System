@@ -65,8 +65,10 @@
                     </ol>
                     <button type="submit">Submit answers</button>
                 </form>
-            @else
+            @elseif (! $withinWindow)
                 <p>This test is not currently open for answers.</p>
+            @else
+                <p>No questions are configured for this test yet.</p>
             @endif
         @endif
     @else

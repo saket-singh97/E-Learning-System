@@ -10,7 +10,9 @@ use App\Domains\Growth\Services\ScholarshipTestGradingService;
 use App\Domains\Growth\Services\ScholarshipTestRegistrationService;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 
 /**
@@ -29,6 +31,18 @@ use Livewire\Component;
  * gate, submitting a victim's already-registered email would silently
  * hand the submitter the victim's hall-ticket download link (name, roll
  * number, QR) and let them answer the test on the victim's behalf.
+ *
+ * S23 B21 review-pass fix (critical, independently found): that gate is
+ * worthless on its own — Livewire applies a request's `updates` to any
+ * public property *before* invoking the requested method, so a crafted
+ * `/livewire/update` payload could set `isNewRegistration`/`registrationId`/
+ * `questionIds` directly, no email-guessing needed at all, reaching the
+ * exact hijack the fix above claims to close (plus permanently zeroing a
+ * victim's score, since `grade()`'s own idempotency then locks it in).
+ * `#[Locked]` is Livewire's own opt-in guard against exactly this — every
+ * property this component treats as server-authoritative state (as
+ * opposed to raw user input: `name`/`email`/`phone`/`responses`) is
+ * locked below, so only this class's own PHP can ever set them.
  */
 class ScholarshipTestRegistrationForm extends Component
 {
@@ -42,16 +56,20 @@ class ScholarshipTestRegistrationForm extends Component
 
     public bool $submitted = false;
 
+    #[Locked]
     public bool $isNewRegistration = false;
 
+    #[Locked]
     public ?int $registrationId = null;
 
     /** @var array<int, int> */
+    #[Locked]
     public array $questionIds = [];
 
     /** @var array<int, mixed> */
     public array $responses = [];
 
+    #[Locked]
     public bool $answersSubmitted = false;
 
     public function mount(int $scholarshipTestId): void
@@ -66,6 +84,21 @@ class ScholarshipTestRegistrationForm extends Component
             'email' => 'required|email',
             'phone' => 'nullable|string|max:30',
         ]);
+
+        // S23 B21 review-pass fix (rate limiting) — this whole app has no
+        // other precedent for throttling a public write endpoint outside
+        // `routes/auth.php`; a per-IP cap here is cheap insurance against
+        // an anonymous actor cheaply repeating dompdf-render + QR-encode +
+        // row-lock work with disposable emails.
+        $rateLimitKey = 'scholarship-test-register:'.request()->ip();
+
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 10)) {
+            $this->addError('email', 'Too many attempts. Please try again in a few minutes.');
+
+            return;
+        }
+
+        RateLimiter::hit($rateLimitKey, 60);
 
         $test = ScholarshipTest::findOrFail($this->scholarshipTestId);
 
@@ -104,10 +137,23 @@ class ScholarshipTestRegistrationForm extends Component
 
         $registration = ScholarshipTestRegistration::findOrFail($this->registrationId);
 
+        // S23 B21 review-pass fix — render()'s own $withinWindow check only
+        // ever gated whether the form was *displayed*; a tab left open past
+        // closes_at (or before opens_at) could still POST straight to this
+        // action and get graded regardless. Re-checked here, not trusted
+        // from a stale page load.
+        $test = $registration->scholarshipTest;
+
+        if (! now()->between($test->opens_at, $test->closes_at)) {
+            return;
+        }
+
         // Only the questions actually drawn for this registration are
         // gradable — a tampered payload adding extra question_id keys for
         // any other approved course question must not inflate the score
-        // past what this one test actually offered.
+        // past what this one test actually offered. `questionIds` itself
+        // is `#[Locked]`, so this filter can no longer be defeated by
+        // forging the drawn set along with the extra answer.
         $answers = array_intersect_key($this->responses, array_flip($this->questionIds));
 
         app(ScholarshipTestGradingService::class)->grade($registration, $answers);
@@ -120,6 +166,7 @@ class ScholarshipTestRegistrationForm extends Component
         $hallTicketDownloadUrl = null;
         $questions = collect();
         $test = null;
+        $withinWindow = false;
 
         if ($this->isNewRegistration) {
             $test = ScholarshipTest::findOrFail($this->scholarshipTestId);
@@ -144,6 +191,11 @@ class ScholarshipTestRegistrationForm extends Component
             'hallTicketDownloadUrl' => $hallTicketDownloadUrl,
             'test' => $test,
             'questions' => $questions,
+            // S23 B21 review-pass fix (cosmetic) — distinguishes "outside
+            // the opens_at/closes_at window" from "no questions configured
+            // for this test at all" instead of showing the same misleading
+            // message for both.
+            'withinWindow' => $withinWindow,
         ]);
     }
 }

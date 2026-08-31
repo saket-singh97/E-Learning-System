@@ -3,6 +3,7 @@
 namespace App\Domains\Growth\Services;
 
 use App\Domains\Assessments\Models\Question;
+use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Growth\Models\ScholarshipTest;
 use App\Domains\Growth\Models\ScholarshipTestRegistration;
 
@@ -46,7 +47,12 @@ class ScholarshipTestGradingService
     public function drawQuestions(ScholarshipTest $test): array
     {
         $quiz = $test->quiz;
-        $courseId = $quiz->lesson->section->course_id;
+        $courseId = $this->courseIdFor($quiz);
+
+        if ($courseId === null) {
+            return [];
+        }
+
         $drawn = [];
 
         foreach ($quiz->blueprint as $line) {
@@ -86,7 +92,13 @@ class ScholarshipTestGradingService
         }
 
         $quiz = $registration->scholarshipTest->quiz;
-        $courseId = $quiz->lesson->section->course_id;
+        $courseId = $this->courseIdFor($quiz);
+
+        if ($courseId === null) {
+            $registration->update(['score' => 0.0]);
+
+            return $registration->fresh();
+        }
 
         // Same pool scoping QuizAttemptService::draw() applies — this
         // course's own approved questions only, so an id from a different
@@ -102,6 +114,19 @@ class ScholarshipTestGradingService
         $registration->update(['score' => $score]);
 
         return $registration->fresh();
+    }
+
+    /**
+     * S23 B21 review-pass fix — `$quiz->lesson->section->course_id` was an
+     * unguarded chain both `drawQuestions()` and `grade()` relied on;
+     * harmless while `grade()` had no real caller, but `drawQuestions()`
+     * is now invoked on every public registration, so a `ScholarshipTest`
+     * whose linked `Quiz.lesson` is missing/soft-deleted would otherwise
+     * 500 for every prospect rather than degrading gracefully.
+     */
+    protected function courseIdFor(Quiz $quiz): ?int
+    {
+        return $quiz->lesson?->section?->course_id;
     }
 
     protected function grade1(Question $question, mixed $response): float

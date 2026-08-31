@@ -5,12 +5,58 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-30)
+## Right now (2026-08-31)
 
-- **S23 — Coaching-Market Differentiators: DESIGNED, NOT BUILT.** Design +
-  22-block plan written, all 10 roadmap-pinned items (U9-U18) covered, none
-  cut — `docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,
-  `...-plan.md`. No blocks started yet; next session picks up at B0.
+- **S23 — Coaching-Market Differentiators: COMPLETE, all 22 blocks (2026-08-30–31).**
+  `docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,
+  `...-plan.md` (full per-block build log lives there, not repeated here).
+  Real build scope: all 10 roadmap-pinned items (U9-U18), none cut. 5 new
+  `BelongsToTenant` models. Confusion-signal teacher widget (U9), syllabus
+  tracker (U10), PYQ bank (U11), dual-language course tracks (U17),
+  attendance-linked access (U18), free demo class + conversion tracking
+  (U13), scholarship test module — registration, an actual guest-taken
+  test, grading, Admin builder/results (U12), rank card PDF generation +
+  delivery (U15), hall ticket generation + delivery (U14), backlog/catch-up
+  mode (U16).
+  Two review passes, not one — B20's own fix needed re-reviewing rather
+  than trusted on a green commit message, same discipline this project
+  applies to any fix. **B20** (2-angle review over the whole slice): found
+  U12 had shipped as a lead-capture form, not a test —
+  `ScholarshipTestGradingService::grade()` had no caller anywhere, so B14's
+  results view could never show a real score. Fixed by wiring a
+  question-drawing/answer-taking step into the registration flow itself.
+  Also found and fixed a hall-ticket hijack: a repeat submission under an
+  already-registered email exposed that registrant's hall-ticket link and
+  overwrote their name. **B21** (a second, independent 2-angle pass
+  specifically re-covering B20's own new code): found the hijack fix
+  itself was incomplete — Livewire applies a request's `updates` to any
+  public property *before* invoking the requested method, so the gate B20
+  added (`$isNewRegistration`) was trivially bypassable by forging that
+  property directly in a crafted payload, no email-guessing needed, and
+  could even permanently zero a victim's score via `grade()`'s own
+  idempotency. Fixed with Livewire's `#[Locked]` attribute (new to this
+  codebase) on every server-authoritative property. Also fixed: the test's
+  own close-time window wasn't re-checked at answer-submission time (only
+  at render), a null-deref crash risk if a scholarship test's linked
+  quiz's lesson gets soft-deleted, and added a per-IP rate limit (this
+  app's only other throttled route is `routes/auth.php`). Full detail —
+  every block, every finding — in `docs/PROJECT-STATUS.md`'s own S23
+  section, not repeated here.
+  4 lifecycle E2E tests: scholarship test registration → graded (through
+  the now-real question-taking flow) → hall ticket issued → conversion
+  tracked once a real enrolment lands; a rank card generated for a real
+  `TestSeries` participant (design §5's own "rank card + hall ticket"
+  chain wording conflates two architecturally separate features — no
+  schema links `ScholarshipTest` to `TestSeries` — split into two real
+  stories instead of forcing an unbuildable pipeline); a syllabus
+  tracker's percent-complete rising as lessons complete; an
+  attendance-gated batch blocking a low-attendance student while an
+  ungated enrolment for the same student keeps access.
+  Tests green: **2033/2039** (same pre-existing/unrelated baseline flakes
+  carried across this slice's own blocks: `CourseSlugUniquenessTest` since
+  S1/S2, `CalendarTest` x3 in Planner, `BackupConfigurationTest` in
+  Support, plus a rotating export-controller order-flake sibling) — full
+  suite re-run after B21's own fixes to confirm no regression.
 
 - **S22 — AI-Native Content Layer: COMPLETE, all 14 blocks (2026-08-29–30).**
   `docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`,

@@ -2585,3 +2585,212 @@ than inserting into the existing one (see B9 above). `ChapterMarkers`'
 guest-visibility gap is pre-existing (S17), not introduced or fixed here.
 
 **All 14 S22 blocks are now built, tested, and reviewed.**
+
+## S23 — Coaching-Market Differentiators: COMPLETE (all 22 blocks, 2026-08-31)
+
+`docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`
+and `...-plan.md` cover B0-B21 in full per-block detail — not repeated
+here. Real build scope was all 10 roadmap-pinned items (U9-U18, none cut),
+5 new `BelongsToTenant` models, 22 build blocks.
+
+- **B0-B1** — U10 syllabus tracker: `syllabus_topics` + `lesson_syllabus_topic`
+  pivot (no model), Admin/Teach relation-manager mapping UI.
+  `SyllabusTracker::percentCompleteFor()` groups a course's mapped lessons
+  by `board_or_exam`, reuses `LessonCompletion`'s existing per-type
+  heuristic (S13) rather than a second "done" signal — rendered on the
+  student syllabus page, parent portal, and a Teach-panel widget.
+- **B2** — U16 backlog/catch-up mode: `CatchUpPlanService`, deterministic
+  (oldest-taught-first, no AI call) — a batch's own taught lessons
+  (`BatchSession.lesson_id` on/before today, same definition
+  `DailyPracticeSetGenerator` established) minus this student's own
+  `LessonCompletion` rows.
+- **B3-B4** — U9 confusion signal: `ConfusionSignalService` composes
+  `RewatchHeatmapService`/`DoubtChatMessage` count/quiz failure rate into
+  one normalized per-lesson score, no new schema (same no-table precedent
+  those two services already set); `ConfusionSignalWidget` on the
+  Teach-panel batch edit page.
+- **B5-B6** — U11 PYQ bank: 3 plain columns on `questions`
+  (`is_pyq`/`pyq_exam_name`/`pyq_exam_year`, no new table), Admin tagging
+  UI; `PyqBrowser` student-facing filter page, gated the same
+  enrolled+`canStream()` way any other question-bank view is.
+- **B7-B8** — U17 dual-language tracks: `courses.language`/
+  `translation_of_course_id` (self-referencing, two courses each
+  independently authored, not a shared-content i18n system — design
+  decision 5), catalog language filter + a course-detail track switcher
+  resolving either link direction.
+- **B9** — U18 attendance-linked access: `tenants.attendance_linked_access_enabled` +
+  `batches.min_attendance_percent`, one new check inside
+  `LessonAccess::canStream()` — same two-key opt-in shape S20's
+  fee-based restriction already established; a batch with no threshold
+  set stays exempt even with the tenant flag on.
+- **B10-B11** — U13 free demo + conversion: `lessons.is_demo` grants an
+  unauthenticated viewer access independent of enrolment (the one "no
+  viewer at all" branch `LessonAccess` gained); `DemoConversionService`
+  answers "did this prospect convert" as a read-only query against
+  `Enrolment` by email+course, not an event listener (design decision 3 —
+  a prospect can convert weeks later through any of this app's several
+  enrolment paths).
+- **B12-B14** — U12 scholarship test module: `scholarship_tests`/
+  `scholarship_test_registrations` (prospect shape, no `user_id`, same as
+  `CourseInterestSignup`), public registration page;
+  `ScholarshipTestGradingService` grades in-memory against the linked
+  `Quiz`'s questions with no `QuizAttempt` row ever created, keeping the
+  trusted enrolled-attempt path untouched (design decision 2);
+  `ScholarshipTestResource` (Admin) to create a test/link a quiz/set the
+  open-close window, plus a results view sorted by score with
+  `ScholarshipConversionService`'s own conversion flag per row.
+- **B15-B16** — U15 rank cards: `rank_cards`, `RankCardGenerator` reuses
+  `TestSeriesRankingService::rankingsFor()` for rank/percentile (no second
+  ranking algorithm) and groups the series's questions by `Question.concept`
+  for the subject breakdown; unlike `IdCardGenerator`'s issue-once posture,
+  a repeat `generate()` call recomputes and overwrites since a student can
+  attempt another quiz after their first card; student download link on
+  the results page, an Admin bulk generate/regenerate relation manager.
+- **B17** — U14 hall tickets: `hall_tickets`, `HallTicketGenerator`
+  (`IdCardGenerator`'s own dompdf+QR shape, idempotent on repeat call — a
+  printed roll number must never change), roll numbers sequential *per
+  test* via a `ScholarshipTest`-row lock; delivery via a `signed`-only,
+  non-expiring URL (`DownloadCalendarFeedController`'s own posture — a
+  prospect has no login to re-request a fresh link later).
+- **B18** — Registry reverse sweep: **106** real `BelongsToTenant` usages,
+  **106** registry entries, exact match (a naive first-pass grep under-counted
+  at 92 — it misses any model combining the trait on one line with
+  another, e.g. `use BelongsToTenant, SoftDeletes;`; the corrected
+  `grep -rlP "^\s+use\s+BelongsToTenant\b"` is the one to reuse next
+  slice). `tests/Isolation/CrossTenantTest.php` — 107/107.
+- **B19** — Full coverage pass: audited every new service/generator this
+  slice added against `tests/Feature/**` — all 12 already had dedicated
+  tests from their own block. Design §5 names three edge cases explicitly;
+  two were already covered (U18's threshold-unset exemption, U12's
+  double-grading guard), one was genuinely missing — every
+  `DemoConversionServiceTest` case varied the *course*, never the *email*
+  itself, so a bug matching on tenant+course alone would have slipped
+  through. Added it, plus the identical un-named gap in
+  `ScholarshipConversionServiceTest` (same email-matching pattern, B14).
+- **B20** — 2-angle background-agent review pass (correctness/convention,
+  security/tenant-isolation) over the whole slice's diff. **Found and
+  fixed 2 real issues, both converging on the same root cause from
+  opposite angles:**
+  1. **U12's scholarship test was never actually a test** —
+     `ScholarshipTestGradingService::grade()` (B13) had no caller anywhere
+     in the app. The registration flow (B12) only ever collected
+     name/email/phone; nothing presented the linked `Quiz`'s questions or
+     submitted answers, so B14's results view showed a permanent
+     "Not graded" placeholder with no code path that could ever replace
+     it. Fixed by wiring the missing step into `ScholarshipTestRegistrationForm`
+     itself: a new `ScholarshipTestGradingService::drawQuestions()`
+     duplicates `QuizAttemptService::draw()`'s blueprint-based selection
+     (same cross-domain-service reasoning `grade1()`'s own dispatch
+     already documents — a service is not a model, so calling `draw()`
+     directly would violate CLAUDE.md's domains-talk-through-Events rule);
+     drawn once on successful registration, rendered behind the test's own
+     `opens_at`/`closes_at` window, graded on submit. A submitted answer
+     is filtered to only the drawn questions before grading — closes a
+     related score-inflation gap the correctness agent flagged as
+     "currently unreachable, only matters once #1 is fixed."
+  2. **Hall-ticket hijack + registration overwrite via an unverified
+     email-upsert.** `ScholarshipTestRegistrationService::register()`
+     mirrored `CourseInterestSignupService`'s own "repeat email updates
+     the row" idiom — fine for a low-stakes interest signup, but this row
+     now backs a printed document (B17's hall ticket: name + QR-coded
+     roll number). Submitting a victim's already-registered email with an
+     attacker's own name would silently overwrite the victim's stored
+     name, and the confirmation view exposed the hall-ticket download
+     link + the test-taking form on *every* successful submission, not
+     just a genuinely new one. Fixed at two levels: `register()` now only
+     fills name/phone when the row didn't already exist; the Livewire
+     component gates the hall-ticket link, the question form, and
+     hall-ticket generation itself behind `$registration->wasRecentlyCreated`
+     — same "no identity-carrying link across an unauthenticated page
+     boundary" posture B11's `CourseInterestForm::watchDemo()` already
+     established, applied here to a second, unnoticed instance of the
+     same class of gap.
+  Reviewed and accepted as pre-existing, low-risk, not touched:
+  `CourseInterestForm::watchDemo()`'s own demo-attendance flag can be set
+  by anyone who knows a prospect's email — skews `DemoConversionService`'s
+  read-only metric, exposes no data, matches design decision 3's
+  already-accepted trust model for this whole unauthenticated surface.
+- **B21** — a second, fresh 2-angle background-agent review pass
+  specifically re-covering B20's own new code (a fix a first pass writes
+  is not automatically correct — same discipline as re-verifying, not
+  just trusting a green commit message), plus the lifecycle E2E test.
+  **Found and fixed 4 more real issues** — the most important being that
+  B20's own hijack fix was itself incomplete:
+  1. **CRITICAL — the `wasRecentlyCreated`/`isNewRegistration` gate B20
+     added does not hold against a crafted Livewire payload.** Livewire
+     applies a request's `updates` to any public property *before*
+     invoking the requested method — `isNewRegistration`, `registrationId`,
+     and `questionIds` were plain `public` properties with no guard, so a
+     forged `/livewire/update` payload could set `registrationId` to any
+     guessable id and `isNewRegistration: true` directly, no email-guessing
+     needed at all, reaching the exact hall-ticket hijack B20's own
+     docblock claimed to have closed — and, since `grade()` is idempotent,
+     a forged call to `submitAnswers()` with empty answers could
+     permanently zero a victim's score before they ever took the test.
+     Fixed with Livewire's own `#[Locked]` attribute (new to this
+     codebase, no prior usage to follow) on every property this component
+     treats as server-authoritative state (`isNewRegistration`,
+     `registrationId`, `questionIds`, `answersSubmitted`) — only this
+     class's own PHP can set them now, confirmed by a new test that
+     asserts a `set()` on any of them throws
+     `CannotUpdateLockedPropertyException`.
+  2. **HIGH — `submitAnswers()` never re-checked the test's own
+     `opens_at`/`closes_at` window**, only `render()` did (gating what got
+     *displayed*, not what got *accepted*). A tab left open past
+     `closes_at` could still submit and get graded. Fixed by re-deriving
+     the test and re-checking the window inside `submitAnswers()` itself,
+     not trusted from a stale page load.
+  3. **MEDIUM — `$quiz->lesson->section->course_id` was an unguarded
+     null-dereference chain** in both `drawQuestions()` and `grade()`,
+     inherited from `QuizAttemptService::draw()`'s own identical
+     derivation. Harmless while `grade()` had no real caller (B13-B19),
+     but B20 made `drawQuestions()` fire on every public registration —
+     a `ScholarshipTest` whose linked `Quiz.lesson` is soft-deleted (Lesson
+     uses `SoftDeletes`) now 500s for every prospect instead of degrading.
+     Fixed with a shared `courseIdFor()` helper using nullsafe chaining;
+     `drawQuestions()` returns no questions and `grade()` scores 0 rather
+     than crashing.
+  4. **LOW — no rate limiting anywhere on this newly-public write
+     surface.** Every new email triggers a row-lock transaction + dompdf
+     render + QR encode, freely repeatable with disposable emails — the
+     only other throttled route in this whole app is `routes/auth.php`.
+     Added a per-IP cap (`RateLimiter`, 10/minute) inside `submit()`
+     itself, the same proportionate, self-contained shape given no
+     existing component-level throttle precedent to extend.
+  Confirmed clean, not newly found: the score-inflation guard
+  (`array_intersect_key` against the drawn set) genuinely holds once
+  `questionIds` is locked; cross-tenant/cross-course question smuggling
+  via a forged `$responses` payload is blocked by `grade()`'s own
+  `course_id`/`status=approved` re-scoping; no XSS anywhere in the new
+  blade views (`{{ }}` throughout, no `{!! !!}`); `register()`'s
+  no-overwrite-on-repeat fix genuinely holds for its own targeted vector.
+  4 new lifecycle-E2E tests (`S23CoachingMarketDifferentiatorsE2ETest`):
+  scholarship test registration → graded (via the now-real question-taking
+  flow) → hall ticket issued → conversion tracked once a real enrolment
+  lands under the same email; a rank card generated for a real `TestSeries`
+  participant, matching `TestSeriesRankingService`'s own numbers (design
+  §5 names "rank card + hall ticket" as one chain, but the two are
+  architecturally separate — `RankCard` needs an authenticated enrolled
+  `User` + `TestSeries`, `HallTicket` needs neither, and no schema links
+  `ScholarshipTest` to `TestSeries` at all — split into two real,
+  independently-chained stories instead of forcing an unbuildable literal
+  pipeline); a syllabus tracker's percent-complete rising from 0% to 100%
+  as a student's own `LessonCompletion` signal appears per mapped lesson;
+  an attendance-gated batch blocking a low-attendance student's stream
+  while a second, ungated enrolment for the same student/course keeps
+  access.
+
+**What's still rough, on purpose:** design §5's own "rank card + hall
+ticket" chain wording conflates two architecturally separate features
+(U15 rank cards vs U12/U14 scholarship-test hall tickets) — see B21 above,
+not a build gap, a design-doc wording gap. Everything else this slice
+named is fully wired end to end, including the scholarship-test
+question-taking flow B20/B21 had to add mid-slice after review found it
+missing.
+
+Tests green: **2033/2039** (same pre-existing/unrelated baseline flakes
+carried across this slice's own blocks: `CourseSlugUniquenessTest` since
+S1/S2, `CalendarTest` x3 in Planner, `BackupConfigurationTest` in Support,
+plus a rotating export-controller order-flake sibling).
+
+**All 22 S23 blocks are now built, tested, and reviewed.**

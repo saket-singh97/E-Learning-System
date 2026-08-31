@@ -11,7 +11,9 @@ use App\Domains\Growth\Models\ScholarshipTestRegistration;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 
 /**
@@ -60,6 +62,8 @@ beforeEach(function () {
         'opens_at' => now()->subDay(),
         'closes_at' => now()->addWeek(),
     ]);
+
+    RateLimiter::clear('scholarship-test-register:127.0.0.1');
 });
 
 it('presents the test after registering and scores a submitted answer', function () {
@@ -141,4 +145,59 @@ it('does not re-expose the hall ticket or the test to a repeat submission under 
     // repeat submission — no overwrite, no second hall ticket generated.
     expect(ScholarshipTestRegistration::sole()->name)->toBe('Guest Prospect');
     expect(ScholarshipTestRegistration::sole()->hallTicket->id)->toBe($originalHallTicketId);
+});
+
+it('refuses a crafted payload that tries to set a locked property directly, not just a forged email', function () {
+    // S23 B21 review-pass fix (critical) — Livewire applies a request's
+    // `updates` to any public property before invoking the requested
+    // method, so gating purely on server-set state (as the B20 fix did)
+    // is worthless unless that state is also `#[Locked]`. Without it, a
+    // crafted payload could set registrationId/isNewRegistration directly
+    // — no email-guessing needed — and reach the exact hijack the B20 fix
+    // claims to close.
+    expect(fn () => Livewire::test(ScholarshipTestRegistrationForm::class, ['scholarshipTestId' => $this->test->id])
+        ->set('registrationId', 999999))
+        ->toThrow(CannotUpdateLockedPropertyException::class);
+
+    expect(fn () => Livewire::test(ScholarshipTestRegistrationForm::class, ['scholarshipTestId' => $this->test->id])
+        ->set('isNewRegistration', true))
+        ->toThrow(CannotUpdateLockedPropertyException::class);
+
+    expect(fn () => Livewire::test(ScholarshipTestRegistrationForm::class, ['scholarshipTestId' => $this->test->id])
+        ->set('questionIds', [$this->question->id]))
+        ->toThrow(CannotUpdateLockedPropertyException::class);
+});
+
+it('refuses to grade a submission made after the test has already closed', function () {
+    $component = Livewire::test(ScholarshipTestRegistrationForm::class, ['scholarshipTestId' => $this->test->id])
+        ->set('name', 'Guest Prospect')
+        ->set('email', 'guest@example.com')
+        ->call('submit')
+        ->assertSee($this->question->stem);
+
+    // The window closes after the form was already loaded — same as a
+    // prospect leaving a tab open past the deadline.
+    $this->test->update(['closes_at' => now()->subMinute()]);
+
+    $component->set("responses.{$this->question->id}", '4')->call('submitAnswers');
+
+    expect(ScholarshipTestRegistration::sole()->score)->toBeNull();
+});
+
+it('rate-limits repeated registration attempts from the same IP', function () {
+    for ($i = 0; $i < 10; $i++) {
+        Livewire::test(ScholarshipTestRegistrationForm::class, ['scholarshipTestId' => $this->test->id])
+            ->set('name', 'Prospect')
+            ->set('email', "prospect{$i}@example.com")
+            ->call('submit')
+            ->assertHasNoErrors();
+    }
+
+    Livewire::test(ScholarshipTestRegistrationForm::class, ['scholarshipTestId' => $this->test->id])
+        ->set('name', 'Prospect')
+        ->set('email', 'prospect-over-limit@example.com')
+        ->call('submit')
+        ->assertHasErrors('email');
+
+    expect(ScholarshipTestRegistration::where('email', 'prospect-over-limit@example.com')->exists())->toBeFalse();
 });
