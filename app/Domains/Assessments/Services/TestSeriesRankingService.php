@@ -6,6 +6,7 @@ use App\Domains\Assessments\Models\Quiz;
 use App\Domains\Assessments\Models\QuizAttempt;
 use App\Domains\Assessments\Models\TestSeries;
 use App\Models\User;
+use App\Support\Analytics\PercentileRank;
 use Illuminate\Support\Collection;
 
 /**
@@ -60,17 +61,14 @@ class TestSeriesRankingService
                 ->map(fn (Collection $perQuiz): float => (float) $perQuiz->max('score'))
                 ->sum());
 
-        $totalParticipants = $totalScoreByUser->count();
-
         return $totalScoreByUser
             ->map(fn (float $totalScore, int $userId): array => ['user_id' => $userId, 'total_score' => $totalScore])
             ->values()
             ->sortByDesc('total_score')
             ->values()
-            ->map(function (array $row) use ($totalScoreByUser, $totalParticipants): array {
+            ->map(function (array $row) use ($totalScoreByUser): array {
                 $rank = 1 + $totalScoreByUser->filter(fn (float $score): bool => $score > $row['total_score'])->count();
-                $countBelow = $totalScoreByUser->filter(fn (float $score): bool => $score < $row['total_score'])->count();
-                $percentile = $totalParticipants > 0 ? round($countBelow / $totalParticipants * 100, 1) : 0.0;
+                $percentile = PercentileRank::of($row['total_score'], $totalScoreByUser);
 
                 return $row + ['rank' => $rank, 'percentile' => $percentile];
             });

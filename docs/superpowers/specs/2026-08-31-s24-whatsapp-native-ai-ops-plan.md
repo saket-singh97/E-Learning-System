@@ -35,7 +35,7 @@ then stop and report before starting the next block.
 | B5 | U22 pt.2 — Admin review UI feeding `BatchSessionsRelationManager`'s existing prefill-from-template accept flow | ✅ done |
 | B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ✅ done |
 | B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ✅ done |
-| B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ⬜ not started |
+| B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ✅ done |
 | B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ⬜ not started |
 | B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ⬜ not started |
 | B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ⬜ not started |
@@ -366,9 +366,9 @@ pre-existing baseline flakes (`CourseSlugUniquenessTest`, `CalendarTest`
 x3, `BackupConfigurationTest`, both rotating export-controller
 order-flake siblings) — no new failures. This closes out U23.
 
-### B8 — U24 pt.1: peer comparison service
+### B8 — U24 pt.1: peer comparison service ✅
 
-- [ ] `PeerComparisonService::percentileFor(User $student, Batch $batch,
+- [x] `PeerComparisonService::percentileFor(User $student, Batch $batch,
       string $concept): ?float` — reuses `WeakTopicDetectionService::classWideWeakTopicsFor()`'s
       own per-concept score aggregation for the batch, then the same
       percentile-rank math `TestSeriesRankingService::rankingsFor()`
@@ -376,10 +376,38 @@ order-flake siblings) — no new failures. This closes out U23.
       rather than a 3rd copy — confirm the cleanest reuse point without
       creating a cross-domain service call, design §3.1's own domain-model-
       read precedent).
-- [ ] Tests: a student's own percentile matches a hand-computed rank among
+- [x] Tests: a student's own percentile matches a hand-computed rank among
       real seeded classmates' concept scores; a concept with only one
       student enrolled returns a defined value (100th percentile, or null
       — pick one and test it), not an error.
+
+**Build notes:** the plan's own named reuse target didn't quite hold, checked
+rather than assumed — `WeakTopicDetectionService::classWideWeakTopicsFor()`
+only returns *weak* (ratio &lt; 0.6) concepts aggregated across the whole
+class, never a per-student raw score for an arbitrary concept, so it isn't
+actually callable from a percentile method; `PeerComparisonService`
+re-derives the same per-student per-concept ratio
+`weakTopicsFor()` computes (concept normalized in PHP after fetching, same
+reasoning as that method's own `normalize()`), unfiltered, reading
+`QuizAnswer`/`Question` (Assessments) directly — the genuine
+`RewatchHeatmapService`/`DropOffService` cross-domain-*model*-read shape,
+never a call into another domain's service class. The percentile math
+itself *is* the one piece that's truly shared, so that's what got
+extracted: `App\Support\Analytics\PercentileRank::of()`, a new stateless
+`Support/` helper (CLAUDE.md's own "shared cross-domain code lives outside
+Domains/" rule) — `TestSeriesRankingService::rankingsFor()` was refactored
+to call it too, replacing its own inline formula, so there's exactly one
+copy of the "beat X%" math in the codebase now, not two. Chose **null**
+(not 100) for "not enough peers to compare against" — covers both a
+concept the student never answered and a concept only one student's data
+exists for (batch of one, or a lone answerer), since a percentile is
+genuinely undefined with no peer group, and 0.0 (the formula's own natural
+output for "beat nobody") would misleadingly read as "you're at the
+bottom" rather than "no ranking is possible yet." `composer test`:
+2061/2066 passed (the `TestSeriesRankingService` refactor confirmed
+non-regressive via its own full test file, plus the wider suite); the 5
+failures are all pre-existing baseline flakes (`CourseSlugUniquenessTest`,
+`CalendarTest` x3, `BackupConfigurationTest`) — no new failures.
 
 ### B9 — U24 pt.2: student-facing widget
 
