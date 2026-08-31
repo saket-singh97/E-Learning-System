@@ -45,7 +45,7 @@ then stop and report before starting the next block.
 | B15 | U15 pt.1 — `rank_cards` schema + `RankCardGenerator` (reuses `TestSeriesRankingService`) | ✅ done |
 | B16 | U15 pt.2 — Rank card download UI wiring (student + Admin) | ✅ done |
 | B17 | U14 — `hall_tickets` schema + `HallTicketGenerator` + download UI | ✅ done |
-| B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ⬜ not started |
+| B18 | `TenantModelRegistry` sweep — 5 new models confirmed registered | ✅ done |
 | B19 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
 | B20 | Multi-angle review pass over the whole slice's diff (same discipline S13-S22 B-final each used) | ⬜ not started |
 | B21 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -800,15 +800,47 @@ this run, `DownloadCompletionExportControllerTest`/
 B3/B16 already documented), none touching Assessments/Growth code this
 block changed.
 
-### B18 — TenantModelRegistry sweep
+### B18 — TenantModelRegistry sweep ✅
 
-- [ ] Confirm all 5 new models (`SyllabusTopic`, `ScholarshipTest`,
+- [x] Confirm all 5 new models (`SyllabusTopic`, `ScholarshipTest`,
       `ScholarshipTestRegistration`, `RankCard`, `HallTicket`) registered
       with `seedAttributes()`/`updateAttributes()`.
-- [ ] Reverse grep every real `BelongsToTenant` usage under
+- [x] Reverse grep every real `BelongsToTenant` usage under
       `app/Domains/*/Models/*.php` against the registry — same
       exact-count discipline every prior slice's own sweep block ran.
-- [ ] `tests/Isolation/CrossTenantTest.php` passes for all 5 new models.
+- [x] `tests/Isolation/CrossTenantTest.php` passes for all 5 new models.
+
+Verification-only block, no code changes. First pass with a naive
+`grep -rl "use BelongsToTenant;"` under-counted at 92 — it misses any model
+combining the trait on one line with another (`use BelongsToTenant,
+SoftDeletes;`, e.g. `Question`), so the real reverse grep needs
+`grep -rlP "^\s+use\s+BelongsToTenant\b"` (leading indentation anchors it
+to the trait-use line inside the class body, not the `use
+App\Support\Tenancy\BelongsToTenant;` import at column 0) — same lesson
+worth keeping for the next slice's own sweep block. That correct grep
+found **106** models using the trait; `TenantModelRegistry::MODELS` also
+lists **106**; a basename diff between the two lists (checked for
+duplicate basenames first, since a naive basename compare would mask a
+same-named model in two domains — none exist) came back byte-identical:
+every registered model has a real `BelongsToTenant` usage and every real
+usage is registered, zero gaps either direction.
+
+All 5 of this slice's new models confirmed present in all three required
+spots (`MODELS` array, `seedAttributes()`, `updateAttributes()`):
+`SyllabusTopic` (B0), `ScholarshipTest`/`ScholarshipTestRegistration`
+(B12), `RankCard` (B15), `HallTicket` (B17) — each was in fact registered
+in the same block that introduced it, so this sweep found nothing to fix,
+only confirmed the running total. `tests/Isolation/CrossTenantTest.php`:
+107/107 (cross-tenant read, update, and no-tenant-context guard, once per
+registered model, generated from the registry — not hand-written per
+model, per `CLAUDE.md`'s own rule).
+
+`composer test`: 2017/2023. 6 failures — the same pre-existing/unrelated
+family as every prior block's run (`CourseSlugUniquenessTest`,
+`CalendarTest` x3 in Planner, `BackupConfigurationTest` in Support, plus
+the rotating `DownloadEnrolmentExportControllerTest`/
+`DownloadCompletionExportControllerTest` order-flake sibling), identical
+count to B17's own run since this block changed no application code.
 
 ### B19 — Full test coverage pass
 
