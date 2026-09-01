@@ -38,7 +38,7 @@ then stop and report before starting the next block.
 | B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ✅ done |
 | B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ✅ done |
 | B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ✅ done |
-| B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ⬜ not started |
+| B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ✅ done |
 | B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
 | B13 | Multi-angle review pass over the whole slice's diff (same discipline S13-S23 B-final each used) | ⬜ not started |
 | B14 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
@@ -479,16 +479,29 @@ baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
 both rotating export-controller order-flake siblings) — no new failures.
 This closes out U25 — every S24 item (U19-U25) is now built.
 
-### B11 — TenantModelRegistry sweep
+### B11 — TenantModelRegistry sweep ✅
 
-- [ ] Confirm `WhatsAppLink` (the only new model this slice adds) is
+- [x] Confirm `WhatsAppLink` (the only new model this slice adds) is
       registered with `seedAttributes()`/`updateAttributes()`.
-- [ ] Reverse grep every real `BelongsToTenant` usage under
+- [x] Reverse grep every real `BelongsToTenant` usage under
       `app/Domains/*/Models/*.php` against the registry — same exact-count
       discipline every prior slice's own sweep block ran (S23's own sweep
       found the naive-grep under-count trap; reuse the corrected
       `grep -rlP "^\s+use\s+BelongsToTenant\b"` pattern directly).
-- [ ] `tests/Isolation/CrossTenantTest.php` passes for the new model.
+- [x] `tests/Isolation/CrossTenantTest.php` passes for the new model.
+
+**Build notes:** clean sweep, no code changes needed — `WhatsAppLink` was
+already registered (with `seedAttributes()`/`updateAttributes()` entries)
+back in B0, immediately on creation, per the design's own "not deferred to
+the registry sweep" instruction. The corrected reverse-grep
+(`grep -rlP "^\s+use\s+BelongsToTenant\b" app/Domains/*/Models/*.php`)
+found exactly 107 models; `TenantModelRegistry::MODELS` has exactly 107
+entries; diffing the two sets both ways found zero missing and zero stale
+— an exact match, `WhatsAppLink` included in both.
+`tests/Isolation/CrossTenantTest.php`: 108/108 passed.
+`composer test`: 2067/2071 passed; the 4 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
+both rotating export-controller order-flake siblings) — no new failures.
 
 ### B12 — Full test coverage pass
 
