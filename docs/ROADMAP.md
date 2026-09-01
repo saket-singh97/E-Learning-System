@@ -14,8 +14,7 @@ regenerate it from this file.
 | | |
 |---|---|
 | **Slices in the full plan** | 26 |
-| **Shipped** | 23 (S1–S23) |
-| **Designed, not built** | 1 (S24) |
+| **Shipped** | 24 (S1–S24) |
 | **Proposed, not yet scoped** | 2 (S25–S26) |
 
 **Phase completion:**
@@ -26,7 +25,7 @@ regenerate it from this file.
 
 ---
 
-## Shipped — S1 to S23
+## Shipped — S1 to S24
 
 | Slice | Scope | Size | Built | Status |
 |---|---|---|---|---|
@@ -53,22 +52,17 @@ regenerate it from this file.
 | S21 | Platform Scale & Migration — stateless-readiness audit, per-tenant feature flags, institute API keys + outbound webhooks, bearer-token auth on `/api/v1/`, Google Workspace SSO, Card EMI, data-import tooling (courses/enrolments/payment history). Real scope is 6 items, not the row's own headline "5 sentences" (V12 splits into two tracked deliverables): read replicas (V8) and server hardening (V7) are cut — infra/ops or "no concrete deliverable yet," not application code; SAML (half of V13) is cut — no library installed, no buyer signal | 16 blocks | Aug 28–29 | ✅ Done |
 | S22 | AI-Native Content Layer — auto lecture notes, auto chapters/timestamps, auto quiz after every live class, Daily Practice Problems, ask-at-timestamp, auto formula sheets, audio-only revision mode, teacher lesson-plan assistant. Real scope is 8 items (U1-U8), not the roadmap row's own 5-clause headline (U6/U7/U8 are real, separate FEATURES.md rows the headline folded into other clauses) — plus 2 backlog gaps (Z1 subscription renewal never scheduled, Z2 affiliate commission never auto-confirmed) found by this slice's own audit of every S11-S21 "deferred as fast-follow" note, neither previously picked up by a later slice | 14 blocks | Aug 29–30 | ✅ Done |
 | S23 | Coaching-Market Differentiators — confusion-signal teacher widget, syllabus tracker, PYQ bank, scholarship test module (registration + guest-taken test + grading + admin builder/results), free demo class access + conversion tracking, hall ticket generation, rank card PDF generation + delivery, backlog/catch-up mode, dual-language course tracks, attendance-linked access. All 10 roadmap-pinned items (U9-U18), none cut | 22 blocks | Aug 30–31 | ✅ Done |
+| S24 | WhatsApp-Native AI & Ops — WhatsApp doubt bot (text/voice/photo) over a new signature-verified inbound webhook, conflict-free timetable auto-scheduler + admin review UI, per-institute fee analytics, peer-comparison "top N%" widget, print-friendly lesson-notes export. All 7 roadmap-pinned items (U19-U25), none cut | 15 blocks | Aug 31–Sep 1 | ✅ Done |
 
 Full design/plan docs: `docs/superpowers/specs/2026-08-26-s19-communication-platform-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-27-s20-growth-billing-extensions-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-28-s21-platform-scale-migration-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-29-s22-ai-native-content-layer-design.md`,
 `...-plan.md`; `docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,
+`...-plan.md`; `docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`,
 `...-plan.md`.
 
 ---
-
-## S24 — WhatsApp-Native AI & Ops (designed, not built)
-
-Design + block-by-block plan written 2026-08-31, all 7 roadmap-pinned items
-(U19-U25) covered, none cut:
-`docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`,
-`...-plan.md` (15 blocks, B0-B14 — not yet started).
 
 ## Full roadmap — S25 onward (proposed)
 

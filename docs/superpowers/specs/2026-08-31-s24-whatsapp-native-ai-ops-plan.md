@@ -41,7 +41,7 @@ then stop and report before starting the next block.
 | B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ✅ done |
 | B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ✅ done |
 | B13 | Multi-angle review pass over the whole slice's diff (same discipline S13-S23 B-final each used) | ✅ done |
-| B14 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
+| B14 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ✅ done |
 
 **Test suite baseline:** carry forward S23's own closing count (2033+/2039+,
 same documented pre-existing/unrelated flakes: `CourseSlugUniquenessTest`
@@ -667,15 +667,39 @@ instead. `composer test`: 2079/2081 passed; the 2 failures are the same
 pre-existing baseline flakes (`CourseSlugUniquenessTest`,
 `BackupConfigurationTest`) — no new failures.
 
-### B14 — Lifecycle E2E + docs
+### B14 — Lifecycle E2E + docs ✅
 
-- [ ] New `S24WhatsAppNativeAiOpsE2ETest` chaining at minimum: a linked
+- [x] New `S24WhatsAppNativeAiOpsE2ETest` chaining at minimum: a linked
       student's WhatsApp text doubt → resolved to the real enrolled lesson
       → answered through the real `DoubtChatService`; a voice note →
       transcribed → answered through the same path; fee analytics numbers
       verified against a real seeded set of paid/unpaid/overdue invoices;
       a student's own percentile on a weak topic matches hand-computed
       rank among real seeded classmates.
-- [ ] Update `docs/PROJECT-STATUS.md` (new S24 section), `HANDOVER.md`
+- [x] Update `docs/PROJECT-STATUS.md` (new S24 section), `HANDOVER.md`
       ("Right now" entry), `docs/ROADMAP.md` (S24 row → ✅ Done, shipped
       count 23→24) — same close-out shape every prior slice used.
+
+**Build notes:** design §5 names 4 chains; the first two ("a WhatsApp text
+doubt → resolved lesson → answered" and "a voice note → transcribed →
+answered through the same path") were combined into one story — a real
+HTTP round trip through the signature-verified `/api/webhooks/whatsapp`
+for each message type, on the same linked student/lesson, proving both
+land in the exact same `DoubtChatService` path rather than just similar
+per-block assertions in isolation. Fee analytics and peer-comparison each
+got their own fresh scenario (hand-computed collection rate/ageing-bucket
+against a real paid/pending/overdue mix; a student's own weak-topic
+percentile against 2 real seeded classmates, one stronger, one weaker,
+matching `PercentileRank`'s own "beat X%, denominator includes self" — the
+same convention `TestSeriesRankingService` already established, not a
+simpler "beat your classmates only" reading). `docs/ROADMAP.md`'s own
+`## S24 — ... (designed, not built)` standalone section was folded into
+the shipped table as a normal row (matching every other shipped slice's
+own shape) rather than kept as a separate section.
+`composer test`: 2082/2084 passed (3 new tests added, no production
+code changed this block); the 2 failures are the same pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`)
+— no new failures.
+
+**All 15 S24 blocks are now built, tested, and reviewed — S24
+"WhatsApp-Native AI & Ops" is complete.**

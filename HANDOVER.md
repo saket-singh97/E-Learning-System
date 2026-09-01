@@ -5,19 +5,57 @@ now — not a dump of everything. Full detail always lives in the doc linked
 below, never copied here; this file just says where things are and points
 at the source.
 
-## Right now (2026-08-31)
+## Right now (2026-09-01)
 
-- **S24 — WhatsApp-Native AI & Ops: DESIGNED, NOT BUILT.** Design +
-  15-block plan written, all 7 roadmap-pinned items (U19-U25) covered, none
-  cut — `docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`,
-  `...-plan.md`. No blocks started yet; next session picks up at B0. Real
-  gaps confirmed before designing (not assumed): no inbound WhatsApp
-  webhook exists anywhere in this codebase today (outbound-only via
-  `CommsProvider::sendTemplate()`); phone numbers aren't unique across
-  tenants on this platform, so a new `whatsapp_links` table + one-time
-  linking-code flow resolves identity (design's own named limitation, not
-  hidden); U19-U21 all reuse existing `AiProvider`/`DoubtChatService`/
-  `PhotoDoubtQuery` engines as new entry points, no new AI subsystem.
+- **S24 — WhatsApp-Native AI & Ops: COMPLETE, all 15 blocks (2026-08-31–09-01).**
+  `docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`,
+  `...-plan.md` (full per-block build log lives there, not repeated here).
+  Real build scope: all 7 roadmap-pinned items (U19-U25), none cut. 1 new
+  `BelongsToTenant` model (`WhatsAppLink`). WhatsApp doubt bot — text,
+  voice-note (transcribed, re-enters the same path), and photo (real
+  `PhotoDoubtQuery` row through the existing S17 pipeline) — all through a
+  new signature-verified, platform-wide `/webhooks/whatsapp` (U19-U21);
+  auto-scheduler proposal engine + admin review/accept UI (U22);
+  per-institute fee analytics service + Admin dashboard widget (U23);
+  peer-comparison percentile service + student "top N%" widget, own
+  standing only (U24); print-friendly lesson-notes export, no new PDF
+  generator (U25).
+  Two review passes, not one — same discipline S23's own B20/B21
+  established: a fix a first pass writes isn't automatically correct.
+  **First pass** (2-angle: correctness/convention + security/tenant-
+  isolation) found and fixed 3 real issues: `handleDoubt()` let a raw
+  HTTP 403/404 from `DoubtChatService::ask()` (a fee/attendance-blocked
+  lesson) escape the webhook instead of replying; `WhatsAppLinkService::verifyCode()`
+  burned a valid one-time code on an unrelated duplicate-phone failure;
+  that same check was TOCTOU-racy against its own insert (uncaught 500 on
+  a concurrent attempt, no cross-tenant leak). **Second pass** (same
+  2-angle shape, specifically re-covering the first pass's own fix
+  commit) found 4 more, one a regression the first pass's own fix had
+  introduced: switching `Cache::pull()` to `Cache::get()` to fix the
+  burned-code bug reopened a worse hole — two concurrent LINK attempts
+  with the *same* code but *different* phones could both succeed, one
+  code binding multiple phones, no unlink feature anywhere in the app
+  (fixed with a `Cache::lock()` keyed by the code); `handleDoubt()` also
+  never caught the plain `RuntimeException` subclasses an AI spend-cap/
+  circuit-breaker throw, silently dropping doubts with zero reply;
+  `BatchResource::autoScheduleAction()` never re-validated conflicts at
+  actual persist time, letting a stale proposal double-book an
+  instructor; `handleAudio()` downloaded unbounded, unauthenticated audio
+  before checking `WhatsAppLink` at all (unlike its `handleImage()`
+  sibling), and ran its transcribe call with no tenant bound in real
+  production — every inbound voice note threw in production, invisible
+  to tests since `beforeEach()` leaves a tenant bound a real request
+  never gets. Full detail — every block, every finding — in
+  `docs/PROJECT-STATUS.md`'s own S24 section, not repeated here.
+  3 lifecycle E2E tests: a linked student's WhatsApp text doubt and a
+  voice note both landing in the exact same `DoubtChatService` path via a
+  real HTTP round trip through the signature-verified webhook; fee
+  analytics numbers matching a hand-computed value against a real seeded
+  invoice mix; a student's own weak-topic percentile matching a
+  hand-computed rank among real seeded classmates.
+  Tests green: **2079/2081** (same pre-existing/unrelated baseline flakes:
+  `CourseSlugUniquenessTest` since S1/S2, `BackupConfigurationTest` in
+  Support, plus a rotating export-controller order-flake sibling).
 
 - **S23 — Coaching-Market Differentiators: COMPLETE, all 22 blocks (2026-08-30–31).**
   `docs/superpowers/specs/2026-08-30-s23-coaching-market-differentiators-design.md`,

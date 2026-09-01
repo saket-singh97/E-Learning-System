@@ -2794,3 +2794,140 @@ S1/S2, `CalendarTest` x3 in Planner, `BackupConfigurationTest` in Support,
 plus a rotating export-controller order-flake sibling).
 
 **All 22 S23 blocks are now built, tested, and reviewed.**
+
+## S24 — WhatsApp-Native AI & Ops: COMPLETE (all 15 blocks, 2026-08-31–09-01)
+
+`docs/superpowers/specs/2026-08-31-s24-whatsapp-native-ai-ops-design.md`
+and `...-plan.md` cover B0-B14 in full per-block detail — not repeated
+here. Real build scope was all 7 roadmap-pinned items (U19-U25, none
+cut), 1 new `BelongsToTenant` model (`WhatsAppLink`), 15 build blocks.
+
+- **B0** — U19 pt.1: `doubt_chat_messages.channel`/`source_phone` +
+  `whatsapp_links` schema (platform-wide unique `phone_e164`, since a
+  phone number isn't unique across tenants — the identity-ambiguity gap
+  design decision 1 names). `WhatsAppLinkService::generateCode()`/
+  `verifyCode()`, code held in cache (not a table — `whatsapp_links` only
+  ever holds confirmed rows), student-portal "Link WhatsApp" UI.
+- **B1** — U19 pt.2: `/webhooks/whatsapp` (platform-wide, HMAC-signature-
+  gated, same unsigned/controller-gated shape every other page-rendering
+  route uses). `WhatsAppInboundMessageHandler` resolves phone → tenant →
+  student via `whatsapp_links`, routes a text doubt through
+  `SemanticSearchService` → the *existing*, unchanged `DoubtChatService::ask()`.
+  `CommsProvider` gained `sendSessionMessage()` for freeform replies.
+- **B2** — U20 voice notes: downloads, transcribes via the same
+  `AiProvider::transcribe()` lecture ingestion already uses, re-enters
+  B1's exact text-doubt path with the transcript.
+- **B3** — U21 photo doubt: downloads/validates against
+  `PhotoDoubtService`'s own extension/size limits, creates a real
+  `PhotoDoubtQuery` row, dispatches the *existing* S17 `ProcessPhotoDoubtQuery`
+  job unchanged — the job itself replies once processing finishes (no
+  event/broadcast infra exists to hook a completion signal from instead).
+- **B4** — U22 pt.1: `AutoSchedulerService::propose()` — conflict-free
+  slot proposals cycling the tenant's own `TimetableTemplate` rows,
+  checked against `TeacherConflictDetector::wouldConflict()` plus an
+  in-memory check against the same call's own not-yet-persisted
+  proposals. Confirmed rooms are genuinely unmodeled anywhere in this
+  codebase — every candidate carries `room => null`, a documented v1 gap.
+- **B5** — U22 pt.2: `BatchResource::autoScheduleAction()` — a Repeater-
+  based review/accept modal (first computed, non-Eloquent candidate list
+  in a Filament modal in this codebase), writing accepted slots through
+  the same `BatchSession::create()`/position-increment shape
+  `BatchSessionsRelationManager` already uses.
+- **B6-B7** — U23 fee analytics: `FeeAnalyticsService` (collection rate,
+  projected revenue, defaulter ageing in 0-30/31-60/60+ day buckets
+  computed straight from `due_date`) + `FeeAnalyticsWidget` on the Admin
+  dashboard. Confirmed no `'partial'` invoice status and no ageing-bucket
+  precedent exist in this codebase before building around either.
+- **B8-B9** — U24 peer comparison: `PeerComparisonService::percentileFor()`
+  reads `QuizAnswer`/`Question` directly (same cross-domain-model-read
+  shape `RewatchHeatmapService`/`DropOffService` already establish), since
+  `WeakTopicDetectionService::classWideWeakTopicsFor()` turned out not to
+  expose per-student raw scores for an arbitrary concept. Extracted the
+  one genuinely shared piece — the percentile formula — into
+  `App\Support\Analytics\PercentileRank`, refactoring
+  `TestSeriesRankingService::rankingsFor()` to use it too.
+  `PeerComparisonWidget` on the syllabus page shows "top N%" per weak
+  topic, own standing only.
+- **B10** — U25 print-friendly notes: `PrintLessonNotesController` gates
+  on `isVisibleTo()`/`canStream()` (same shape `WatchLessonController`
+  uses) and renders a bare print page embedding the *existing*
+  `content.lesson-notes`/`ai.lesson-revision-notes` components unchanged
+  — no new PDF generator, the browser's own print-to-PDF handles
+  pagination for this free-form content.
+- **B11** — Registry sweep: **107** real `BelongsToTenant` usages, **107**
+  registry entries, exact match — `WhatsAppLink` was already registered
+  in B0. `tests/Isolation/CrossTenantTest.php` — 108/108.
+- **B12** — Full coverage pass: audited every new file against its test
+  file — found 2 real gaps (the B0 `WhatsAppLinkCode` Livewire component
+  had zero coverage; `CircuitBreakerGuardedCommsDriver::sendSessionMessage()`
+  had no breaker-trip test of its own), both fixed. Confirmed both of
+  design §5's named edge cases were already covered from their own
+  blocks.
+- **B13** — Two independent review passes (correctness/convention,
+  security/tenant-isolation), run twice — the second pass specifically
+  re-covering the first pass's own fix commit, same discipline S23's own
+  B20/B21 established. **Found and fixed 7 real issues across both
+  rounds:**
+  1. `handleDoubt()` never caught `DoubtChatService::ask()`'s own
+     `abort_unless()` (403/404) for a fee/attendance/prerequisite-blocked
+     lesson `search()`'s own visibility filter never checks — a raw HTTP
+     error propagated out of the webhook instead of a reply.
+  2. `WhatsAppLinkService::verifyCode()` consumed the one-time code before
+     checking phone uniqueness, burning a valid code on an unrelated
+     duplicate-phone failure.
+  3. That same uniqueness check was TOCTOU-racy against its own
+     `create()` — a concurrent LINK attempt could hit an uncaught 500
+     instead of the same clean validation error.
+  4. **Second-pass, a regression in fix #2 itself** — switching
+     `Cache::pull()` to `Cache::get()` (peek) reopened a worse hole: two
+     concurrent LINK attempts using the *same* code with *different*
+     phones could both succeed, binding one code to multiple phones, with
+     no unlink feature anywhere in the app. Fixed with a `Cache::lock()`
+     keyed by the code.
+  5. `handleDoubt()` also never caught the plain `RuntimeException`
+     subclasses `AiSpendCapExceededException`/`CircuitOpenException` can
+     throw — a tenant hitting its spend cap silently dropped every doubt
+     with zero reply.
+  6. `BatchResource::autoScheduleAction()` never re-validated conflicts at
+     the moment of actual persistence — a stale proposal (a real session
+     landing for the same instructor between computing candidates and
+     submitting) could silently double-book them.
+  7. `handleAudio()` downloaded/stored unbounded, unauthenticated audio
+     from any sender before checking `WhatsAppLink` at all (unlike its
+     `handleImage()` sibling), and its synchronous `transcribe()` call ran
+     with no tenant bound in real production — every inbound voice note
+     threw `MissingTenantContextException`, invisible to tests since
+     `beforeEach()` leaves a tenant bound a real request never gets.
+     Fixed both at once: resolve the link first, bind tenant for the
+     whole download/transcribe step.
+  Confirmed clean, not newly found: `WhatsAppInboundMessageHandler::verifySignature()`
+  is genuinely constant-time (`hash_equals`) and unconditionally first in
+  `handle()`; every phone→tenant lookup is correctly rebind/restored;
+  `phone_e164` is a genuinely platform-wide unique index; no mass-
+  assignment gap from the new `channel`/`source_phone` fillable fields
+  (every write is a server-side literal array, never user input);
+  `PrintLessonNotesController`'s gate order and note-privacy inheritance
+  both hold. No rate limiting on `/webhooks/whatsapp` — pre-existing,
+  platform-wide posture shared by every vendor webhook, not introduced
+  this slice.
+- **B14** — 3 lifecycle E2E tests (`S24WhatsAppNativeAiOpsE2ETest`): a
+  linked student's WhatsApp text doubt and a voice note both landing in
+  the exact same `DoubtChatService` path via a real HTTP round trip
+  through the signature-verified webhook; fee analytics numbers matching
+  a hand-computed value against a real seeded paid/pending/overdue
+  invoice mix; a student's own weak-topic percentile matching a
+  hand-computed rank among real seeded classmates.
+
+**What's still rough, on purpose:** a single platform-wide WhatsApp
+number for v1, not per-institute connections (design decision 1 — a
+named, deferred scale concern). Rooms have no schema anywhere in this
+codebase, so `AutoSchedulerService`'s own room-limit constraint is a
+v1 gap (`room => null` on every candidate), not silently dropped.
+
+Tests green: **2079/2081** (same pre-existing/unrelated baseline flakes
+carried across every prior slice's own blocks: `CourseSlugUniquenessTest`
+since S1/S2, `BackupConfigurationTest` in Support, plus a rotating
+export-controller order-flake sibling — `CalendarTest` did not flake this
+run).
+
+**All 15 S24 blocks are now built, tested, and reviewed.**
