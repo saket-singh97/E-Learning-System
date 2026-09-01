@@ -10,6 +10,8 @@ use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\TimetableTemplate;
 use App\Domains\Batches\Services\AutoSchedulerService;
 use App\Domains\Content\Models\Course;
+use App\Domains\Content\Models\CourseSection;
+use App\Domains\Content\Models\Lesson;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -348,6 +350,68 @@ it('writes no BatchSession when every proposed auto-schedule slot is rejected', 
             'candidates' => [
                 [
                     'accept' => false,
+                    'when' => 'irrelevant display text',
+                    'starts_at' => $proposal['starts_at']->format('Y-m-d H:i:s'),
+                    'duration_minutes' => $proposal['duration_minutes'],
+                ],
+            ],
+        ]);
+
+    expect(BatchSession::where('batch_id', $batch->id)->count())->toBe(0);
+});
+
+// S24 B13 second-pass review — a stale proposal could silently
+// double-book an instructor if their real schedule changed between
+// computing candidates and submitting the modal.
+it('skips a proposed slot that now conflicts with a real session created after the proposal was computed', function () {
+    TimetableTemplate::create(['title' => 'Mon 4pm', 'day_of_week' => 1, 'starts_at' => '16:00:00', 'duration_minutes' => 60]);
+
+    $teacher = User::factory()->create(['tenant_id' => $this->tenant->id]);
+
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'instructor_id' => $teacher->id,
+        'title' => 'Stale Batch',
+        'slug' => 'stale-batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+
+    $proposal = app(AutoSchedulerService::class)->propose($batch, 1)->first();
+
+    // Simulate staleness: the same teacher gets a real session on a
+    // DIFFERENT batch for this exact slot after the proposal was
+    // computed, before this admin submits it.
+    $otherBatch = Batch::create([
+        'course_id' => $this->course->id,
+        'instructor_id' => $teacher->id,
+        'title' => 'Other Batch',
+        'slug' => 'other-batch',
+        'starts_on' => '2026-09-01',
+        'ends_on' => '2026-12-01',
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'draft',
+    ]);
+    $section = CourseSection::create(['course_id' => $this->course->id, 'title' => 'Section', 'position' => 0]);
+    $lesson = Lesson::create(['course_section_id' => $section->id, 'title' => 'Lesson', 'type' => 'live_session', 'position' => 0]);
+    BatchSession::create([
+        'batch_id' => $otherBatch->id,
+        'lesson_id' => $lesson->id,
+        'starts_at' => $proposal['starts_at']->format('Y-m-d H:i:s'),
+        'duration_minutes' => $proposal['duration_minutes'],
+        'position' => 0,
+        'live_provider' => 'external_link',
+        'provider_meeting_ref' => 'https://example.test/meet',
+    ]);
+
+    Livewire::test(ListBatches::class)
+        ->callTableAction('autoSchedule', $batch, data: [
+            'session_count' => 1,
+            'candidates' => [
+                [
+                    'accept' => true,
                     'when' => 'irrelevant display text',
                     'starts_at' => $proposal['starts_at']->format('Y-m-d H:i:s'),
                     'duration_minutes' => $proposal['duration_minutes'],

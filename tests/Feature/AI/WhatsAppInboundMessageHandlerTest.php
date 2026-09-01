@@ -45,6 +45,14 @@ class ThrowingTranscribeDriver extends FakeAiDriver
     }
 }
 
+class ThrowingEmbedDriver extends FakeAiDriver
+{
+    public function embed(string $text): array
+    {
+        throw new RuntimeException('vendor is down');
+    }
+}
+
 class RecordingCommsDriver extends FakeWhatsAppDriver
 {
     /** @var array<int, array{to: string, text: string}> */
@@ -212,6 +220,59 @@ it('transcribes a voice note and produces the same DoubtChatMessage shape a text
         ->and($message->source_phone)->toBe('+919876500050')
         ->and($message->question)->toBe('Velocity is displacement over time.')
         ->and($message->answer)->not->toBeEmpty();
+});
+
+// S24 B13 second-pass review — handleAudio() used to download/store audio
+// from ANY sender before checking WhatsAppLink at all, unlike handleImage().
+it('never downloads or stores audio from an unlinked number', function () {
+    app()->bind(CommsProvider::class, RecordingCommsDriver::class);
+    RecordingCommsDriver::$sent = [];
+    Http::fake(['https://cdn.example.com/note.ogg' => Http::response('fake audio bytes')]);
+
+    $payload = json_encode(['from' => '+919876500097', 'type' => 'audio', 'audio' => ['url' => 'https://cdn.example.com/note.ogg']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    Http::assertNothingSent();
+    expect(RecordingCommsDriver::$sent)->toHaveCount(1)
+        ->and(RecordingCommsDriver::$sent[0]['text'])->toContain("isn't linked");
+});
+
+// S24 B13 second-pass review — no size cap existed before, unlike the
+// photo path's PhotoDoubtService::MAX_SIZE_KB check.
+it('replies with a try-typing message and skips transcription when the audio exceeds the size cap', function () {
+    app()->bind(CommsProvider::class, RecordingCommsDriver::class);
+    RecordingCommsDriver::$sent = [];
+
+    WhatsAppLink::create(['user_id' => $this->student->id, 'phone_e164' => '+919876500096', 'verified_at' => now()]);
+
+    $oversized = str_repeat('a', 5121 * 1024);
+    Http::fake(['https://cdn.example.com/big.ogg' => Http::response($oversized)]);
+
+    $payload = json_encode(['from' => '+919876500096', 'type' => 'audio', 'audio' => ['url' => 'https://cdn.example.com/big.ogg']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    expect(DoubtChatMessage::count())->toBe(0)
+        ->and(RecordingCommsDriver::$sent)->toHaveCount(1)
+        ->and(RecordingCommsDriver::$sent[0]['text'])->toContain('try typing');
+});
+
+// S24 B13 second-pass review — search()/ask() both call into AiProvider,
+// decorated by SpendCapGuardedAiDriver/CircuitBreakerGuardedAiDriver,
+// which throw plain RuntimeException subclasses (not HttpException) —
+// used to propagate uncaught, silently dropping the doubt with no reply.
+it('replies with a generic try-again message and writes no row when the AI provider itself fails', function () {
+    app()->bind(AiProvider::class, ThrowingEmbedDriver::class);
+    app()->bind(CommsProvider::class, RecordingCommsDriver::class);
+    RecordingCommsDriver::$sent = [];
+
+    WhatsAppLink::create(['user_id' => $this->student->id, 'phone_e164' => '+919876500098', 'verified_at' => now()]);
+
+    $payload = json_encode(['from' => '+919876500098', 'type' => 'text', 'text' => ['body' => 'What is velocity?']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    expect(DoubtChatMessage::count())->toBe(0)
+        ->and(RecordingCommsDriver::$sent)->toHaveCount(1)
+        ->and(RecordingCommsDriver::$sent[0]['text'])->toContain('try again');
 });
 
 it('replies with a try-typing message and writes no row when transcription fails', function () {

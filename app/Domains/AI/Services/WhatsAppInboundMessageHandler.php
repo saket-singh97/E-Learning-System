@@ -45,6 +45,10 @@ class WhatsAppInboundMessageHandler
 
     private const ACCESS_DENIED_REPLY = "You don't currently have access to that lesson — check with your institute if this seems wrong.";
 
+    private const AI_UNAVAILABLE_REPLY = "Couldn't answer that right now — try again in a bit.";
+
+    private const MAX_AUDIO_SIZE_KB = 5120;
+
     public function __construct(
         private readonly WhatsAppLinkService $links,
         private readonly SemanticSearchService $search,
@@ -101,27 +105,52 @@ class WhatsAppInboundMessageHandler
     }
 
     /**
-     * Downloads to a phone-keyed path (tenant isn't known yet — that's
-     * resolved, same as the text path, once handleDoubt() looks up the
-     * WhatsAppLink) then re-enters handleDoubt() with the transcript text
-     * verbatim, same shape a typed doubt already takes end to end
-     * (channel/source_phone included).
+     * Resolves the WhatsAppLink *before* any download/storage happens
+     * (B13 second-pass review — this used to download and store
+     * unbounded audio from any sender, linked or not, unlike the
+     * near-identical handleImage() below), then downloads/transcribes
+     * with the tenant bound for the whole step (not deferred to
+     * handleDoubt()) — AiProvider's own spend-cap decorator reads
+     * CurrentTenant unconditionally, and this route has no subdomain to
+     * resolve one from otherwise; every inbound voice note threw
+     * MissingTenantContextException in production before this fix,
+     * invisible to tests since a test's own beforeEach() leaves a tenant
+     * bound that a real request never gets. Then re-enters handleDoubt()
+     * with the transcript text verbatim, same shape a typed doubt already
+     * takes end to end (channel/source_phone included, and its own
+     * independent WhatsAppLink lookup — one extra indexed query, not
+     * worth threading the already-resolved $link through for).
      */
     private function handleAudio(string $phone, string $mediaUrl): void
     {
-        try {
-            $bytes = Http::get($mediaUrl)->throw()->body();
-            $diskPath = "whatsapp-audio/{$phone}/".uniqid().'.ogg';
-            Storage::disk('local')->put($diskPath, $bytes);
+        $link = WhatsAppLink::withoutGlobalScope('tenant')->where('phone_e164', $phone)->first();
 
-            $transcript = trim($this->ai->transcribe($diskPath)->text);
-        } catch (Throwable) {
-            $this->comms->sendSessionMessage($phone, self::TRANSCRIPTION_FAILED_REPLY);
+        if ($link === null) {
+            $this->comms->sendSessionMessage($phone, self::UNLINKED_REPLY);
 
             return;
         }
 
-        if ($transcript === '') {
+        $transcript = null;
+
+        $this->runAsTenant($link->tenant_id, function () use ($phone, $mediaUrl, &$transcript): void {
+            try {
+                $bytes = Http::get($mediaUrl)->throw()->body();
+
+                if ((int) ceil(strlen($bytes) / 1024) > self::MAX_AUDIO_SIZE_KB) {
+                    return;
+                }
+
+                $diskPath = "whatsapp-audio/{$phone}/".uniqid().'.ogg';
+                Storage::disk('local')->put($diskPath, $bytes);
+
+                $transcript = trim($this->ai->transcribe($diskPath)->text);
+            } catch (Throwable) {
+                // $transcript stays null.
+            }
+        });
+
+        if ($transcript === null || $transcript === '') {
             $this->comms->sendSessionMessage($phone, self::TRANSCRIPTION_FAILED_REPLY);
 
             return;
@@ -244,34 +273,44 @@ class WhatsAppInboundMessageHandler
 
         $this->runAsTenant($link->tenant_id, function () use ($link, $phone, $question): void {
             $viewer = User::findOrFail($link->user_id);
-            $chunks = $this->search->search($question, $viewer, $link->tenant_id);
 
-            if ($chunks->isEmpty()) {
-                $this->comms->sendSessionMessage($phone, self::NO_MATCH_REPLY);
-
-                return;
-            }
-
-            $lesson = $chunks->first()->lessonArtifact->lesson;
-
-            // ask() itself stays unchanged (design §4 decision 2) — channel/
-            // source_phone are set as a follow-up update, not a new ask()
-            // param. isVisibleTo() (what search() already filtered on) and
+            // search()/ask() both call into AiProvider, decorated by
+            // SpendCapGuardedAiDriver/CircuitBreakerGuardedAiDriver — both
+            // throw plain RuntimeException subclasses (not HttpException)
+            // on a spend cap or open breaker, a second-pass review found
+            // uncaught here, silently dropping the doubt with no reply.
+            // isVisibleTo() (what search() already filtered on) and
             // canStream() (what ask() itself gates on — fee/attendance/
             // prerequisite blocks search() never checks) are genuinely
-            // different gates, so a semantically-matched but access-blocked
-            // lesson still aborts inside ask() — caught here rather than
-            // left to propagate as a raw HTTP 403/404 out of the webhook
-            // request, same never-silently-drop posture every sibling
-            // branch in this handler already takes (B13 review pass).
+            // different gates too, so a semantically-matched but
+            // access-blocked lesson still aborts inside ask() as an
+            // HttpException (design §4 decision 2 — ask() itself stays
+            // unchanged). Both caught here rather than left to propagate
+            // out of the webhook request, same never-silently-drop posture
+            // every sibling branch in this handler already takes.
             try {
+                $chunks = $this->search->search($question, $viewer, $link->tenant_id);
+
+                if ($chunks->isEmpty()) {
+                    $this->comms->sendSessionMessage($phone, self::NO_MATCH_REPLY);
+
+                    return;
+                }
+
+                $lesson = $chunks->first()->lessonArtifact->lesson;
                 $message = $this->doubtChat->ask($lesson, $viewer, $question);
             } catch (HttpExceptionInterface) {
                 $this->comms->sendSessionMessage($phone, self::ACCESS_DENIED_REPLY);
 
                 return;
+            } catch (Throwable) {
+                $this->comms->sendSessionMessage($phone, self::AI_UNAVAILABLE_REPLY);
+
+                return;
             }
 
+            // channel/source_phone are set as a follow-up update, not a
+            // new ask() param.
             $message->update(['channel' => 'whatsapp', 'source_phone' => $phone]);
 
             $this->comms->sendSessionMessage($phone, $message->answer);

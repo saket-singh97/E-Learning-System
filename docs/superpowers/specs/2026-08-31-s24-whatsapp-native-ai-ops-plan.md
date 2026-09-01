@@ -611,6 +611,62 @@ failures are all pre-existing baseline flakes (`CourseSlugUniquenessTest`,
 `BackupConfigurationTest`, both rotating export-controller order-flake
 siblings) — no new failures.
 
+**Second review pass (same day, requested explicitly):** two more
+independent background agents re-reviewed the full B0-B13 diff with
+fresh eyes, including the B13 fix commit itself. Found and fixed 4 more
+real issues, one of them a regression the first B13 fix had itself
+introduced:
+
+1. **Correctness** — `handleDoubt()` only caught `HttpExceptionInterface`
+   around `ask()`, not the plain `RuntimeException` subclasses
+   `AiSpendCapExceededException`/`CircuitOpenException` that
+   `search()`/`ask()` can throw via their `AiProvider` decorators (a
+   tenant hitting its daily spend cap, or an open circuit breaker) —
+   uncaught, silently dropping the doubt with zero reply. Now a second
+   `catch (Throwable)` sends a generic "try again in a bit" reply.
+2. **Correctness** — `BatchResource::autoScheduleAction()` never
+   re-validated conflicts at the moment of actual persistence — a stale
+   proposal (computed conflict-free, then invalidated by a real session
+   created for the same instructor before the admin submitted) could
+   silently double-book the instructor, the exact defect class this whole
+   feature exists to prevent. Now re-checks
+   `TeacherConflictDetector::wouldConflict()` per accepted candidate right
+   before `BatchSession::create()`, skipping any that have gone stale.
+3. **Security — regression in the first B13 fix itself** — switching
+   `verifyCode()` from `Cache::pull()` (atomic) to `Cache::get()` (peek)
+   to fix the code-burned-on-unrelated-failure bug reopened a worse hole:
+   two concurrent `LINK <code>` attempts using the *same* code but
+   *different* phone numbers could both pass their own phone-uniqueness
+   check and both succeed, binding one student's code to more than one
+   phone — with no unlink/revoke feature anywhere in the app, permanent
+   and exploitable by anyone who observes a displayed code (shoulder-surf,
+   screenshot) and races the legitimate use. Now the whole
+   peek→check→create→forget sequence runs inside a `Cache::lock()` keyed
+   by the code, restoring one-time-use while keeping the wrong-phone-retry
+   fix.
+4. **Security/correctness (shared root cause)** — `handleAudio()`
+   downloaded and stored unbounded, unauthenticated audio from *any*
+   WhatsApp sender (no `WhatsAppLink` check, no size cap) before
+   `handleImage()`'s equivalent gate, and separately, its synchronous
+   `AiProvider::transcribe()` call ran with no tenant bound in real
+   production (the link lookup that determines the tenant only happened
+   afterward, inside `handleDoubt()`) — meaning every inbound voice note
+   threw `MissingTenantContextException` in production, invisible to
+   tests because `beforeEach()` leaves a tenant bound that a real request
+   never gets. Fixed both at once: `handleAudio()` now resolves the
+   `WhatsAppLink` first (replying `UNLINKED_REPLY` with no network/disk
+   activity if unlinked, matching `handleImage()`), then runs the
+   download/size-cap/transcribe step inside `runAsTenant()`.
+
+4 new tests added: one each for fix 1 (AI-provider-throws reply) and
+fix 2 (stale-conflict skip), two for fix 4 (the unlinked-audio gate and
+the size cap). Fix 3's lock only serializes genuine concurrency,
+not economically testable in a single-process suite (same posture as the
+first pass's own untestable race), covered by inspection/reasoning
+instead. `composer test`: 2079/2081 passed; the 2 failures are the same
+pre-existing baseline flakes (`CourseSlugUniquenessTest`,
+`BackupConfigurationTest`) — no new failures.
+
 ### B14 — Lifecycle E2E + docs
 
 - [ ] New `S24WhatsAppNativeAiOpsE2ETest` chaining at minimum: a linked

@@ -13,6 +13,7 @@ use App\Domains\Batches\Models\BatchGeofence;
 use App\Domains\Batches\Models\BatchSession;
 use App\Domains\Batches\Models\TimetableTemplate;
 use App\Domains\Batches\Services\AutoSchedulerService;
+use App\Domains\Batches\Services\TeacherConflictDetector;
 use App\Domains\Content\Models\Course;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -344,6 +345,20 @@ class BatchResource extends Resource
             ->action(function (Batch $record, array $data): void {
                 foreach ($data['candidates'] ?? [] as $candidate) {
                     if (! ($candidate['accept'] ?? false)) {
+                        continue;
+                    }
+
+                    // Candidates were computed conflict-free against the DB
+                    // state at fillForm/afterStateUpdated time, but nothing
+                    // stopped the instructor's real schedule from changing
+                    // before this submit — a second admin accepting another
+                    // proposal for the same instructor, or a manual session
+                    // created via BatchSessionsRelationManager in between
+                    // (S24 B13 second-pass review). Re-checked here, the
+                    // same write-time gate that manual create already
+                    // enforces, so a stale slot is skipped rather than
+                    // silently double-booking the instructor.
+                    if (app(TeacherConflictDetector::class)->wouldConflict($record, $candidate['starts_at'], $candidate['duration_minutes'])) {
                         continue;
                     }
 
