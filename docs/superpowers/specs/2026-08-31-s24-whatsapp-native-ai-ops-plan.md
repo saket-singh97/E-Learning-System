@@ -36,7 +36,7 @@ then stop and report before starting the next block.
 | B6 | U23 pt.1 — `FeeAnalyticsService` (collection rate, projected revenue, defaulter ageing) | ✅ done |
 | B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ✅ done |
 | B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ✅ done |
-| B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ⬜ not started |
+| B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ✅ done |
 | B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ⬜ not started |
 | B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ⬜ not started |
 | B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
@@ -409,16 +409,39 @@ non-regressive via its own full test file, plus the wider suite); the 5
 failures are all pre-existing baseline flakes (`CourseSlugUniquenessTest`,
 `CalendarTest` x3, `BackupConfigurationTest`) — no new failures.
 
-### B9 — U24 pt.2: student-facing widget
+### B9 — U24 pt.2: student-facing widget ✅
 
-- [ ] Widget on the student dashboard/syllabus page: "You're in the top N%
+- [x] Widget on the student dashboard/syllabus page: "You're in the top N%
       of your batch on {concept}" for each of the student's own weak
       topics (reuses `WeakTopicDetectionService::weakTopicsFor()`'s own
       per-student list as the concept set to show percentiles for) — never
       names or ranks classmates (design §2.3).
-- [ ] Tests: widget shows only the viewer's own percentile, never a
+- [x] Tests: widget shows only the viewer's own percentile, never a
       classmate's name or score (same `assertDontSee` pattern
       `TestSeriesResults`' own test already established).
+
+**Build notes:** `PeerComparisonWidget` (`App\Domains\Analytics\Livewire`,
+tag `analytics.peer-comparison-widget`) embeds on `content/syllabus.blade.php`
+right below `ai.weak-topics` — the exact same course-scoped page, same
+`mount(Course $course)` shape, since the concept set literally comes from
+that same `weakTopicsFor()` call. `PeerComparisonService::percentileFor()`
+(B8) returns "beat X%"; the widget displays the complement,
+`100 - percentile`, as "top N%". No existing helper resolves "which batch
+is this student active in for this course" (confirmed — every caller
+inlines the `Enrolment::where('user_id',...)->whereHas('batch', fn ($q) =>
+$q->where('course_id', ...))` query, same shape `LessonAccess`'s own two
+gate methods already use), so the widget does the same inline lookup
+rather than inventing a shared helper for a single caller. A concept
+`percentileFor()` returns `null` for (no peer group, B8's own contract) is
+simply omitted from the list, not shown as an error. Structurally
+guaranteed to never leak a classmate's name/score, same as `WeakTopics`/
+`TestSeriesResults` before it — every underlying call
+(`weakTopicsFor()`/`percentileFor()`) is already scoped to the viewer, so
+there's no classmate row this component could even render.
+`composer test`: 2064/2068 passed; the 4 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
+both rotating export-controller order-flake siblings) — no new failures.
+This closes out U24.
 
 ### B10 — U25: print-friendly notes export
 

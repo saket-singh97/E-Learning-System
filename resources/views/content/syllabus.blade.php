@@ -32,6 +32,10 @@
          course visibility) is the natural embed point, not a new page. --}}
     <livewire:ai.weak-topics :course="$course" />
 
+    {{-- S24 B9 — same concept set weak-topics above already computes,
+         each shown with the viewer's own peer percentile. --}}
+    <livewire:analytics.peer-comparison-widget :course="$course" />
+
     @if ($recommendations->isNotEmpty())
         <h2>You might also like</h2>
         <ul>

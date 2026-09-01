@@ -61,6 +61,7 @@ use App\Domains\Analytics\Listeners\AwardXpOnAssignmentSubmission;
 use App\Domains\Analytics\Listeners\AwardXpOnAttendance;
 use App\Domains\Analytics\Listeners\AwardXpOnQuizSubmission;
 use App\Domains\Analytics\Livewire\GamificationWidget;
+use App\Domains\Analytics\Livewire\PeerComparisonWidget;
 use App\Domains\Assessments\Events\QuizAttemptSubmitted;
 use App\Domains\Assignments\Events\AssignmentSubmitted;
 use App\Integrations\AiProvider;
@@ -284,6 +285,7 @@ class AppServiceProvider extends ServiceProvider
         Livewire::component('batches.batch-feedback-form', BatchFeedbackForm::class);
         Livewire::component('comms.notice-board', NoticeBoard::class);
         Livewire::component('analytics.gamification-widget', GamificationWidget::class);
+        Livewire::component('analytics.peer-comparison-widget', PeerComparisonWidget::class);
         Livewire::component('ai.whatsapp-link-code', WhatsAppLinkCode::class);
 
         // Unscoped (no third $scopes argument) — applies to all three
