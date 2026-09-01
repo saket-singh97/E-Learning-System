@@ -7,9 +7,12 @@ use App\Domains\AI\Models\PhotoDoubtQuery;
 use App\Domains\AI\Models\WhatsAppLink;
 use App\Domains\AI\Services\PhotoDoubtService;
 use App\Domains\AI\Services\WhatsAppLinkService;
+use App\Domains\Batches\Models\Batch;
+use App\Domains\Batches\Models\Enrolment;
 use App\Domains\Content\Models\Course;
 use App\Domains\Content\Models\CourseSection;
 use App\Domains\Content\Models\Lesson;
+use App\Domains\Fees\Models\FeeInvoice;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Integrations\AiProvider;
 use App\Integrations\CommsProvider;
@@ -88,7 +91,8 @@ beforeEach(function () {
     $this->tenant = Tenant::factory()->create();
     app(CurrentTenant::class)->set($this->tenant);
 
-    $course = Course::create(['title' => 'Mechanics', 'slug' => 'mechanics-'.uniqid(), 'status' => 'published']);
+    $this->course = Course::create(['title' => 'Mechanics', 'slug' => 'mechanics-'.uniqid(), 'status' => 'published']);
+    $course = $this->course;
     $section = CourseSection::create(['course_id' => $course->id, 'title' => 'Kinematics', 'position' => 0]);
     $this->lesson = Lesson::create([
         'course_section_id' => $section->id,
@@ -116,6 +120,49 @@ it('answers a linked student\'s text doubt and tags the message channel/source_p
         ->and($message->channel)->toBe('whatsapp')
         ->and($message->source_phone)->toBe('+919876500010')
         ->and($message->answer)->not->toBeEmpty();
+});
+
+// S24 B13 review pass — DoubtChatService::ask() aborts (403/404) on a
+// canStream()-blocked lesson even when isVisibleTo()/search() already
+// matched it (fee/attendance/prerequisite gates search() never checks),
+// and that used to propagate as a raw HTTP error out of the webhook
+// instead of a reply.
+it('replies with an access-denied message instead of a raw HTTP error when the matched lesson is fee-blocked', function () {
+    $this->tenant->fee_grace_period_days = 0;
+    $this->tenant->save();
+
+    $artifact = LessonArtifact::create(['lesson_id' => $this->lesson->id, 'version' => 1, 'source_asset_version' => 'v1', 'status' => 'ready']);
+    whatsappChunk($artifact->id, $this->tenant->id, 'Velocity is displacement over time.');
+
+    WhatsAppLink::create(['user_id' => $this->student->id, 'phone_e164' => '+919876500095', 'verified_at' => now()]);
+
+    $batch = Batch::create([
+        'course_id' => $this->course->id,
+        'title' => 'Batch',
+        'slug' => 'batch-'.uniqid(),
+        'starts_on' => now()->toDateString(),
+        'ends_on' => now()->addMonth()->toDateString(),
+        'self_enrol_mode' => 'manual_only',
+        'status' => 'published',
+    ]);
+    $enrolment = Enrolment::create(['batch_id' => $batch->id, 'user_id' => $this->student->id, 'status' => 'active', 'source' => 'manual_add', 'requested_at' => now()]);
+    FeeInvoice::create([
+        'user_id' => $this->student->id,
+        'enrolment_id' => $enrolment->id,
+        'sequence_number' => 1,
+        'invoice_number' => 'INV-'.uniqid(),
+        'description' => 'Fee',
+        'amount' => 100,
+        'gst_amount' => 0,
+        'total_amount' => 100,
+        'due_date' => now()->subDays(5)->toDateString(),
+        'status' => 'overdue',
+    ]);
+
+    $payload = json_encode(['from' => '+919876500095', 'type' => 'text', 'text' => ['body' => 'Velocity is displacement over time.']]);
+    whatsappWebhookPost($payload, 'test-secret')->assertOk();
+
+    expect(DoubtChatMessage::count())->toBe(0);
 });
 
 it('replies with a link-prompt and writes no row for an unlinked number', function () {

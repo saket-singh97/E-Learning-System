@@ -17,6 +17,7 @@ use Closure;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 /**
@@ -41,6 +42,8 @@ class WhatsAppInboundMessageHandler
     private const TRANSCRIPTION_FAILED_REPLY = "Couldn't understand that voice note — try typing your question instead.";
 
     private const PHOTO_FAILED_REPLY = "Couldn't process that photo — send a JPG, PNG, or WebP under 5MB.";
+
+    private const ACCESS_DENIED_REPLY = "You don't currently have access to that lesson — check with your institute if this seems wrong.";
 
     public function __construct(
         private readonly WhatsAppLinkService $links,
@@ -253,8 +256,22 @@ class WhatsAppInboundMessageHandler
 
             // ask() itself stays unchanged (design §4 decision 2) — channel/
             // source_phone are set as a follow-up update, not a new ask()
-            // param.
-            $message = $this->doubtChat->ask($lesson, $viewer, $question);
+            // param. isVisibleTo() (what search() already filtered on) and
+            // canStream() (what ask() itself gates on — fee/attendance/
+            // prerequisite blocks search() never checks) are genuinely
+            // different gates, so a semantically-matched but access-blocked
+            // lesson still aborts inside ask() — caught here rather than
+            // left to propagate as a raw HTTP 403/404 out of the webhook
+            // request, same never-silently-drop posture every sibling
+            // branch in this handler already takes (B13 review pass).
+            try {
+                $message = $this->doubtChat->ask($lesson, $viewer, $question);
+            } catch (HttpExceptionInterface) {
+                $this->comms->sendSessionMessage($phone, self::ACCESS_DENIED_REPLY);
+
+                return;
+            }
+
             $message->update(['channel' => 'whatsapp', 'source_phone' => $phone]);
 
             $this->comms->sendSessionMessage($phone, $message->answer);

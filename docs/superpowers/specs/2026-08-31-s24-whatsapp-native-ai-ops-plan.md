@@ -40,7 +40,7 @@ then stop and report before starting the next block.
 | B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ✅ done |
 | B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ✅ done |
 | B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ✅ done |
-| B13 | Multi-angle review pass over the whole slice's diff (same discipline S13-S23 B-final each used) | ⬜ not started |
+| B13 | Multi-angle review pass over the whole slice's diff (same discipline S13-S23 B-final each used) | ✅ done |
 | B14 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
 **Test suite baseline:** carry forward S23's own closing count (2033+/2039+,
@@ -538,9 +538,9 @@ an unbound real vendor driver (`sendTemplate()` has none either).
 baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
 one rotating export-controller order-flake sibling) — no new failures.
 
-### B13 — Multi-angle review pass
+### B13 — Multi-angle review pass ✅
 
-- [ ] Same discipline S13-S23's own closing review block each ran:
+- [x] Same discipline S13-S23's own closing review block each ran:
       correctness/convention pass + security/tenant-isolation pass over
       the whole slice's diff, independently (2 background agents, same
       S20-S23 pattern). Pay particular attention to the inbound webhook's
@@ -548,8 +548,68 @@ one rotating export-controller order-flake sibling) — no new failures.
       (design §4 decision 1's own named ambiguity) — the exact class of
       gap S23's own B20/B21 review passes found real bugs in for an
       analogous unauthenticated-actor surface.
-- [ ] Fix any real bugs found; document anything confirmed-clean-not-new
+- [x] Fix any real bugs found; document anything confirmed-clean-not-new
       the same way every prior slice's plan file did.
+
+**Build notes:** signature verification and the phone→tenant resolution —
+the two areas explicitly flagged as the S23 B20/B21-class risk — both
+came back confirmed clean: `verifySignature()` is `hash_equals()`
+(genuinely constant-time), runs unconditionally first in `handle()` before
+any type branching, fails closed on a blank secret, and no code path
+reaches any handler without it; every `WhatsAppLink::withoutGlobalScope('tenant')`
+lookup is immediately followed by the save/set/restore `runAsTenant()`
+shape, correct even under an exception; `phone_e164` is a genuinely
+platform-wide unique index (not composite with `tenant_id`), matching the
+code's own assumption.
+
+3 real bugs found and fixed, all in `WhatsAppInboundMessageHandler`/
+`WhatsAppLinkService`:
+1. **Correctness** — `handleDoubt()` never caught `DoubtChatService::ask()`'s
+   own `abort_unless()` (403/404) for a semantically-matched-but-access-blocked
+   lesson (fee/attendance/prerequisite gates `search()` never checks, only
+   `isVisibleTo()`) — the raw HTTP exception propagated out of the webhook
+   request instead of a reply, breaking the "never silently drop" posture
+   every sibling branch already had. Now caught, replies with a clean
+   access-denied message.
+2. **Correctness** — `WhatsAppLinkService::verifyCode()` consumed
+   (`Cache::pull()`) the one-time code *before* checking whether the phone
+   was already linked, so a student who mistyped the number lost a
+   perfectly valid code just for retrying with the right one. Now peeks
+   (`Cache::get()`) and only consumes (`Cache::forget()`) after the whole
+   verification actually succeeds.
+3. **Security (low-medium)** — the same method's phone-uniqueness
+   `exists()` check was TOCTOU-racy against its own `create()` a few lines
+   later: two concurrent `LINK` deliveries for the same phone could both
+   pass the check, and the loser hit an uncaught `QueryException` (raw
+   500) instead of the same clean `ValidationException` the sequential
+   path already gets — no cross-tenant leak (the unique index still
+   blocked the duplicate row), just an ungraceful failure mode. Now
+   catches `UniqueConstraintViolationException` from the losing `create()`
+   and rethrows the same clean error.
+
+Confirmed-clean-not-new, no action needed: `PeerComparisonService`
+relies on ambient `CurrentTenant` (via `BelongsToTenant`'s scope) rather
+than an explicit `tenant_id` filter, unlike `FeeAnalyticsService`'s
+stricter convention — flagged as worth tightening if this service ever
+grows a cross-tenant caller, but its only caller today derives `$batch`
+from an already-viewer-scoped `Enrolment` lookup, so there's no reachable
+mismatch and any hypothetical one would fail closed (empty → `null`), not
+leak. No rate limiting on `/webhooks/whatsapp` — pre-existing,
+platform-wide posture shared by every vendor webhook in `routes/api.php`,
+not introduced this slice; the LINK-code keyspace (32^8, 15-min TTL)
+makes brute force impractical regardless. No allowlist on the media URLs
+`handleAudio`/`handleImage` fetch — informational defense-in-depth note
+only, not currently exploitable since the whole payload is already
+HMAC-gated to the vendor.
+
+2 new tests added covering fixes 1 and 2 (`WhatsAppInboundMessageHandlerTest`,
+`WhatsAppLinkServiceTest`) — fix 3's genuine-concurrency race isn't
+economically testable in a single-process suite, so it's covered by
+inspection/reasoning only, same posture this codebase already takes for
+other untestable races. `composer test`: 2073/2077 passed; the 4
+failures are all pre-existing baseline flakes (`CourseSlugUniquenessTest`,
+`BackupConfigurationTest`, both rotating export-controller order-flake
+siblings) — no new failures.
 
 ### B14 — Lifecycle E2E + docs
 

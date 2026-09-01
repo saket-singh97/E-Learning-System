@@ -46,3 +46,21 @@ it('rejects linking an already-linked phone number with a clean error, not a 500
 
     expect(WhatsAppLink::where('phone_e164', '+919876500003')->count())->toBe(1);
 });
+
+// S24 B13 review pass — verifyCode() used to Cache::pull() (consume) the
+// code before checking the phone, so a student retrying with the correct
+// number after a typo had to go generate a brand new code for no reason.
+it('keeps a code valid for retry when verification fails only on the phone-already-linked check', function () {
+    $service = app(WhatsAppLinkService::class);
+    $code = $service->generateCode($this->student);
+
+    $otherStudent = User::factory()->create(['tenant_id' => $this->tenant->id]);
+    $service->verifyCode($service->generateCode($otherStudent), '+919876500010');
+
+    expect(fn () => $service->verifyCode($code, '+919876500010'))
+        ->toThrow(ValidationException::class);
+
+    // Same code, different (correct) number — must still succeed.
+    $link = $service->verifyCode($code, '+919876500011');
+    expect($link->user_id)->toBe($this->student->id);
+});

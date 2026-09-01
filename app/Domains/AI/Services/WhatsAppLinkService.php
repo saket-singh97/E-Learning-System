@@ -6,6 +6,7 @@ use App\Domains\AI\Models\WhatsAppLink;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
@@ -42,7 +43,13 @@ class WhatsAppLinkService
     public function verifyCode(string $code, string $phoneE164): WhatsAppLink
     {
         $code = strtoupper(trim($code));
-        $pending = Cache::pull($this->cacheKey($code));
+        $cacheKey = $this->cacheKey($code);
+
+        // Peek, don't consume yet (B13 review pass) — a phone-already-linked
+        // failure below is unrelated to whether the code itself is valid,
+        // so a student who mistyped the number shouldn't have to go back
+        // and generate a brand new code just to retry with the right one.
+        $pending = Cache::get($cacheKey);
 
         if ($pending === null) {
             throw ValidationException::withMessages(['code' => 'That linking code is invalid or expired.']);
@@ -62,11 +69,20 @@ class WhatsAppLinkService
         $currentTenant->set(Tenant::findOrFail($pending['tenant_id']));
 
         try {
-            return WhatsAppLink::create([
-                'user_id' => $pending['user_id'],
-                'phone_e164' => $phoneE164,
-                'verified_at' => now(),
-            ]);
+            // The exists() check above is TOCTOU-racy under two concurrent
+            // LINK attempts for the same phone (B13 review pass) — the
+            // phone_e164 unique index is the real guard; a second insert
+            // losing that race surfaces here as the same clean
+            // already-linked error instead of an uncaught 500.
+            try {
+                $link = WhatsAppLink::create([
+                    'user_id' => $pending['user_id'],
+                    'phone_e164' => $phoneE164,
+                    'verified_at' => now(),
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                throw ValidationException::withMessages(['phone_e164' => 'That phone number is already linked to an account.']);
+            }
         } finally {
             if ($previousTenant !== null) {
                 $currentTenant->set($previousTenant);
@@ -74,6 +90,12 @@ class WhatsAppLinkService
                 $currentTenant->clear();
             }
         }
+
+        // Consumed only once fully successful — a code that failed on the
+        // phone check above stays valid for the student to retry.
+        Cache::forget($cacheKey);
+
+        return $link;
     }
 
     private function generateUniqueCode(): string
