@@ -44,3 +44,18 @@ it('trips the comms-provider breaker after repeated sendTemplate failures', func
 
     expect(fn () => $driver->sendTemplate('+911234567890', 'reminder', []))->toThrow(CircuitOpenException::class);
 });
+
+// S24 B12 — same breaker key (comms-provider) covers sendSessionMessage()
+// too, parity with sendTemplate's own coverage above.
+it('trips the same comms-provider breaker after repeated sendSessionMessage failures', function () {
+    $driver = new CircuitBreakerGuardedCommsDriver(failingCommsProvider(), app(CircuitBreaker::class));
+
+    foreach (range(1, 3) as $i) {
+        try {
+            $driver->sendSessionMessage('+911234567890', 'hello');
+        } catch (RuntimeException) {
+        }
+    }
+
+    expect(fn () => $driver->sendSessionMessage('+911234567890', 'hello'))->toThrow(CircuitOpenException::class);
+});

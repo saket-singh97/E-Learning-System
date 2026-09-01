@@ -39,7 +39,7 @@ then stop and report before starting the next block.
 | B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ✅ done |
 | B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ✅ done |
 | B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ✅ done |
-| B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
+| B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ✅ done |
 | B13 | Multi-angle review pass over the whole slice's diff (same discipline S13-S23 B-final each used) | ⬜ not started |
 | B14 | Lifecycle E2E test + `PROJECT-STATUS.md`/`HANDOVER.md`/`ROADMAP.md` update | ⬜ not started |
 
@@ -503,13 +503,40 @@ entries; diffing the two sets both ways found zero missing and zero stale
 baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
 both rotating export-controller order-flake siblings) — no new failures.
 
-### B12 — Full test coverage pass
+### B12 — Full test coverage pass ✅
 
-- [ ] One feature test per new service/generator not already covered
+- [x] One feature test per new service/generator not already covered
       inline in its own block, plus the specific edge cases design §5
       names (unlinked-phone reply path; a proposed schedule slot
       conflicting with a batch outside the one being scheduled).
-- [ ] `composer test` green, baseline flakes only.
+- [x] `composer test` green, baseline flakes only.
+
+**Build notes:** unlike earlier slices, S24 wrote tests inline with every
+block this time, so this pass audited coverage rather than writing it from
+scratch (same "sweep found nothing to fix" shape B11 just established).
+Diffed every production file touched since B0 against its test file;
+found 2 real gaps, both fixed: `WhatsAppLinkCode` (the B0 student-portal
+Livewire component) had zero coverage — B0's own test bullets only
+required the underlying `WhatsAppLinkService`, not this component, and
+none got added later; now covers generate-a-code, an already-linked
+student sees their phone (not the generate button), and a guest no-ops
+cleanly. `CircuitBreakerGuardedCommsDriver::sendSessionMessage()` (B1) had
+no breaker-trip test of its own, only `sendTemplate()`'s — added the
+parity test (same breaker key, same shape). Confirmed both of design §5's
+explicitly-named edge cases were already covered from their own blocks,
+not newly needed: the unlinked-phone reply-with-linking-prompt path
+(`WhatsAppInboundMessageHandlerTest`, B1) and a proposed slot conflicting
+with a batch *outside* the one being scheduled
+(`AutoSchedulerServiceTest`'s "shared across batches" test, B4).
+`App\Support\Analytics\PercentileRank` (B8) and `AiSensyProvider::sendSessionMessage()`
+(B1, real driver, still unbound) stay without a dedicated test file —
+the former is exercised with real asserted values by both
+`TestSeriesRankingServiceTest` and `PeerComparisonServiceTest`, the latter
+matches this codebase's own existing precedent of never directly testing
+an unbound real vendor driver (`sendTemplate()` has none either).
+`composer test`: 2072/2075 passed; the 3 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
+one rotating export-controller order-flake sibling) — no new failures.
 
 ### B13 — Multi-angle review pass
 
