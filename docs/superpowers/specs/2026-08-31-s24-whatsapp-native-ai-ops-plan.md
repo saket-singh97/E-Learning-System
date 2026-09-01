@@ -37,7 +37,7 @@ then stop and report before starting the next block.
 | B7 | U23 pt.2 — Admin fee-analytics dashboard widget | ✅ done |
 | B8 | U24 pt.1 — `PeerComparisonService` (per-concept percentile, composes `WeakTopicDetectionService` + `TestSeriesRankingService`'s own rank math) | ✅ done |
 | B9 | U24 pt.2 — student-facing "you're in the top N%" widget (own standing only, no roster) | ✅ done |
-| B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ⬜ not started |
+| B10 | U25 — print-friendly lesson-notes export (`@media print` stylesheet + route, no new PDF generator) | ✅ done |
 | B11 | `TenantModelRegistry` sweep — `WhatsAppLink` confirmed registered | ⬜ not started |
 | B12 | Full test coverage pass — one feature test per new service/generator, edge cases per design §5 | ⬜ not started |
 | B13 | Multi-angle review pass over the whole slice's diff (same discipline S13-S23 B-final each used) | ⬜ not started |
@@ -443,16 +443,41 @@ baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
 both rotating export-controller order-flake siblings) — no new failures.
 This closes out U24.
 
-### B10 — U25: print-friendly notes export
+### B10 — U25: print-friendly notes export ✅
 
-- [ ] `resources/views/content/lesson-notes-print.blade.php` — renders a
+- [x] `resources/views/content/lesson-notes-print.blade.php` — renders a
       lesson's `LessonNote`/`LessonRevisionNote` content behind
       `LessonAccess::isVisibleTo()`, `@media print` CSS hides all
       navigation/chrome, browser's own print-to-PDF handles pagination.
-- [ ] Route + a "Print notes" link on the existing lesson view.
-- [ ] Tests: a viewer without stream access is denied the same way any
+- [x] Route + a "Print notes" link on the existing lesson view.
+- [x] Tests: a viewer without stream access is denied the same way any
       other lesson-scoped page already is; the printable view renders the
       real note content for an authorized viewer.
+
+**Build notes:** confirmed 3 distinct "notes" concepts exist in this
+codebase before picking which two the plan means —
+`LessonNote` (Content domain, the student's own private timestamped
+notes/bookmarks), `LessonRevisionNote` (AI domain, AI-generated read-only
+bullet summary), and `LessonPdfNote` (AI domain, an already-dompdf-rendered
+PDF file with no serving route at all) — the plan's own
+`LessonNote`/`LessonRevisionNote` naming maps to the first two,
+`LessonPdfNote` is unrelated. `PrintLessonNotesController` does no new
+query logic at all: it only gates (`isVisibleTo()` → 404,
+`canStream()` → 403, the exact same two-gate shape `WatchLessonController`
+already uses) and hands the lesson to a bare print page that embeds the
+*existing* `content.lesson-notes`/`ai.lesson-revision-notes` Livewire
+components unchanged — no duplicated `LessonNote`/`LessonRevisionNote`
+queries, and the viewer-scoping (`LessonNotes`' own `where('user_id', ...)`
+filter) is inherited for free. Route `lessons.notes.print` follows
+`lessons.watch`'s own unsigned, controller-gated convention (a page
+render, not a byte-serving endpoint) — no `signed` middleware. "Hides all
+navigation/chrome" is mostly structural: the print page has no site
+header/branding/nav to begin with, so the one `@media print` rule only
+needs to hide the on-screen "Print" button itself.
+`composer test`: 2067/2071 passed; the 4 failures are all pre-existing
+baseline flakes (`CourseSlugUniquenessTest`, `BackupConfigurationTest`,
+both rotating export-controller order-flake siblings) — no new failures.
+This closes out U25 — every S24 item (U19-U25) is now built.
 
 ### B11 — TenantModelRegistry sweep
 

@@ -72,6 +72,10 @@
          regardless of type (design doc decision 8). --}}
     <livewire:content.lesson-questions :lesson="$lesson" />
 
+    {{-- S24 B10 — same route-param convention every other lessons.watch
+         link on this page already uses. --}}
+    <a href="{{ route('lessons.notes.print', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'lesson' => $lesson->id]) }}">Print notes</a>
+
     @livewireScripts
 </body>
 </html>

@@ -5,6 +5,7 @@ use App\Http\Controllers\Content\DownloadCourseImportErrorReportController;
 use App\Http\Controllers\Content\DownloadLessonPdfController;
 use App\Http\Controllers\Content\DownloadLessonSubtitleController;
 use App\Http\Controllers\Content\JoinLiveClassController;
+use App\Http\Controllers\Content\PrintLessonNotesController;
 use App\Http\Controllers\Content\ShowSyllabusController;
 use App\Http\Controllers\Content\StreamLessonAudioController;
 use App\Http\Controllers\Content\StreamLessonController;
@@ -57,6 +58,12 @@ Route::post('/watch/{lesson}/heartbeat', WatchHeartbeatController::class)
 
 Route::get('/lessons/{lesson}', WatchLessonController::class)
     ->name('lessons.watch');
+
+// S24 B10 (U25) — same unsigned, controller-internal-gating shape as
+// lessons.watch above (a page render, not a byte-serving endpoint, so no
+// 'signed' middleware).
+Route::get('/lessons/{lesson}/notes/print', PrintLessonNotesController::class)
+    ->name('lessons.notes.print');
 
 Route::get('/courses/{course}', ShowSyllabusController::class)
     ->name('courses.show');
