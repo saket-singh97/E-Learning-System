@@ -1,13 +1,14 @@
-<li>
-    <p><strong>{{ $post->author->name }}</strong>: {{ $post->body }}</p>
+<li class="lms-thread-item">
+    <p style="margin:0 0 0.25rem;"><strong>{{ $post->author->name }}</strong></p>
+    <p style="margin:0;">{{ $post->body }}</p>
 
     @if ($canParticipate && $post->depth < 2)
-        <form wire:submit="reply({{ $post->id }})">
-            <textarea wire:model="replyBodies.{{ $post->id }}" placeholder="Reply"></textarea>
+        <form wire:submit="reply({{ $post->id }})" class="lms-field" style="margin-top:0.625rem;margin-bottom:0;">
+            <textarea class="lms-input" wire:model="replyBodies.{{ $post->id }}" placeholder="Reply" rows="2"></textarea>
             @error("replyBodies.{$post->id}")
-                <p>{{ $message }}</p>
+                <p class="lms-error">{{ $message }}</p>
             @enderror
-            <button type="submit">Reply</button>
+            <button type="submit" class="lms-button lms-button-secondary" style="width:auto;margin-top:0.5rem;">Reply</button>
         </form>
     @endif
 

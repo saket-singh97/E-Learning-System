@@ -1,17 +1,17 @@
 <div>
-    <h2>Catch up — {{ $batch->title }}</h2>
+    <h2 class="lms-heading">Catch up — {{ $batch->title }}</h2>
 
     @if ($plan->isEmpty())
-        <p>You're all caught up.</p>
+        <p class="lms-subtext">You're all caught up.</p>
     @else
-        <ul>
+        <div class="lms-panel">
             @foreach ($plan as $lesson)
-                <li wire:key="catch-up-lesson-{{ $lesson->id }}">
-                    <a href="{{ route('lessons.watch', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'lesson' => $lesson->id]) }}">
+                <div class="lms-list-item" wire:key="catch-up-lesson-{{ $lesson->id }}">
+                    <a class="lms-link" href="{{ route('lessons.watch', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'lesson' => $lesson->id]) }}">
                         {{ $lesson->title }}
                     </a>
-                </li>
+                </div>
             @endforeach
-        </ul>
+        </div>
     @endif
 </div>

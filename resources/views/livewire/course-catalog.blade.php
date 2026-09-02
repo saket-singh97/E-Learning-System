@@ -1,19 +1,19 @@
 <div>
-    <h1>Course catalog</h1>
+    <h1 class="lms-heading">Course catalog</h1>
 
     @auth
-        <a href="{{ route('wishlist.index', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain]) }}">My wishlist</a>
+        <a class="lms-link" style="margin-top:0" href="{{ route('wishlist.index', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain]) }}">My wishlist</a>
     @endauth
 
-    <form>
-        <label>
-            Search
-            <input type="search" wire:model.live.debounce.300ms="search" placeholder="Search courses">
+    <form class="lms-panel">
+        <label class="lms-field">
+            <span class="lms-field-label">Search</span>
+            <input class="lms-input" type="search" wire:model.live.debounce.300ms="search" placeholder="Search courses">
         </label>
 
-        <label>
-            Category
-            <select wire:model.live="categoryId">
+        <label class="lms-field">
+            <span class="lms-field-label">Category</span>
+            <select class="lms-input" wire:model.live="categoryId">
                 <option value="">All categories</option>
                 @foreach ($categories as $category)
                     <option value="{{ $category->id }}">{{ $category->name }}</option>
@@ -21,9 +21,9 @@
             </select>
         </label>
 
-        <label>
-            Tag
-            <select wire:model.live="tagId">
+        <label class="lms-field">
+            <span class="lms-field-label">Tag</span>
+            <select class="lms-input" wire:model.live="tagId">
                 <option value="">All tags</option>
                 @foreach ($tags as $tag)
                     <option value="{{ $tag->id }}">{{ $tag->name }}</option>
@@ -31,9 +31,9 @@
             </select>
         </label>
 
-        <label>
-            Language
-            <select wire:model.live="language">
+        <label class="lms-field" style="margin-bottom:0">
+            <span class="lms-field-label">Language</span>
+            <select class="lms-input" wire:model.live="language">
                 <option value="">All languages</option>
                 @foreach ($languages as $languageCode)
                     <option value="{{ $languageCode }}">{{ ['en' => 'English', 'hi' => 'Hindi'][$languageCode] ?? $languageCode }}</option>
@@ -42,31 +42,29 @@
         </label>
     </form>
 
-    <ul>
-        @forelse ($courses as $course)
-            <li>
-                <a href="{{ route('courses.show', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'course' => $course->slug]) }}">
-                    {{ $course->title }}
-                </a>
-                <button type="button" wire:click="toggleWishlist({{ $course->id }})">
+    @forelse ($courses as $course)
+        <div class="lms-panel">
+            <a class="lms-link" style="margin-top:0" href="{{ route('courses.show', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'course' => $course->slug]) }}">
+                {{ $course->title }}
+            </a>
+            <div>
+                <button type="button" class="lms-button lms-button-secondary" style="width:auto" wire:click="toggleWishlist({{ $course->id }})">
                     {{ in_array($course->id, $wishlistedCourseIds, true) ? 'Remove from wishlist' : 'Add to wishlist' }}
                 </button>
-            </li>
-        @empty
-            <li>No courses match these filters.</li>
-        @endforelse
-    </ul>
+            </div>
+        </div>
+    @empty
+        <p class="lms-meta">No courses match these filters.</p>
+    @endforelse
 
     @if ($recommendations->isNotEmpty())
-        <h2>Recommended for you</h2>
-        <ul>
-            @foreach ($recommendations as $course)
-                <li>
-                    <a href="{{ route('courses.show', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'course' => $course->slug]) }}">
-                        {{ $course->title }}
-                    </a>
-                </li>
-            @endforeach
-        </ul>
+        <h2 class="lms-heading" style="margin-top:2rem">Recommended for you</h2>
+        @foreach ($recommendations as $course)
+            <div class="lms-panel">
+                <a class="lms-link" style="margin-top:0" href="{{ route('courses.show', ['subdomain' => app(\App\Support\Tenancy\CurrentTenant::class)->get()->subdomain, 'course' => $course->slug]) }}">
+                    {{ $course->title }}
+                </a>
+            </div>
+        @endforeach
     @endif
 </div>

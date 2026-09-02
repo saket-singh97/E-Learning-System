@@ -3,9 +3,20 @@
 use App\Http\Controllers\Assignments\VerifyCertificateController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Batches\ZoomOAuthController;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Support\Facades\Route;
 
+// Host-agnostic route — the global `resolve.tenant:optional` pass
+// (bootstrap/app.php) already ran and bound CurrentTenant when the host is a
+// tenant subdomain. Without this check every tenant subdomain's root URL
+// served the stock Laravel welcome page instead of the student portal
+// (login form lives inside student.dashboard's Livewire component), with no
+// way in.
 Route::get('/', function () {
+    if (app(CurrentTenant::class)->isBound()) {
+        return redirect()->route('student.dashboard');
+    }
+
     return view('welcome');
 });
 

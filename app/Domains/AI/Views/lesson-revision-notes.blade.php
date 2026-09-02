@@ -1,13 +1,13 @@
-<div class="lesson-revision-notes">
-    <h3>Revision notes</h3>
+<div class="lms-panel">
+    <h3 class="lms-field-label">Revision notes</h3>
 
     @if ($note)
         <ul>
             @foreach ($note->notes as $point)
-                <li>{{ $point }}</li>
+                <li class="lms-list-item">{{ $point }}</li>
             @endforeach
         </ul>
     @else
-        <p>No revision notes yet for this lesson.</p>
+        <p class="lms-meta">No revision notes yet for this lesson.</p>
     @endif
 </div>

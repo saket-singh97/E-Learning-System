@@ -1,6 +1,8 @@
 <div>
     @if ($impersonatedUser)
-        Viewing as {{ $impersonatedUser->name }} (impersonating).
-        <button type="button" wire:click="stop">Stop impersonating</button>
+        <div class="lms-impersonation-bar">
+            <span>Viewing as {{ $impersonatedUser->name }} (impersonating).</span>
+            <button type="button" class="lms-link" style="margin-top:0;" wire:click="stop">Stop impersonating</button>
+        </div>
     @endif
 </div>

@@ -8,6 +8,7 @@
         <link rel="icon" href="{{ $favicon }}">
     @endif
     <style>:root { {{ $branding->cssVariables() }} }</style>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
 <body>

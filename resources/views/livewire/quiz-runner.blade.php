@@ -1,13 +1,16 @@
 <div>
-    <h1>{{ $quiz->title }}</h1>
-    <p>Time limit: {{ $quiz->time_limit_minutes }} minutes &middot; Attempts remaining: {{ $attemptsRemaining }}</p>
+    <h1 class="lms-heading">{{ $quiz->title }}</h1>
+    <p class="lms-subtext">Time limit: {{ $quiz->time_limit_minutes }} minutes &middot; Attempts remaining: {{ $attemptsRemaining }}</p>
 
     @error('attempt')
-        <p><strong>{{ $message }}</strong></p>
+        <p class="lms-error">{{ $message }}</p>
     @enderror
 
     @if ($attempt !== null)
-        <p>Attempt in progress &mdash; expires {{ $attempt->expires_at->diffForHumans() }}.</p>
+        <div class="lms-quiz-timer">
+            <span>Attempt in progress</span>
+            <span>Expires {{ $attempt->expires_at->diffForHumans() }}</span>
+        </div>
 
         <script>
             // S16 B10 (I8 pt.2) — quizElapsedSeconds(questionId) reports the
@@ -70,30 +73,48 @@
             </script>
         @endif
 
-        <ol>
+        {{-- Question navigator — jump links to each question's own anchor.
+        No "current question" modifier: this component renders every
+        question on one page (not paginated/wizard-stepped), so there is no
+        current-question state property to key it off — only --answered,
+        derived from the actual responses array, is applied here. --}}
+        <nav class="lms-quiz-nav">
+            @foreach ($questions as $index => $question)
+                <a
+                    href="#question-{{ $question->id }}"
+                    class="lms-quiz-nav-item @if (! empty($responses[$question->id] ?? null)) lms-quiz-nav-item--answered @endif"
+                >{{ $index + 1 }}</a>
+            @endforeach
+        </nav>
+
+        <ol style="list-style:none;padding:0;margin:0;">
             @foreach ($questions as $question)
-                <li wire:key="question-{{ $question->id }}">
+                <li wire:key="question-{{ $question->id }}" id="question-{{ $question->id }}" class="lms-panel">
                     <p>{{ $question->stem }}</p>
 
                     @if ($question->type === 'mcq' || $question->type === 'true_false')
                         @foreach ($question->options as $option)
-                            <label>
-                                <input
-                                    type="radio"
-                                    wire:model="responses.{{ $question->id }}"
-                                    wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
-                                    value="{{ $option }}"
-                                >
-                                {{ $option }}
-                            </label>
+                            <div class="lms-list-item">
+                                <label>
+                                    <input
+                                        type="radio"
+                                        wire:model="responses.{{ $question->id }}"
+                                        wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
+                                        value="{{ $option }}"
+                                    >
+                                    {{ $option }}
+                                </label>
+                            </div>
                         @endforeach
                     @elseif ($question->type === 'short_answer')
                         <textarea
+                            class="lms-input"
                             wire:model="responses.{{ $question->id }}"
                             wire:blur="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                         ></textarea>
                     @elseif ($question->type === 'numerical')
                         <input
+                            class="lms-input"
                             type="number"
                             step="any"
                             wire:model="responses.{{ $question->id }}"
@@ -101,27 +122,31 @@
                         >
                     @elseif ($question->type === 'multi_select')
                         @foreach ($question->options as $option)
-                            <label>
-                                <input
-                                    type="checkbox"
-                                    wire:model="responses.{{ $question->id }}"
-                                    wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
-                                    value="{{ $option }}"
-                                >
-                                {{ $option }}
-                            </label>
+                            <div class="lms-list-item">
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        wire:model="responses.{{ $question->id }}"
+                                        wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
+                                        value="{{ $option }}"
+                                    >
+                                    {{ $option }}
+                                </label>
+                            </div>
                         @endforeach
                     @elseif ($question->type === 'fill_in_blank')
                         <input
+                            class="lms-input"
                             type="text"
                             wire:model="responses.{{ $question->id }}"
                             wire:blur="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                         >
                     @elseif ($question->type === 'matching')
                         @foreach ($question->options['left'] ?? [] as $leftIndex => $leftLabel)
-                            <div wire:key="match-{{ $question->id }}-{{ $leftIndex }}">
+                            <div class="lms-list-item" wire:key="match-{{ $question->id }}-{{ $leftIndex }}">
                                 <span>{{ $leftLabel }}</span>
                                 <select
+                                    class="lms-input"
                                     wire:model="responses.{{ $question->id }}.{{ $leftIndex }}"
                                     wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                                 >
@@ -134,9 +159,10 @@
                         @endforeach
                     @elseif ($question->type === 'ordering')
                         @for ($position = 0; $position < count($question->options ?? []); $position++)
-                            <div wire:key="order-{{ $question->id }}-{{ $position }}">
-                                <label>Position {{ $position + 1 }}</label>
+                            <div class="lms-list-item" wire:key="order-{{ $question->id }}-{{ $position }}">
+                                <label class="lms-field-label">Position {{ $position + 1 }}</label>
                                 <select
+                                    class="lms-input"
                                     wire:model="responses.{{ $question->id }}.{{ $position }}"
                                     wire:change="saveAnswer({{ $question->id }}, quizElapsedSeconds({{ $question->id }}))"
                                 >
@@ -152,25 +178,27 @@
             @endforeach
         </ol>
 
-        <button type="button" wire:click="submitAttempt">Submit</button>
+        <button type="button" class="lms-button" style="width:auto;" wire:click="submitAttempt">Submit</button>
     @else
         @if ($results !== null)
-            <h2>Your last result</h2>
-            <p>
-                Score: {{ (float) ($lastCompletedAttempt->score ?? 0) }} / {{ (float) $lastCompletedAttempt->max_score }}
-                @if ($results->contains(fn ($row) => $row['answer']->status === 'pending_review'))
-                    &mdash; some short answers are still pending review
-                @endif
-            </p>
+            <h2 class="lms-heading">Your last result</h2>
+            <div class="lms-panel">
+                <p>
+                    Score: {{ (float) ($lastCompletedAttempt->score ?? 0) }} / {{ (float) $lastCompletedAttempt->max_score }}
+                    @if ($results->contains(fn ($row) => $row['answer']->status === 'pending_review'))
+                        &mdash; some short answers are still pending review
+                    @endif
+                </p>
+            </div>
 
-            <ol>
+            <ol style="list-style:none;padding:0;margin:0;">
                 @foreach ($results as $row)
-                    <li wire:key="result-{{ $row['answer']->id }}">
+                    <li class="lms-list-item" wire:key="result-{{ $row['answer']->id }}">
                         <p>{{ $row['question']?->stem }}</p>
-                        <p>Your answer: {{ is_array($row['answer']->response) ? implode(', ', $row['answer']->response) : ($row['answer']->response ?? '(no answer)') }}</p>
+                        <p class="lms-meta">Your answer: {{ is_array($row['answer']->response) ? implode(', ', $row['answer']->response) : ($row['answer']->response ?? '(no answer)') }}</p>
 
                         @if ($row['answer']->status === 'pending_review')
-                            <p><em>Pending review</em></p>
+                            <p class="lms-meta"><em>Pending review</em></p>
                         @else
                             {{-- Score shown directly rather than a
                             Correct/Incorrect label — a reviewer-assigned
@@ -180,7 +208,7 @@
                             <p>Score: {{ (float) $row['answer']->score }} / 1</p>
 
                             @if ($row['question']?->explanation)
-                                <p>{{ $row['question']->explanation }}</p>
+                                <p class="lms-meta">{{ $row['question']->explanation }}</p>
                             @endif
                         @endif
                     </li>
@@ -189,16 +217,16 @@
         @endif
 
         @if ($attemptsRemaining > 0)
-            <button type="button" wire:click="startAttempt">Start attempt</button>
+            <button type="button" class="lms-button" style="width:auto;" wire:click="startAttempt">Start attempt</button>
         @else
-            <em>No attempts remaining for this quiz.</em>
+            <p class="lms-meta">No attempts remaining for this quiz.</p>
         @endif
 
         @if ($attemptHistory->isNotEmpty())
-            <h2>Your attempts</h2>
-            <ol>
+            <h2 class="lms-heading">Your attempts</h2>
+            <ol style="list-style:none;padding:0;margin:0;">
                 @foreach ($attemptHistory as $index => $historyAttempt)
-                    <li wire:key="history-{{ $historyAttempt->id }}">
+                    <li class="lms-list-item" wire:key="history-{{ $historyAttempt->id }}">
                         Attempt {{ $index + 1 }} ({{ $historyAttempt->started_at->format('Y-m-d H:i') }}):
                         {{ (float) ($historyAttempt->score ?? 0) }} / {{ (float) $historyAttempt->max_score }}
                         @if ($historyAttempt->status === 'auto_submitted')

@@ -1,48 +1,48 @@
-<div>
-    <h1>{{ $course->title }}</h1>
+<div class="lms-panel">
+    <h1 class="lms-heading">{{ $course->title }}</h1>
 
     @include('content::syllabus-tracker', ['tracker' => $syllabusTracker])
 
     @foreach ($sections as $entry)
-        <h2>{{ $entry['section']->title }}</h2>
+        <div class="lms-thread-item">
+            <strong>{{ $entry['section']->title }}</strong>
 
-        <ul>
             @foreach ($entry['rows'] as $row)
                 @php($lesson = $row['lesson'])
-                <li wire:key="lesson-{{ $lesson->id }}">
+                <div class="lms-thread-item" wire:key="lesson-{{ $lesson->id }}">
                     {{ $lesson->title }}
-                    <span>({{ $lesson->type }})</span>
+                    <span class="lms-meta">({{ $lesson->type }})</span>
 
                     @if ($lesson->type === 'live_session')
                         @if ($row['session'] === null)
-                            <em>Not offered in your batch</em>
+                            <p class="lms-meta"><em>Not offered in your batch</em></p>
                         @elseif ($row['liveState'] === 'scheduled')
-                            Scheduled &mdash; {{ $row['session']->starts_at->diffForHumans() }}
+                            <p class="lms-meta">Scheduled &mdash; {{ $row['session']->starts_at->diffForHumans() }}</p>
                         @elseif ($row['liveState'] === 'live')
-                            <strong>Live now</strong>
+                            <p><span class="lms-badge">Live now</span></p>
                             @if ($row['canJoin'])
-                                <a href="{{ route('live.join', ['subdomain' => $subdomain, 'session' => $row['session']->id]) }}">Join</a>
+                                <a class="lms-link" style="margin-top:0.375rem" href="{{ route('live.join', ['subdomain' => $subdomain, 'session' => $row['session']->id]) }}">Join</a>
                                 <livewire:live-poll-board :session="$row['session']" :key="'live-poll-board-'.$row['session']->id" />
                             @endif
                         @elseif ($row['liveState'] === 'recorded')
-                            <a href="{{ route('lessons.watch', ['subdomain' => $subdomain, 'lesson' => $lesson->id]) }}">Watch recording</a>
+                            <a class="lms-link" style="margin-top:0.375rem" href="{{ route('lessons.watch', ['subdomain' => $subdomain, 'lesson' => $lesson->id]) }}">Watch recording</a>
                         @else
-                            Class ended &mdash; recording coming soon
+                            <p class="lms-meta">Class ended &mdash; recording coming soon</p>
                         @endif
                     @elseif ($lesson->type === 'quiz')
                         @if ($row['canAttemptQuiz'])
-                            <a href="{{ route('quizzes.show', ['subdomain' => $subdomain, 'quiz' => $row['quiz']->id]) }}">Take quiz</a>
+                            <a class="lms-link" style="margin-top:0.375rem" href="{{ route('quizzes.show', ['subdomain' => $subdomain, 'quiz' => $row['quiz']->id]) }}">Take quiz</a>
                         @else
-                            <em>Not yet available</em>
+                            <p class="lms-meta"><em>Not yet available</em></p>
                         @endif
                     @elseif ($lesson->type === 'assignment')
                         @if ($row['canSubmitAssignment'])
-                            <a href="{{ route('assignments.show', ['subdomain' => $subdomain, 'assignment' => $row['assignment']->id]) }}">Open assignment</a>
+                            <a class="lms-link" style="margin-top:0.375rem" href="{{ route('assignments.show', ['subdomain' => $subdomain, 'assignment' => $row['assignment']->id]) }}">Open assignment</a>
                         @else
-                            <em>Not yet available</em>
+                            <p class="lms-meta"><em>Not yet available</em></p>
                         @endif
                     @elseif ($row['canStream'])
-                        <a href="{{ route('lessons.watch', ['subdomain' => $subdomain, 'lesson' => $lesson->id]) }}">
+                        <a class="lms-link" style="margin-top:0.375rem" href="{{ route('lessons.watch', ['subdomain' => $subdomain, 'lesson' => $lesson->id]) }}">
                             {{ match ($lesson->type) {
                                 'pdf' => 'View PDF',
                                 'text' => 'Read',
@@ -51,10 +51,10 @@
                             } }}
                         </a>
                     @else
-                        <em>Enrol to access</em>
+                        <p class="lms-meta"><em>Enrol to access</em></p>
                     @endif
-                </li>
+                </div>
             @endforeach
-        </ul>
+        </div>
     @endforeach
 </div>

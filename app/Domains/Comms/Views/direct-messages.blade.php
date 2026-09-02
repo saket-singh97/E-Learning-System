@@ -1,63 +1,68 @@
-<div>
-    <h1>Messages</h1>
+<div class="lms-panel">
+    <h2 class="lms-field-label">Messages</h2>
 
     @guest
-        <p>Log in to see your messages.</p>
+        <p class="lms-meta">Log in to see your messages.</p>
     @else
-        <h2>Conversations</h2>
+        <h3 class="lms-field-label">Conversations</h3>
         <ul>
             @forelse ($conversationPartners as $partner)
-                <li>
-                    <button type="button" wire:click="selectConversation({{ $partner->id }})">{{ $partner->name }}</button>
+                <li class="lms-list-item">
+                    <button type="button" class="lms-link" style="margin-top:0;" wire:click="selectConversation({{ $partner->id }})">{{ $partner->name }}</button>
                 </li>
             @empty
-                <li>No conversations yet.</li>
+                <li class="lms-meta">No conversations yet.</li>
             @endforelse
         </ul>
 
-        <h2>Start a new conversation</h2>
-        <select wire:model.live="recipientId">
-            <option value="">Choose someone</option>
-            @foreach ($otherUsers as $user)
-                <option value="{{ $user->id }}">{{ $user->name }}</option>
-            @endforeach
-        </select>
+        <label class="lms-field">
+            <span class="lms-field-label">Start a new conversation</span>
+            <select class="lms-input" wire:model.live="recipientId">
+                <option value="">Choose someone</option>
+                @foreach ($otherUsers as $user)
+                    <option value="{{ $user->id }}">{{ $user->name }}</option>
+                @endforeach
+            </select>
+        </label>
 
         @if ($recipientId)
-            <h2>Thread</h2>
+            <hr class="lms-divider">
 
-            <button type="button" wire:click="toggleBlock({{ $recipientId }})">
-                {{ in_array($recipientId, $blockedUserIds, true) ? 'Unblock' : 'Block' }}
-            </button>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <h3 class="lms-field-label" style="margin-bottom:0;">Thread</h3>
+                <button type="button" class="lms-button lms-button-secondary" style="width:auto;" wire:click="toggleBlock({{ $recipientId }})">
+                    {{ in_array($recipientId, $blockedUserIds, true) ? 'Unblock' : 'Block' }}
+                </button>
+            </div>
 
-            <ul>
+            <div class="lms-chat-messages" style="margin-top:0.75rem;">
                 @forelse ($messages as $directMessage)
-                    <li>
-                        <strong>{{ $directMessage->sender_id === auth()->id() ? 'You' : $directMessage->sender->name }}</strong>:
-                        {{ $directMessage->body }}
+                    <div class="lms-chat-message @if ($directMessage->sender_id === auth()->id()) lms-chat-message--mine @endif">
+                        <p class="lms-meta" style="margin:0 0 0.25rem;">{{ $directMessage->sender_id === auth()->id() ? 'You' : $directMessage->sender->name }}</p>
+                        <p style="margin:0;">{{ $directMessage->body }}</p>
 
                         @if ($directMessage->sender_id !== auth()->id())
-                            <form wire:submit="reportMessage({{ $directMessage->id }})">
-                                <input type="text" wire:model="reportReasons.{{ $directMessage->id }}" placeholder="Reason for reporting">
+                            <form wire:submit="reportMessage({{ $directMessage->id }})" style="margin-top:0.5rem;">
+                                <input class="lms-input" type="text" wire:model="reportReasons.{{ $directMessage->id }}" placeholder="Reason for reporting">
                                 @error("reportReasons.{$directMessage->id}")
-                                    <p>{{ $message }}</p>
+                                    <p class="lms-error">{{ $message }}</p>
                                 @enderror
-                                <button type="submit">Report</button>
+                                <button type="submit" class="lms-link" style="margin-top:0.375rem;">Report</button>
                             </form>
                         @endif
-                    </li>
+                    </div>
                 @empty
-                    <li>No messages yet — say hello.</li>
+                    <p class="lms-meta">No messages yet — say hello.</p>
                 @endforelse
-            </ul>
+            </div>
 
-            <form wire:submit="send">
-                <textarea wire:model="newMessageBody" placeholder="Write a message"></textarea>
-                @error('newMessageBody')
-                    <p>{{ $message }}</p>
-                @enderror
-                <button type="submit">Send</button>
+            <form wire:submit="send" class="lms-chat-input">
+                <textarea class="lms-input" wire:model="newMessageBody" placeholder="Write a message" rows="1"></textarea>
+                <button type="submit" class="lms-button" style="width:auto;">Send</button>
             </form>
+            @error('newMessageBody')
+                <p class="lms-error">{{ $message }}</p>
+            @enderror
         @endif
 
         {{-- S19 N11 pt.2 — real-time push over the user.{id} private channel

@@ -1,14 +1,14 @@
 <div>
     @if ($poll === null)
-        <em>No poll open right now</em>
+        <p class="lms-meta"><em>No poll open right now</em></p>
     @elseif ($alreadyResponded)
-        <em>Response recorded — waiting for results</em>
+        <p class="lms-meta"><em>Response recorded — waiting for results</em></p>
     @else
-        <p>{{ $poll->question }}</p>
+        <p class="lms-field-label">{{ $poll->question }}</p>
         <ul>
             @foreach ($poll->options as $option)
-                <li wire:key="poll-option-{{ $option->id }}">
-                    <button type="button" wire:click="submit({{ $option->id }})">{{ $option->label }}</button>
+                <li class="lms-list-item" wire:key="poll-option-{{ $option->id }}">
+                    <button type="button" class="lms-button lms-button-secondary" style="width:auto" wire:click="submit({{ $option->id }})">{{ $option->label }}</button>
                 </li>
             @endforeach
         </ul>
